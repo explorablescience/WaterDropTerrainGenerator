@@ -1,0 +1,16 @@
+# Rust
+**/*.rs.bk
+target/
+target-*/
+
+# Cargo
+Cargo.lock
+.cargo/config
+.cargo/config.toml
+
+# Editor
+/.idea
+/.vscode/settings.json
+
+# Claude
+.claude/

@@ -1,0 +1,39 @@
+[package]
+name = "waterdrop-terrain-editor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies.bevy]
+version = "0.18"
+default-features = false
+features = ["multi_threaded", "bevy_winit", "x11", "wayland"]
+
+[dependencies.wde]
+path = "../WaterDropEngine/crates/core/wde"
+default-features = false
+features = ["pbr", "gizmos", "editor"]
+
+[build-dependencies]
+anyhow = "1.0.104"
+fs_extra = "1.3.0"
+
+[features]
+default = []
+log-debug = ["wde/log-debug"]
+debug = ["wde/debug"]
+watch = ["wde/watch"]
+tracing = ["wde/tracing"]
+gpu-debug = ["wde/gpu-debug"]
+
+[profile.dev]
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = true
+opt-level = 3
+codegen-units = 1
+incremental = false
+debug = false

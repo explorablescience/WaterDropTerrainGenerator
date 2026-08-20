@@ -1,0 +1,89 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Trace",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=waterdrop-terrain-editor",
+                    "--package=waterdrop-terrain-editor",
+                    "--target-dir=target",
+                    "--features=debug,watch,tracing"
+                ],
+                "filter": {
+                    "name": "waterdrop-terrain-editor",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "CARGO_MANIFEST_DIR": "${workspaceFolder}",
+            }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=waterdrop-terrain-editor",
+                    "--package=waterdrop-terrain-editor",
+                    "--target-dir=target",
+                    "--features=log-debug,debug,watch"
+                ],
+                "filter": {
+                    "name": "waterdrop-terrain-editor",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "CARGO_MANIFEST_DIR": "${workspaceFolder}",
+            }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Release",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--release",
+                    "--bin=waterdrop-terrain-editor",
+                    "--package=waterdrop-terrain-editor",
+                    "--target-dir=target",
+                    "--features=log-debug"
+                ],
+                "filter": {
+                    "name": "waterdrop-terrain-editor",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "CARGO_MANIFEST_DIR": "${workspaceFolder}",
+            }
+        },
+        {
+            "type": "node-terminal",
+            "request": "launch",
+            "name": "Fix Clippy",
+            "command": "cargo clippy --fix --allow-dirty --allow-staged --workspace --all-targets",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "node-terminal",
+            "request": "launch",
+            "name": "Fix Rustfmt",
+            "command": "cargo +nightly fmt --all",
+            "cwd": "${workspaceFolder}"
+        },
+    ]
+}
