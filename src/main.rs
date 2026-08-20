@@ -1,6 +1,9 @@
 use wde::{CustomBevyPlugins, prelude::{*, Color as WdeColor}};
 use bevy::prelude::*;
 
+pub(crate) mod core;
+pub(crate) mod nodes;
+
 /// Custom WaterDropEngine plugins.
 #[derive(Default)]
 struct CustomWdePlugins;
