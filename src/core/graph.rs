@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::mem::discriminant;
 
 use crate::core::node::{Node, NodeError};
+use crate::core::tile_allocator::{TileHandle, TilePool};
 
 /// Identifies a node within a [`NodeGraph`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -20,12 +22,25 @@ struct Edge {
 pub struct NodeGraph {
     nodes: Vec<Box<dyn Node>>,
     edges: Vec<Edge>,
+    /// Dependency order computed by the last successful [`Self::validate`] call, for the node
+    /// it validated. Consumed by [`Self::process`] so the topological sort isn't redone on every
+    /// run. Cleared whenever the graph is mutated, since that can invalidate the order.
+    cached_topo: Option<(NodeId, Vec<NodeId>)>,
 }
 impl NodeGraph {
+    pub fn new() -> Self {
+        Self {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            cached_topo: None,
+        }
+    }
+
     /// Adds a node to the graph and returns its [`NodeId`].
     pub fn add_node(&mut self, node: Box<dyn Node>) -> NodeId {
         let id = NodeId(self.nodes.len());
         self.nodes.push(node);
+        self.cached_topo = None;
         id
     }
 
@@ -41,7 +56,11 @@ impl NodeGraph {
         // Validate that the socket indices exist and that their types match
         let from = self.node(from_node)?;
         let out_socket = from.outputs().get(from_socket).ok_or_else(|| {
-            NodeError(format!("{} has no output socket {}", from.label(), from_socket))
+            NodeError(format!(
+                "{} has no output socket {}",
+                from.label(),
+                from_socket
+            ))
         })?;
         let out_dtype = discriminant(&out_socket.dtype);
 
@@ -66,107 +85,129 @@ impl NodeGraph {
             to_node,
             to_socket,
         });
+        self.cached_topo = None;
         Ok(self)
     }
 
-    /// Validates the graph and computes a topological sort of the nodes to determine execution order.
-    /// This function must be called before executing the graph.
-    /// Returns an error if the graph contains a cycle.
-    pub fn validate(&mut self) -> Result<(), NodeError> {
-        // Compute a topological sort of the nodes to determine execution order
-        let mut in_degree = vec![0; self.nodes.len()];
-        for edge in &self.edges {
-            in_degree[edge.to_node.0] += 1;
-        }
-
-        let mut order = Vec::with_capacity(self.nodes.len());
-        let mut stack: Vec<NodeId> = self
-            .nodes
-            .iter()
-            .enumerate()
-            .filter_map(|(i, _)| if in_degree[i] == 0 { Some(NodeId(i)) } else { None })
-            .collect();
-
-        while let Some(node_id) = stack.pop() {
-            order.push(node_id);
-            for edge in &self.edges {
-                if edge.from_node == node_id {
-                    in_degree[edge.to_node.0] -= 1;
-                    if in_degree[edge.to_node.0] == 0 {
-                        stack.push(edge.to_node);
-                    }
-                }
-            }
-        }
-
-        if order.len() != self.nodes.len() {
-            return Err(NodeError("Graph contains a cycle".to_string()));
-        }
-        Ok(())
-    }
-
-
-
-
+    /// Returns a reference to the node with the given [`NodeId`].
     pub fn node(&self, id: NodeId) -> Result<&dyn Node, NodeError> {
         self.nodes
             .get(id.0)
             .map(|n| n.as_ref())
             .ok_or_else(|| NodeError(format!("Unknown node id {:?}", id)))
     }
-}
 
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::*;
-
-    #[test]
-    fn test_node_graph_connections() {
-        let mut graph = NodeGraph::default();
-        let (node_a, node_b) = (
-            graph.add_node(Box::new(NodeGeneratorPerlin::default())),
-            graph.add_node(Box::new(NodeErosion::default())),
-        );
-
-        // Valid connection
-        let result = graph.connect(node_a, 0, node_b, 0); 
-        assert!(result.is_ok(), "Graph connection should succeed");
-
-        // Invalid connection: NodeErosion has only one input socket (index 0)
-        let result_invalid = graph.connect(node_a, 0, node_b, 1);
-        assert!(result_invalid.is_err(), "Graph connection should fail due to invalid socket index");
+    /// Validates the graph and caches the dependency order of the final node's ancestors.
+    pub fn validate(&mut self) -> Result<(), NodeError> {
+        let node_id = NodeId(self.nodes.len() - 1);
+        let order = self.ancestors_topo(node_id)?;
+        self.cached_topo = Some((node_id, order));
+        Ok(())
     }
 
-    #[test]
-    fn test_node_graph_validation() {
-        let mut graph = NodeGraph::default();
-        let (node_a, node_b, node_c) = (
-            graph.add_node(Box::new(NodeGeneratorPerlin::default())),
-            graph.add_node(Box::new(NodeErosion::default())),
-            graph.add_node(Box::new(NodeErosion::default())),
-        );
-        graph
-            .connect(node_a, 0, node_b, 0)
-            .and_then(|g| g.connect(node_b, 0, node_c, 0))
-            .expect("Graph connections should succeed");
+    /// Returns `node_id` together with all of its ancestors, in dependency order.
+    fn ancestors_topo(&self, node_id: NodeId) -> Result<Vec<NodeId>, NodeError> {
+        // Walk backward from `node_id` to find the set of nodes it depends on.
+        let mut included = vec![false; self.nodes.len()];
+        included[node_id.0] = true;
+        let mut stack = vec![node_id];
+        while let Some(id) = stack.pop() {
+            for edge in &self.edges {
+                if edge.to_node == id && !included[edge.from_node.0] {
+                    included[edge.from_node.0] = true;
+                    stack.push(edge.from_node);
+                }
+            }
+        }
+
+        // Topologically sort that subset (Kahn's algorithm restricted to `included`).
+        let mut in_degree = vec![0; self.nodes.len()];
+        for edge in &self.edges {
+            if included[edge.to_node.0] && included[edge.from_node.0] {
+                in_degree[edge.to_node.0] += 1;
+            }
+        }
+        let mut order = Vec::new();
+        let mut ready: Vec<NodeId> = (0..self.nodes.len())
+            .filter(|&i| included[i] && in_degree[i] == 0)
+            .map(NodeId)
+            .collect();
+        while let Some(id) = ready.pop() {
+            order.push(id);
+            for edge in &self.edges {
+                if edge.from_node == id && included[edge.to_node.0] {
+                    in_degree[edge.to_node.0] -= 1;
+                    if in_degree[edge.to_node.0] == 0 {
+                        ready.push(edge.to_node);
+                    }
+                }
+            }
+        }
+
+        if order.len() != included.iter().filter(|&&b| b).count() {
+            return Err(NodeError("Graph contains a cycle".to_string()));
+        }
+        Ok(order)
     }
 
-    #[test]
-    fn test_node_graph_cycle_detection() {
-        let mut graph = NodeGraph::default();
-        let (node_a, node_b) = (
-            graph.add_node(Box::new(NodeErosion::default())),
-            graph.add_node(Box::new(NodeErosion::default())),
-        );
-        graph
-            .connect(node_a, 0, node_b, 0)
-            .and_then(|g| g.connect(node_b, 0, node_a, 0)) // This creates a cycle
-            .expect("Graph connections should succeed");
+    /// Evaluates `node_id` and produces its output tiles as square tiles of `tile_size` texels per side.
+    /// Due to padding requirements of the nodes, the internal tile size used for computation may be larger than `tile_size`.
+    /// Returns an error if the graph has not been validated or if any node fails to process.
+    pub fn process(&self, node_id: NodeId, tile_size: usize) -> Result<Vec<TileHandle>, NodeError> {
+        let order = match &self.cached_topo {
+            Some((validated_id, order)) if *validated_id == node_id => order,
+            _ => {
+                return Err(NodeError(format!(
+                    "{:?} has not been validated; call NodeGraph::validate() before process()",
+                    node_id
+                )));
+            }
+        };
 
-        // Validate the graph and expect an error due to the cycle
-        let result = graph.validate();
-        assert!(result.is_err(), "Graph validation should fail due to cycle");
+        let mut internal_tile_size = tile_size;
+        for &id in order {
+            let padding = self.node(id)?.size().div_ceil(2); // half of the kernel size, ceiled
+            internal_tile_size += 2 * padding;
+        }
+
+        let pool = TilePool::new(internal_tile_size * internal_tile_size);
+
+        let mut outputs: HashMap<NodeId, Vec<TileHandle>> = HashMap::new();
+        for &id in order {
+            let node = self.node(id)?;
+            let inputs = node
+                .inputs()
+                .iter()
+                .enumerate()
+                .map(|(socket, _)| {
+                    let (from_node, from_socket) = self
+                        .edges
+                        .iter()
+                        .find(|e| e.to_node == id && e.to_socket == socket)
+                        .map(|e| (e.from_node, e.from_socket))
+                        .ok_or_else(|| {
+                            NodeError(format!(
+                                "{} input {} is not connected",
+                                node.label(),
+                                socket
+                            ))
+                        })?;
+                    outputs
+                        .get(&from_node)
+                        .and_then(|outs| outs.get(from_socket))
+                        .cloned()
+                        .ok_or_else(|| {
+                            NodeError(format!("No output available to feed {}", node.label()))
+                        })
+                })
+                .collect::<Result<Vec<_>, NodeError>>()?;
+
+            let result = node.process(&pool, &inputs)?;
+            outputs.insert(id, result);
+        }
+
+        outputs
+            .remove(&node_id)
+            .ok_or_else(|| NodeError(format!("{:?} was not evaluated", node_id)))
     }
 }

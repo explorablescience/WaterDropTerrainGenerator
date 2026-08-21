@@ -1,22 +1,13 @@
-use std::sync::Arc;
-
 use bevy::prelude::*;
 use wde::{
     CustomBevyPlugins,
     prelude::{Color as WdeColor, *},
 };
 
-use crate::{
-    core::{
-        graph::NodeGraph,
-        node::Node,
-        tile_allocator::{TilePool},
-    }, nodes::{NodeErosion, NodeGeneratorPerlin},
+use waterdrop_terrain_editor::{
+    core::graph::NodeGraph,
+    nodes::{NodeErosion, NodeGeneratorPerlin},
 };
-
-pub(crate) mod core;
-pub(crate) mod nodes;
-pub(crate) mod render;
 
 /// Custom WaterDropEngine plugins.
 #[derive(Default)]
@@ -112,14 +103,4 @@ fn debug_fc() {
     // let outputs = graph
     //     .execute(&pool)
     //     .expect("Graph execution should succeed");
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tmp_test() {
-        
-    }
 }

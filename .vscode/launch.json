@@ -74,6 +74,13 @@
         {
             "type": "node-terminal",
             "request": "launch",
+            "name": "Run Tests",
+            "command": "cargo test --workspace --all-targets",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "node-terminal",
+            "request": "launch",
             "name": "Fix Clippy",
             "command": "cargo clippy --fix --allow-dirty --allow-staged --workspace --all-targets",
             "cwd": "${workspaceFolder}"
