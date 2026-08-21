@@ -45,7 +45,7 @@ fn test_node_graph_cycle_detection() {
         .expect("Graph connections should succeed");
 
     // Validate the graph and expect an error due to the cycle
-    let result = graph.validate();
+    let result = graph.validate(node_b);
     assert!(result.is_err(), "Graph validation should fail due to cycle");
 }
 
@@ -77,7 +77,7 @@ fn test_node_graph_process_grows_internal_tile_size_for_padding() {
     graph
         .connect(source, 0, erosion, 0)
         .expect("Graph connection should succeed");
-    graph.validate().expect("Graph should be valid");
+    graph.validate(erosion).expect("Graph should be valid");
 
     let tile_size = 8;
     let outputs = graph

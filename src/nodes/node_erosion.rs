@@ -7,15 +7,12 @@ use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
 /// A minimal thermal-erosion node
 #[derive(Debug)]
 pub struct NodeErosion {
-    /// Width (and height) in texels of the square tile this node operates on.
-    width: usize,
     /// How strongly each texel is pulled towards its neighbours' average height, in `[0, 1]`.
     strength: f32,
 }
 impl Default for NodeErosion {
     fn default() -> Self {
         Self {
-            width: 3,
             strength: 0.5,
         }
     }
@@ -30,34 +27,31 @@ impl NodeErosion {
                     label: "Strength",
                     default: NParamValue::Float(0.5),
                     constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 }),
-                },
-                NParamDesc {
-                    key: "width",
-                    label: "Width",
-                    default: NParamValue::Int(3),
-                    constraints: Some(NParamConstraints::IntRange { min: 1, max: 1024 }),
-                },
+                }
             ]
         })
     }
 
     fn process_tile(&self, pool: &Arc<TilePool>, input: &TileHandle) -> TileHandle {
         let mut output = pool.allocate();
-        for y in 0..self.width {
-            for x in 0..self.width {
-                let idx = y * self.width + x;
+        let s = output.size();
+        for y in 0..s {
+            for x in 0..s {
                 let mut sum = 0.0;
-                let mut count = 0.0;
-                for (dx, dy) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
-                    let nx = x as i32 + dx;
-                    let ny = y as i32 + dy;
-                    if nx >= 0 && nx < self.width as i32 && ny >= 0 && ny < self.width as i32 {
-                        sum += input[ny as usize * self.width + nx as usize];
-                        count += 1.0;
+                let mut count = 0;
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        let nx = x as isize + dx;
+                        let ny = y as isize + dy;
+                        if nx >= 0 && nx < s as isize && ny >= 0 && ny < s as isize {
+                            sum += input[ny as usize * s + nx as usize];
+                            count += 1;
+                        }
                     }
                 }
-                let avg = if count > 0.0 { sum / count } else { input[idx] };
-                output[idx] = input[idx] + (avg - input[idx]) * self.strength;
+                let average = sum / count as f32;
+                let current = input[y * s + x];
+                output[y * s + x] = current + self.strength * (average - current);
             }
         }
         Arc::new(output)
@@ -69,7 +63,7 @@ impl Node for NodeErosion {
     }
 
     fn size(&self) -> usize {
-        self.width
+        3 // 3x3 kernel
     }
     fn inputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
@@ -90,14 +84,12 @@ impl Node for NodeErosion {
     fn get_param(&self, key: &str) -> Option<NParamValue> {
         match key {
             "strength" => Some(NParamValue::Float(self.strength)),
-            "width" => Some(NParamValue::Int(self.width as i32)),
             _ => None,
         }
     }
     fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), String> {
         match (key, value) {
             ("strength", NParamValue::Float(v)) => self.strength = v,
-            ("width", NParamValue::Int(v)) => self.width = v as usize,
             (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v)),
         }
         Ok(())

@@ -13,9 +13,9 @@ pub struct TileBuffer {
     pool: Arc<TilePool>,
 }
 impl TileBuffer {
-    /// Returns the length of the tile (total number of f32 values).
-    pub fn len(&self) -> usize {
-        self.data.len()
+    /// Returns the size of the tile (number of f32 values).
+    pub fn size(&self) -> usize {
+        self.pool.tile_length()
     }
 
     /// Returns true if the tile is empty.
@@ -55,7 +55,7 @@ impl TilePool {
     /// Creates a new tile pool with the given tile length.
     ///
     /// # Arguments
-    /// * `tile_length` - The length of each tile in the pool (total number of f32 values per tile).
+    /// * `tile_length` - The length of each tile in the pool in a given number of texels (e.g., 3 for a 3x3 tile, 5 for a 5x5 tile, etc.).
     ///
     /// Pools are shared by nodes across the graph, so they're always handed out behind an [`Arc`].
     pub fn new(tile_length: usize) -> Arc<Self> {
@@ -73,7 +73,7 @@ impl TilePool {
             .lock()
             .unwrap()
             .pop()
-            .unwrap_or_else(|| vec![0.0; self.tile_length]);
+            .unwrap_or_else(|| vec![0.0; self.tile_length * self.tile_length]);
         TileBuffer {
             data: tile,
             pool: Arc::clone(self),

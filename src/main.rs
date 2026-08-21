@@ -85,22 +85,20 @@ fn gizmo_debug(mut gizmos: ResMut<Gizmos>) {
 }
 
 fn debug_fc() {
-    // Chain two erosion nodes and check the graph runs them in dependency order.
-    let mut graph = NodeGraph::default();
-    let (initial_terrain, first_erosion, second_erosion) = (
+    let mut graph = NodeGraph::new();
+    let (generator_noise, erosion) = (
         graph.add_node(Box::new(NodeGeneratorPerlin::default())),
-        graph.add_node(Box::new(NodeErosion::default())),
         graph.add_node(Box::new(NodeErosion::default())),
     );
     graph
-        .connect(initial_terrain, 0, first_erosion, 0)
-        .and_then(|g| g.connect(first_erosion, 0, second_erosion, 0))
-        .expect("Graph connections should succeed");
-    graph
-        .validate()
-        .expect("Graph should be valid");
-    // let pool = TilePool::new(9); // 3x3 tile
-    // let outputs = graph
-    //     .execute(&pool)
-    //     .expect("Graph execution should succeed");
+        .connect(generator_noise, 0, erosion, 0)
+        .expect("Graph connection should succeed");
+    graph.validate(erosion).expect("Graph should be valid");
+
+    // Run the graph to generate a tile
+    let output_tiles = graph
+        .process(erosion, 3)
+        .expect("Graph processing should succeed");
+    let data: Vec<f32> = output_tiles[0].iter().copied().collect();
+    println!("Generated tile data: {:?}", &data);
 }

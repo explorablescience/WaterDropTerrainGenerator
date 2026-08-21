@@ -97,9 +97,9 @@ impl NodeGraph {
             .ok_or_else(|| NodeError(format!("Unknown node id {:?}", id)))
     }
 
-    /// Validates the graph and caches the dependency order of the final node's ancestors.
-    pub fn validate(&mut self) -> Result<(), NodeError> {
-        let node_id = NodeId(self.nodes.len() - 1);
+    /// Validates the graph for the given `node_id`, ensuring that all dependencies are satisfied and that there are no cycles.
+    /// Returns an error if the graph is invalid.
+    pub fn validate(&mut self, node_id: NodeId) -> Result<(), NodeError> {
         let order = self.ancestors_topo(node_id)?;
         self.cached_topo = Some((node_id, order));
         Ok(())
@@ -170,7 +170,7 @@ impl NodeGraph {
             internal_tile_size += 2 * padding;
         }
 
-        let pool = TilePool::new(internal_tile_size * internal_tile_size);
+        let pool = TilePool::new(internal_tile_size);
 
         let mut outputs: HashMap<NodeId, Vec<TileHandle>> = HashMap::new();
         for &id in order {

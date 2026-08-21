@@ -49,20 +49,20 @@ impl NodeGeneratorPerlin {
 
     fn process_tile(&self, pool: &Arc<TilePool>) -> TileHandle {
         let mut output = pool.allocate();
-        let width = (output.len() as f32).sqrt() as usize;
-        for y in 0..width {
-            for x in 0..width {
+        let s = output.size();
+        for y in 0..s {
+            for x in 0..s {
                 let mut noise_value = 0.0;
                 let mut frequency = self.frequency;
                 let mut amplitude = self.amplitude;
                 for _ in 0..self.octaves {
-                    let nx = x as f32 / width as f32;
-                    let ny = y as f32 / width as f32;
+                    let nx = x as f32 / s as f32;
+                    let ny = y as f32 / s as f32;
                     noise_value += perlin_noise(nx * frequency, ny * frequency) * amplitude;
                     frequency *= 2.0;
                     amplitude *= 0.5;
                 }
-                output[y * width + x] = noise_value;
+                output[y * s + x] = noise_value;
             }
         }
         Arc::new(output)
