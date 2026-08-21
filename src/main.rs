@@ -1,9 +1,15 @@
 use std::sync::Arc;
 
-use wde::{CustomBevyPlugins, prelude::{*, Color as WdeColor}};
 use bevy::prelude::*;
+use wde::{
+    CustomBevyPlugins,
+    prelude::{Color as WdeColor, *},
+};
 
-use crate::{core::{allocator::TilePool, node::Node}, nodes::NodeErosion};
+use crate::{
+    core::{allocator::TilePool, node::Node},
+    nodes::NodeErosion,
+};
 
 pub(crate) mod core;
 pub(crate) mod nodes;
@@ -15,13 +21,20 @@ struct CustomWdePlugins;
 impl Plugin for CustomWdePlugins {
     fn build(&self, app: &mut App) {
         app.add_plugins((
-            wde::wde_logger::LogPlugin::default().auto_level(),
+            wde::wde_logger::LogPlugin {
+                level: wde::wde_logger::LogLevel::INFO,
+                log_file: std::env::temp_dir()
+                    .join("waterdrop-terrain-editor")
+                    .join("log.txt"),
+                ..default()
+            }
+            .with_crate_level("waterdrop_terrain_editor", wde::wde_logger::LogLevel::DEBUG),
             wde::wde_renderer::RenderPlugin,
             wde::wde_pbr::PbrPlugin,
             wde::wde_camera::CameraPlugin,
             wde::wde_camera_controller::CameraControllerPlugin,
             wde::wde_gizmos::GizmosPlugin,
-            wde::wde_editor::EditorPlugin
+            wde::wde_editor::EditorPlugin,
         ));
 
         app.add_systems(Startup, (init_scene, tests))
@@ -46,7 +59,7 @@ fn init_scene(mut commands: Commands) {
         Name::new("Main Camera"),
         Transform::from_xyz(2.0, 2.0, 2.0).looking_at(Vec3::ZERO, Vec3::Y),
         ActiveCamera,
-        ThirdPersonController::default() // FreeCameraController::default()
+        ThirdPersonController::default(), // FreeCameraController::default()
     ));
 }
 
@@ -54,32 +67,32 @@ fn gizmo_debug(mut gizmos: ResMut<Gizmos>) {
     // Gizmos tests
     gizmos.cube(
         Transform::from_xyz(0.0, 1.5, 0.0).with_scale(Vec3::splat(2.0)),
-        WdeColor::from_srgba(1.0, 0.0, 0.0, 1.0)
+        WdeColor::from_srgba(1.0, 0.0, 0.0, 1.0),
     );
     gizmos.line(
         Vec3::new(-5.0, 0.1, 0.0),
         Vec3::new(5.0, 0.1, 0.0),
-        WdeColor::from_srgba(0.0, 1.0, 0.0, 1.0)
+        WdeColor::from_srgba(0.0, 1.0, 0.0, 1.0),
     );
     gizmos.line(
         Vec3::new(0.0, 0.1, -5.0),
         Vec3::new(0.0, 0.1, 5.0),
-        WdeColor::from_srgba(0.0, 0.5, 1.0, 1.0)
+        WdeColor::from_srgba(0.0, 0.5, 1.0, 1.0),
     );
     gizmos.quad(
         [
             Vec3::new(-2.0, 0.05, -2.0),
             Vec3::new(2.0, 0.05, -2.0),
             Vec3::new(2.0, 0.05, 2.0),
-            Vec3::new(-2.0, 0.05, 2.0)
+            Vec3::new(-2.0, 0.05, 2.0),
         ],
-        WdeColor::from_srgba(1.0, 1.0, 0.0, 0.35)
+        WdeColor::from_srgba(1.0, 1.0, 0.0, 0.35),
     );
 }
 
 fn tests() {
     let pool = TilePool::new(9); // 3x3 tile
-        let mut input = pool.allocate();
+    let mut input = pool.allocate();
     input.copy_from_slice(&[0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0]);
 
     let erosion = NodeErosion::default();
@@ -93,5 +106,8 @@ fn tests() {
     // A corner texel (no raised neighbour) should stay untouched.
     assert_eq!(output[0][0], 0.0);
 
-    info!("NodeErosion test passed: output[0][4] = {}, output[0][0] = {}", output[0][4], output[0][0]);
+    debug!(
+        "NodeErosion test passed: output[0][4] = {}, output[0][0] = {}",
+        output[0][4], output[0][0]
+    );
 }
