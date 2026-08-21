@@ -7,8 +7,11 @@ use wde::{
 };
 
 use crate::{
-    core::{allocator::TilePool, node::Node},
-    nodes::NodeErosion,
+    core::{
+        graph::NodeGraph,
+        node::Node,
+        tile_allocator::{TilePool},
+    }, nodes::{NodeErosion, NodeGeneratorPerlin},
 };
 
 pub(crate) mod core;
@@ -37,7 +40,7 @@ impl Plugin for CustomWdePlugins {
             wde::wde_editor::EditorPlugin,
         ));
 
-        app.add_systems(Startup, (init_scene, tests))
+        app.add_systems(Startup, (init_scene, debug_fc))
             .add_systems(Update, gizmo_debug);
     }
 }
@@ -90,24 +93,33 @@ fn gizmo_debug(mut gizmos: ResMut<Gizmos>) {
     );
 }
 
-fn tests() {
-    let pool = TilePool::new(9); // 3x3 tile
-    let mut input = pool.allocate();
-    input.copy_from_slice(&[0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0]);
-
-    let erosion = NodeErosion::default();
-    let output = erosion
-        .process(&pool, &[Arc::new(input)])
-        .expect("erosion should succeed on a matching tile");
-
-    // The centre texel should have moved halfway towards its neighbours' average (0.0).
-    assert_eq!(output.len(), 1);
-    assert!((output[0][4] - 0.5).abs() < 1e-6);
-    // A corner texel (no raised neighbour) should stay untouched.
-    assert_eq!(output[0][0], 0.0);
-
-    debug!(
-        "NodeErosion test passed: output[0][4] = {}, output[0][0] = {}",
-        output[0][4], output[0][0]
+fn debug_fc() {
+    // Chain two erosion nodes and check the graph runs them in dependency order.
+    let mut graph = NodeGraph::default();
+    let (initial_terrain, first_erosion, second_erosion) = (
+        graph.add_node(Box::new(NodeGeneratorPerlin::default())),
+        graph.add_node(Box::new(NodeErosion::default())),
+        graph.add_node(Box::new(NodeErosion::default())),
     );
+    graph
+        .connect(initial_terrain, 0, first_erosion, 0)
+        .and_then(|g| g.connect(first_erosion, 0, second_erosion, 0))
+        .expect("Graph connections should succeed");
+    graph
+        .validate()
+        .expect("Graph should be valid");
+    // let pool = TilePool::new(9); // 3x3 tile
+    // let outputs = graph
+    //     .execute(&pool)
+    //     .expect("Graph execution should succeed");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tmp_test() {
+        
+    }
 }

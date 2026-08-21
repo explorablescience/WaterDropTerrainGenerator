@@ -2,17 +2,17 @@ use std::fmt;
 use std::sync::Arc;
 use std::fmt::Debug;
 
-use crate::core::{allocator::{TileHandle, TilePool}, node_parameters::{NParamDesc, NParamValue}};
+use crate::core::{tile_allocator::{TileHandle, TilePool}, node_parameters::{NParamDesc, NParamValue}};
 
 /// Represents a node in the node graph, which can have input and output sockets for connecting to other nodes.
 /// It is responsible for processing data and producing output based on its inputs.
-pub trait Node: Debug + Clone + Send + Sync {
+pub trait Node: Debug + Send + Sync {
     fn label(&self) -> &str;
 
     /// Size of the kernel (in texels) that this node operates on. Used to determine padding.
-    fn size(&self) -> usize;
-    fn inputs(&self) -> &[NodeSocket];
-    fn outputs(&self) -> &[NodeSocket];
+    fn size(&self) -> usize { 0 }
+    fn inputs(&self) -> &[NodeSocket] { &[] }
+    fn outputs(&self) -> &[NodeSocket] { &[] }
 
     /// Returns a slice of parameter descriptions for this node.
     fn desc_params(&self) -> &[NParamDesc] { &[] }

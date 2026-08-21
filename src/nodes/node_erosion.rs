@@ -1,13 +1,11 @@
-//! A minimal erosion node, used as a template for the terrain-generation node graph.
-
 use std::sync::{Arc, OnceLock};
 
-use crate::core::allocator::{TileHandle, TilePool};
+use crate::core::tile_allocator::{TileHandle, TilePool};
 use crate::core::node::{Node, NodeError, NodePortType, NodeSocket};
 use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
 
 /// A minimal thermal-erosion node
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct NodeErosion {
     /// Width (and height) in texels of the square tile this node operates on.
     width: usize,
@@ -110,15 +108,30 @@ impl Node for NodeErosion {
         pool: &Arc<TilePool>,
         inputs: &[TileHandle],
     ) -> Result<Vec<TileHandle>, NodeError> {
-        assert_eq!(inputs.len(), 1, "Erosion node expects a single input tile");
-        assert_eq!(
-            inputs[0].len(),
-            self.width * self.width,
-            "Erosion node expects a {}x{} input tile",
-            self.width,
-            self.width
-        );
-
         Ok(vec![self.process_tile(pool, &inputs[0])])
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_node_erosion() {
+        let pool = TilePool::new(9); // 3x3 tile
+        let mut input = pool.allocate();
+        input.copy_from_slice(&[0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0]);
+
+        let erosion = NodeErosion::default();
+        let output = erosion
+            .process(&pool, &[Arc::new(input)])
+            .expect("erosion should succeed on a matching tile");
+
+        // The centre texel should have moved halfway towards its neighbours' average (0.0).
+        assert_eq!(output.len(), 1);
+        assert!((output[0][4] - 0.5).abs() < 1e-6);
+        // A corner texel (no raised neighbour) should stay untouched.
+        assert_eq!(output[0][0], 0.0);
     }
 }

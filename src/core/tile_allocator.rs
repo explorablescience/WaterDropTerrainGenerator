@@ -12,6 +12,17 @@ pub struct TileBuffer {
     data: Vec<f32>,
     pool: Arc<TilePool>,
 }
+impl TileBuffer {
+    /// Returns the length of the tile (total number of f32 values).
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Returns true if the tile is empty.
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+}
 impl std::ops::Deref for TileBuffer {
     type Target = [f32];
     fn deref(&self) -> &Self::Target {
@@ -69,7 +80,6 @@ impl TilePool {
         }
     }
 
-    /// The length of each tile in the pool (total number of f32 values per tile).
     pub fn tile_length(&self) -> usize {
         self.tile_length
     }
