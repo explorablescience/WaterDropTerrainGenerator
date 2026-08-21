@@ -7,9 +7,9 @@ use crate::core::tile_allocator::{TileHandle, TilePool};
 /// A node that generates a perlin noise terrain tile.
 #[derive(Debug)]
 pub struct NodeGeneratorPerlin {
-    frequency: f32,
-    amplitude: f32,
-    octaves: u32,
+    pub frequency: f32,
+    pub amplitude: f32,
+    pub octaves: u32,
 }
 impl Default for NodeGeneratorPerlin {
     fn default() -> Self {
@@ -58,7 +58,7 @@ impl NodeGeneratorPerlin {
                 for _ in 0..self.octaves {
                     let nx = x as f32 / s as f32;
                     let ny = y as f32 / s as f32;
-                    noise_value += perlin_noise(nx * frequency, ny * frequency) * amplitude;
+                    noise_value += self.perlin_noise(nx * frequency, ny * frequency) * amplitude;
                     frequency *= 2.0;
                     amplitude *= 0.5;
                 }
@@ -66,6 +66,11 @@ impl NodeGeneratorPerlin {
             }
         }
         Arc::new(output)
+    }
+
+    fn perlin_noise(&self, x: f32, y: f32) -> f32 {
+        // For now, simple sin
+        (x * 2.0 * std::f32::consts::PI).sin() * (y * 2.0 * std::f32::consts::PI).sin() * self.amplitude
     }
 }
 impl Node for NodeGeneratorPerlin {
@@ -108,12 +113,4 @@ impl Node for NodeGeneratorPerlin {
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![self.process_tile(pool)])
     }
-}
-
-
-
-fn perlin_noise(x: f32, y: f32) -> f32 {
-    // Placeholder for actual Perlin noise implementation.
-    // For now, just return a simple function of x and y.
-    (x.sin() + y.cos()) * 0.5
 }

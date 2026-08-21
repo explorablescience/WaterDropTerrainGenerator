@@ -147,13 +147,9 @@ fn main(in: VertexOutput) -> @location(0) vec4<f32> {
         lo += light_contribution * attenuation;
     }
 
-    // // Ambient term: sample the Mars sky
-    // let kd = 0.2;
-    // let irradiance = mars_sky(normal, in_atmosphere) * in_pbr_params.lighting_params.y;
-    // let ambient = kd * irradiance * albedo * ao;
-
-    // Ambient term = dark
-    let ambient = vec3<f32>(0.02, 0.02, 0.02) * albedo * ao;
+    // Ambient term: simple ambient color
+    let kd = 0.1;
+    let ambient = kd * in_pbr_params.lighting_params.y * albedo * ao;
 
     // HDR tone mapping (Reinhard) and final output
     var color = lo + ambient;

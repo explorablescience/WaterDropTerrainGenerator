@@ -1,13 +1,6 @@
 use bevy::prelude::*;
-use wde::{
-    CustomBevyPlugins,
-    prelude::{Color as WdeColor, *},
-};
-
-use waterdrop_terrain_editor::{
-    core::graph::NodeGraph,
-    nodes::{NodeErosion, NodeGeneratorPerlin},
-};
+use waterdrop_terrain_editor::render;
+use wde::{CustomBevyPlugins, prelude::*};
 
 /// Custom WaterDropEngine plugins.
 #[derive(Default)]
@@ -31,8 +24,8 @@ impl Plugin for CustomWdePlugins {
             wde::wde_editor::EditorPlugin,
         ));
 
-        app.add_systems(Startup, (init_scene, debug_fc))
-            .add_systems(Update, gizmo_debug);
+        app.add_plugins(render::RenderPlugin)
+            .add_systems(Startup, default_scene);
     }
 }
 
@@ -47,58 +40,22 @@ fn main() {
     app.run();
 }
 
-fn init_scene(mut commands: Commands) {
+fn default_scene(mut commands: Commands) {
     // Main camera
     commands.spawn((
         Name::new("Main Camera"),
         Transform::from_xyz(2.0, 2.0, 2.0).looking_at(Vec3::ZERO, Vec3::Y),
         ActiveCamera,
-        ThirdPersonController::default(), // FreeCameraController::default()
+        ThirdPersonController::default(),
     ));
-}
 
-fn gizmo_debug(mut gizmos: ResMut<Gizmos>) {
-    // Gizmos tests
-    gizmos.cube(
-        Transform::from_xyz(0.0, 1.5, 0.0).with_scale(Vec3::splat(2.0)),
-        WdeColor::from_srgba(1.0, 0.0, 0.0, 1.0),
-    );
-    gizmos.line(
-        Vec3::new(-5.0, 0.1, 0.0),
-        Vec3::new(5.0, 0.1, 0.0),
-        WdeColor::from_srgba(0.0, 1.0, 0.0, 1.0),
-    );
-    gizmos.line(
-        Vec3::new(0.0, 0.1, -5.0),
-        Vec3::new(0.0, 0.1, 5.0),
-        WdeColor::from_srgba(0.0, 0.5, 1.0, 1.0),
-    );
-    gizmos.quad(
-        [
-            Vec3::new(-2.0, 0.05, -2.0),
-            Vec3::new(2.0, 0.05, -2.0),
-            Vec3::new(2.0, 0.05, 2.0),
-            Vec3::new(-2.0, 0.05, 2.0),
-        ],
-        WdeColor::from_srgba(1.0, 1.0, 0.0, 0.35),
-    );
-}
-
-fn debug_fc() {
-    let mut graph = NodeGraph::new();
-    let (generator_noise, erosion) = (
-        graph.add_node(Box::new(NodeGeneratorPerlin::default())),
-        graph.add_node(Box::new(NodeErosion::default())),
-    );
-    graph
-        .connect(generator_noise, 0, erosion, 0)
-        .expect("Graph connection should succeed");
-    graph.validate(erosion).expect("Graph should be valid");
-
-    // Run the graph to generate a tile
-    let output_tiles = graph
-        .process(erosion, 3)
-        .expect("Graph processing should succeed");
-    let data: Vec<f32> = output_tiles[0].iter().copied().collect();
-    println!("Generated tile data: {:?}", &data);
+    // Spawn the lights
+    commands.spawn((
+        Name::new("Sun Light"),
+        DirectionalLight {
+            direction: Vec3::new(-1.0, -2.0, -1.0).normalize(),
+            intensity: 0.5,
+            ..Default::default()
+        },
+    ));
 }

@@ -4,7 +4,7 @@ use crate::core::node::{Node, NodeError, NodePortType, NodeSocket};
 use crate::core::tile_allocator::{TileHandle, TilePool};
 
 /// A node that generates a flat terrain tile.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct NodeGeneratorFlat;
 impl Node for NodeGeneratorFlat {
     fn label(&self) -> &str {
