@@ -2,8 +2,6 @@
 
 use std::sync::{Arc, Mutex};
 
-type TileData = Vec<f32>;
-
 /// A tile of data produced by a node's output socket and consumed by downstream nodes.
 pub type TileHandle = Arc<TileBuffer>;
 
@@ -11,7 +9,7 @@ pub type TileHandle = Arc<TileBuffer>;
 /// It can be allocated from a [`TilePool`] and will be returned to the pool when dropped.
 /// To access the data, you can dereference the buffer to get a slice of f32 values.
 pub struct TileBuffer {
-    data: TileData,
+    data: Vec<f32>,
     pool: Arc<TilePool>,
 }
 impl std::ops::Deref for TileBuffer {
@@ -39,7 +37,7 @@ impl Drop for TileBuffer {
 /// A pool of tiles that can be allocated and deallocated.
 /// Each tile is represented by a [`TileBuffer`].
 pub struct TilePool {
-    free: Mutex<Vec<TileData>>,
+    free: Mutex<Vec<Vec<f32>>>,
     tile_length: usize,
 }
 impl TilePool {

@@ -1,8 +1,13 @@
+use std::sync::Arc;
+
 use wde::{CustomBevyPlugins, prelude::{*, Color as WdeColor}};
 use bevy::prelude::*;
 
+use crate::{core::{allocator::TilePool, node::Node}, nodes::NodeErosion};
+
 pub(crate) mod core;
 pub(crate) mod nodes;
+pub(crate) mod render;
 
 /// Custom WaterDropEngine plugins.
 #[derive(Default)]
@@ -19,7 +24,7 @@ impl Plugin for CustomWdePlugins {
             wde::wde_editor::EditorPlugin
         ));
 
-        app.add_systems(Startup, init_scene)
+        app.add_systems(Startup, (init_scene, tests))
             .add_systems(Update, gizmo_debug);
     }
 }
@@ -70,4 +75,23 @@ fn gizmo_debug(mut gizmos: ResMut<Gizmos>) {
         ],
         WdeColor::from_srgba(1.0, 1.0, 0.0, 0.35)
     );
+}
+
+fn tests() {
+    let pool = TilePool::new(9); // 3x3 tile
+        let mut input = pool.allocate();
+    input.copy_from_slice(&[0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0]);
+
+    let erosion = NodeErosion::default();
+    let output = erosion
+        .process(&pool, &[Arc::new(input)])
+        .expect("erosion should succeed on a matching tile");
+
+    // The centre texel should have moved halfway towards its neighbours' average (0.0).
+    assert_eq!(output.len(), 1);
+    assert!((output[0][4] - 0.5).abs() < 1e-6);
+    // A corner texel (no raised neighbour) should stay untouched.
+    assert_eq!(output[0][0], 0.0);
+
+    info!("NodeErosion test passed: output[0][4] = {}, output[0][0] = {}", output[0][4], output[0][0]);
 }
