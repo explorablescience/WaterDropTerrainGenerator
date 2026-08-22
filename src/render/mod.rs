@@ -1,67 +1,79 @@
 use bevy::prelude::*;
 use wde::prelude::*;
 
-use crate::{
-    core::graph::NodeGraph, nodes::{NodeErosion, NodeGeneratorPerlin}, render::mesh_generation::heightmap_to_mesh,
-};
+use crate::{TerrainGraph, render::mesh_generation::heightmap_to_mesh};
 
 mod mesh_generation;
 
-/// Number of texels per side of the heightmap tile requested from the graph.
-const TILE_SIZE: usize = 128;
 /// World-space distance between adjacent heightmap samples.
 const CELL_SIZE: f32 = 0.1;
 /// World-space height gained per unit of heightmap value.
 const HEIGHT_SCALE: f32 = 1.0;
 
-
 pub struct RenderPlugin;
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_terrain_preview);
+        app.init_resource::<TerrainPreview>()
+            .add_systems(Startup, create_material)
+            .add_systems(Update, update_terrain_preview);
     }
 }
 
-/// Runs the node graph, then spawns the resulting heightmap as a plain white,
-/// PBR-shaded (and shadow-casting) terrain mesh.
-pub fn spawn_terrain_preview(
-    mut commands: Commands,
+#[derive(Resource, Default)]
+pub struct TerrainPreview {
+    generation: u32,
+    current_go: Option<Entity>,
+    material_handle: Option<Handle<PbrMaterial>>,
+}
+
+pub fn create_material(
     asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<PbrMaterial>>,
+    mut terrain_preview: ResMut<TerrainPreview>,
 ) {
-    let mut graph = NodeGraph::new();
-    let (generator, erosion) = (
-        graph.add_node(Box::new(NodeGeneratorPerlin {
-            frequency: 2.5,
-            octaves: 1,
-            amplitude: 1.0,
-        })),
-        // graph.add_node(Box::new(NodeGeneratorFlat)),
-        graph.add_node(Box::new(NodeErosion::default())),
-    );
-    graph
-        .connect(generator, 0, erosion, 0)
-        .expect("Graph connection should succeed");
-
-    let output_tiles = graph
-        .process(erosion, TILE_SIZE)
-        .expect("Graph processing should succeed");
-    let heightmap = &output_tiles[0];
-    let size = heightmap.size();
-    let data: Vec<f32> = heightmap.iter().copied().collect();
-
-    let mesh_handle = asset_server.add(heightmap_to_mesh("terrain-heightmap", &data, size));
-    let white_material = materials.add(PbrMaterial {
+    terrain_preview.material_handle = Some(asset_server.add(PbrMaterial {
         label: "terrain-white".to_string(),
         albedo: (1.0, 1.0, 1.0, 0.0),
         ..default()
-    });
+    }));
+}
 
-    commands.spawn((
+pub fn update_terrain_preview(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut terrain_preview: ResMut<TerrainPreview>,
+    terrain_graph: Res<TerrainGraph>,
+) {
+    // Check if the terrain graph has new output tiles
+    let state = terrain_graph.state();
+    if state.is_none() || state.unwrap().0 == terrain_preview.generation {
+        return; // No new output tiles, or already processed this generation
+    }
+
+    // Despawn the previous terrain preview entity if it exists
+    if let Some(entity) = terrain_preview.current_go.take() {
+        commands.entity(entity).despawn();
+    }
+
+    // Get the output tiles from the terrain graph state
+    let output_tiles = &state.unwrap().1;
+    let heightmap = &output_tiles[0]; // For now, just use the first tile for preview (should be heightmap)
+    let size = heightmap.size();
+    let data: Vec<f32> = heightmap.iter().copied().collect();
+
+    // Spawn the mesh
+    let mesh = asset_server.add(heightmap_to_mesh(
+        format!("terrain_preview_{}", terrain_preview.generation).as_str(),
+        &data,
+        size,
+    ));
+    terrain_preview.current_go = Some(commands.spawn((
         Name::new("Terrain Preview"),
         Transform::default(),
-        Mesh3d(mesh_handle),
-        PbrMaterial3d(white_material),
+        Mesh3d(mesh),
+        PbrMaterial3d(terrain_preview.material_handle.clone().unwrap()),
         CastShadow,
-    ));
+    )).id());
+
+    // Update the generation to the latest
+    terrain_preview.generation = state.unwrap().0;
 }

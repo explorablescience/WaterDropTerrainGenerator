@@ -29,13 +29,13 @@ impl NodeGeneratorPerlin {
                     key: "frequency",
                     label: "Frequency",
                     default: NParamValue::Float(1.0),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 100.0 }),
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 10.0 }),
                 },
                 NParamDesc {
                     key: "amplitude",
                     label: "Amplitude",
                     default: NParamValue::Float(1.0),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 100.0 }),
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 10.0 }),
                 },
                 NParamDesc {
                     key: "octaves",

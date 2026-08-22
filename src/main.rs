@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use waterdrop_terrain_editor::{render, ui};
+use waterdrop_terrain_editor::{TerrainGraph, nodes::{NodeErosion, NodeGeneratorPerlin}, render, ui};
 use wde::{CustomBevyPlugins, prelude::*};
 
 /// Custom WaterDropEngine plugins.
@@ -24,8 +24,9 @@ impl Plugin for CustomWdePlugins {
             wde::wde_editor::EditorPlugin,
         ));
 
-        app.add_plugins((render::RenderPlugin, ui::UIPlugin))
-            .add_systems(Startup, default_scene);
+        app.init_resource::<TerrainGraph>()
+            .add_plugins((render::RenderPlugin, ui::UIPlugin))
+            .add_systems(Startup, (default_scene, default_terrain));
     }
 }
 
@@ -58,4 +59,24 @@ fn default_scene(mut commands: Commands) {
             ..Default::default()
         },
     ));
+}
+
+fn default_terrain(mut terrain_graph: ResMut<TerrainGraph>) {
+    // For now, create a simple graph
+    let graph = terrain_graph.graph_mut();
+    let (generator, erosion) = (
+        graph.add_node(Box::new(NodeGeneratorPerlin {
+            frequency: 2.5,
+            octaves: 1,
+            amplitude: 1.0,
+        })),
+        // graph.add_node(Box::new(NodeGeneratorFlat)),
+        graph.add_node(Box::new(NodeErosion::default())),
+    );
+    graph
+        .connect(generator, 0, erosion, 0)
+        .expect("Graph connection should succeed");
+
+    // For now, process the graph once
+    terrain_graph.process(erosion, 128).expect("Graph processing should succeed");
 }

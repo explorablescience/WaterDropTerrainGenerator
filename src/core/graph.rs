@@ -116,6 +116,14 @@ impl NodeGraph {
             .ok_or_else(|| NodeError(format!("Unknown node id {:?}", id)))
     }
 
+    /// Returns a mutable reference to the node with the given [`NodeId`].
+    pub fn node_mut(&mut self, id: NodeId) -> Result<&mut (dyn Node + '_), NodeError> {
+        match self.nodes.get_mut(id.0) {
+            Some(Some(node)) => Ok(node.as_mut()),
+            _ => Err(NodeError(format!("Unknown node id {:?}", id))),
+        }
+    }
+
     /// Returns `node_id` together with all of its ancestors, in dependency order.
     fn ancestors_topo(&self, node_id: NodeId) -> Result<Vec<NodeId>, NodeError> {
         // Walk backward from `node_id` to find the set of nodes it depends on.
@@ -220,5 +228,14 @@ impl NodeGraph {
         outputs
             .remove(&node_id)
             .ok_or_else(|| NodeError(format!("{:?} was not evaluated", node_id)))
+    }
+
+
+    pub fn get_nodes_labels(&self) -> Vec<(NodeId, String)> {
+        self.nodes
+            .iter()
+            .enumerate()
+            .filter_map(|(i, node)| node.as_ref().map(|n| (NodeId(i), n.label().to_string())))
+            .collect()
     }
 }

@@ -8,6 +8,7 @@ pub type TileHandle = Arc<TileBuffer>;
 /// A buffer that holds the data of a tile.
 /// It can be allocated from a [`TilePool`] and will be returned to the pool when dropped.
 /// To access the data, you can dereference the buffer to get a slice of f32 values.
+#[derive(Debug, Clone)]
 pub struct TileBuffer {
     data: Vec<f32>,
     pool: Arc<TilePool>,
@@ -47,6 +48,7 @@ impl Drop for TileBuffer {
 
 /// A pool of tiles that can be allocated and deallocated.
 /// Each tile is represented by a [`TileBuffer`].
+#[derive(Debug)]
 pub struct TilePool {
     free: Mutex<Vec<Vec<f32>>>,
     tile_length: usize,
