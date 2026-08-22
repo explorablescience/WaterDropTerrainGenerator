@@ -13,6 +13,13 @@ path = "../WaterDropEngine/crates/core/wde"
 default-features = false
 features = ["pbr", "gizmos", "editor"]
 
+[dependencies.egui-snarl]
+version = "0.9"
+
+[dependencies.egui_tiles]
+version = "0.14"
+default-features = false
+
 [build-dependencies]
 anyhow = "1.0.104"
 fs_extra = "1.3.0"

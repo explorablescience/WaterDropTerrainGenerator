@@ -6,10 +6,15 @@ use crate::TerrainGraph;
 use crate::core::graph::NodeId;
 use crate::core::node_parameters::{NParamConstraints, NParamValue};
 
+mod dock;
+mod snarl_demo;
+use dock::EditorDockPlugin;
+
 pub struct UIPlugin;
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, show_ui);
+        app.add_plugins(EditorDockPlugin)
+            .add_systems(Update, show_ui);
     }
 }
 
