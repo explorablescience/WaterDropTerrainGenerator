@@ -20,7 +20,9 @@ struct Edge {
 /// Nodes are executed in dependency order: a node only runs once every node feeding its inputs has already produced its outputs.
 #[derive(Default)]
 pub struct NodeGraph {
-    nodes: Vec<Box<dyn Node>>,
+    /// Removed nodes leave a `None` tombstone behind so that every other node's [`NodeId`]
+    /// (a plain index into this vec) stays valid.
+    nodes: Vec<Option<Box<dyn Node>>>,
     edges: Vec<Edge>,
     /// Dependency order computed by the last successful [`Self::validate`] call, for the node
     /// it validated. Consumed by [`Self::process`] so the topological sort isn't redone on every
@@ -39,9 +41,26 @@ impl NodeGraph {
     /// Adds a node to the graph and returns its [`NodeId`].
     pub fn add_node(&mut self, node: Box<dyn Node>) -> NodeId {
         let id = NodeId(self.nodes.len());
-        self.nodes.push(node);
+        self.nodes.push(Some(node));
         self.cached_topo = None;
         id
+    }
+
+    /// Removes the node with the given [`NodeId`] from the graph, disconnecting any edges to or from it and invalidating the cached topological order.
+    /// Returns an error if the node doesn't exist (or was already removed).
+    pub fn remove_node(&mut self, node_id: NodeId) -> Result<(), NodeError> {
+        let slot = self
+            .nodes
+            .get_mut(node_id.0)
+            .ok_or_else(|| NodeError(format!("Unknown node id {:?}", node_id)))?;
+        if slot.take().is_none() {
+            return Err(NodeError(format!("Unknown node id {:?}", node_id)));
+        }
+
+        self.edges
+            .retain(|e| e.from_node != node_id && e.to_node != node_id);
+        self.cached_topo = None;
+        Ok(())
     }
 
     /// Connects an output socket of `from_node` to an input socket of `to_node`.
@@ -93,16 +112,8 @@ impl NodeGraph {
     pub fn node(&self, id: NodeId) -> Result<&dyn Node, NodeError> {
         self.nodes
             .get(id.0)
-            .map(|n| n.as_ref())
+            .and_then(|slot| slot.as_deref())
             .ok_or_else(|| NodeError(format!("Unknown node id {:?}", id)))
-    }
-
-    /// Validates the graph for the given `node_id`, ensuring that all dependencies are satisfied and that there are no cycles.
-    /// Returns an error if the graph is invalid.
-    pub fn validate(&mut self, node_id: NodeId) -> Result<(), NodeError> {
-        let order = self.ancestors_topo(node_id)?;
-        self.cached_topo = Some((node_id, order));
-        Ok(())
     }
 
     /// Returns `node_id` together with all of its ancestors, in dependency order.
@@ -153,14 +164,14 @@ impl NodeGraph {
     /// Evaluates `node_id` and produces its output tiles as square tiles of `tile_size` texels per side.
     /// Due to padding requirements of the nodes, the internal tile size used for computation may be larger than `tile_size`.
     /// Returns an error if the graph has not been validated or if any node fails to process.
-    pub fn process(&self, node_id: NodeId, tile_size: usize) -> Result<Vec<TileHandle>, NodeError> {
+    pub fn process(&mut self, node_id: NodeId, tile_size: usize) -> Result<Vec<TileHandle>, NodeError> {
         let order = match &self.cached_topo {
             Some((validated_id, order)) if *validated_id == node_id => order,
             _ => {
-                return Err(NodeError(format!(
-                    "{:?} has not been validated; call NodeGraph::validate() before process()",
-                    node_id
-                )));
+                // Validate the graph to update the cache
+                let order = self.ancestors_topo(node_id)?;
+                self.cached_topo = Some((node_id, order.clone()));
+                &self.cached_topo.as_ref().unwrap().1
             }
         };
 

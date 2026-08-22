@@ -42,7 +42,6 @@ pub fn spawn_terrain_preview(
     graph
         .connect(generator, 0, erosion, 0)
         .expect("Graph connection should succeed");
-    graph.validate(erosion).expect("Graph should be valid");
 
     let output_tiles = graph
         .process(erosion, TILE_SIZE)

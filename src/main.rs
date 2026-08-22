@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use waterdrop_terrain_editor::render;
+use waterdrop_terrain_editor::{render, ui};
 use wde::{CustomBevyPlugins, prelude::*};
 
 /// Custom WaterDropEngine plugins.
@@ -24,7 +24,7 @@ impl Plugin for CustomWdePlugins {
             wde::wde_editor::EditorPlugin,
         ));
 
-        app.add_plugins(render::RenderPlugin)
+        app.add_plugins((render::RenderPlugin, ui::UIPlugin))
             .add_systems(Startup, default_scene);
     }
 }

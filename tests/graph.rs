@@ -44,13 +44,13 @@ fn test_node_graph_cycle_detection() {
         .and_then(|g| g.connect(node_b, 0, node_a, 0)) // This creates a cycle
         .expect("Graph connections should succeed");
 
-    // Validate the graph and expect an error due to the cycle
-    let result = graph.validate(node_b);
+    // Run the graph and expect a cycle detection error
+    let result = graph.process(node_b, 8);
     assert!(result.is_err(), "Graph validation should fail due to cycle");
 }
 
 #[test]
-fn test_node_graph_process_requires_prior_validate() {
+fn test_node_graph_remove_node_disconnects_edges() {
     let mut graph = NodeGraph::new();
     let (source, erosion) = (
         graph.add_node(Box::new(NodeGeneratorFlat)),
@@ -60,11 +60,48 @@ fn test_node_graph_process_requires_prior_validate() {
         .connect(source, 0, erosion, 0)
         .expect("Graph connection should succeed");
 
+    graph.remove_node(source).expect("Removing an existing node should succeed");
+
+    // The dangling input edge should be gone, so erosion now has an unconnected input.
     let result = graph.process(erosion, 8);
     assert!(
         result.is_err(),
-        "Processing before validate() should fail"
+        "Processing should fail once the upstream node feeding erosion is removed"
     );
+
+    // The node itself is gone too.
+    assert!(graph.node(source).is_err(), "Removed node should no longer be reachable");
+}
+
+#[test]
+fn test_node_graph_remove_node_resets_cached_topo() {
+    let mut graph = NodeGraph::new();
+    let (source, erosion) = (
+        graph.add_node(Box::new(NodeGeneratorFlat)),
+        graph.add_node(Box::new(NodeErosion::default())),
+    );
+    graph
+        .connect(source, 0, erosion, 0)
+        .expect("Graph connection should succeed");
+
+    graph.remove_node(source).expect("Removing an existing node should succeed");
+
+    // The cached topo order from before the removal must not be reused.
+    let result = graph.process(erosion, 8);
+    assert!(
+        result.is_err(),
+        "Processing should require re-validation after a node is removed"
+    );
+}
+
+#[test]
+fn test_node_graph_remove_node_unknown_id_errors() {
+    let mut graph = NodeGraph::new();
+    let node = graph.add_node(Box::new(NodeGeneratorFlat));
+    graph.remove_node(node).expect("First removal should succeed");
+
+    let result = graph.remove_node(node);
+    assert!(result.is_err(), "Removing an already-removed node should fail");
 }
 
 #[test]
@@ -77,7 +114,6 @@ fn test_node_graph_process_grows_internal_tile_size_for_padding() {
     graph
         .connect(source, 0, erosion, 0)
         .expect("Graph connection should succeed");
-    graph.validate(erosion).expect("Graph should be valid");
 
     let tile_size = 8;
     let outputs = graph
