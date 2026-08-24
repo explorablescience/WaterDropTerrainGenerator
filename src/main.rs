@@ -1,5 +1,9 @@
 use bevy::prelude::*;
-use waterdrop_terrain_editor::{TerrainGraph, nodes::{NodeErosion, NodeGeneratorPerlin}, render, ui};
+use waterdrop_terrain_editor::{
+    TerrainGraph,
+    nodes::{NodeErosion, NodeGeneratorPerlin},
+    render, ui
+};
 use wde::{CustomBevyPlugins, prelude::*};
 
 /// Custom WaterDropEngine plugins.
@@ -21,7 +25,7 @@ impl Plugin for CustomWdePlugins {
             wde::wde_camera::CameraPlugin,
             wde::wde_camera_controller::CameraControllerPlugin,
             wde::wde_gizmos::GizmosPlugin,
-            wde::wde_editor::EditorPlugin,
+            wde::wde_editor::EditorPlugin
         ));
 
         app.init_resource::<TerrainGraph>()
@@ -47,7 +51,7 @@ fn default_scene(mut commands: Commands) {
         Name::new("Main Camera"),
         Transform::from_xyz(2.0, 2.0, 2.0).looking_at(Vec3::ZERO, Vec3::Y),
         ActiveCamera,
-        ThirdPersonController::default(),
+        ThirdPersonController::default()
     ));
 
     // Spawn the lights
@@ -57,7 +61,7 @@ fn default_scene(mut commands: Commands) {
             direction: Vec3::new(-1.0, -2.0, -1.0).normalize(),
             intensity: 0.5,
             ..Default::default()
-        },
+        }
     ));
 }
 
@@ -68,15 +72,17 @@ fn default_terrain(mut terrain_graph: ResMut<TerrainGraph>) {
         graph.add_node(Box::new(NodeGeneratorPerlin {
             frequency: 2.5,
             octaves: 1,
-            amplitude: 1.0,
+            amplitude: 1.0
         })),
         // graph.add_node(Box::new(NodeGeneratorFlat)),
-        graph.add_node(Box::new(NodeErosion::default())),
+        graph.add_node(Box::new(NodeErosion::default()))
     );
     graph
         .connect(generator, 0, erosion, 0)
         .expect("Graph connection should succeed");
 
     // For now, process the graph once
-    terrain_graph.process(erosion, 128).expect("Graph processing should succeed");
+    terrain_graph
+        .process(erosion, 128)
+        .expect("Graph processing should succeed");
 }

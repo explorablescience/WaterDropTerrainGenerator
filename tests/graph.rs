@@ -6,7 +6,7 @@ fn test_node_graph_connections() {
     let mut graph = NodeGraph::default();
     let (node_a, node_b) = (
         graph.add_node(Box::new(NodeGeneratorPerlin::default())),
-        graph.add_node(Box::new(NodeErosion::default())),
+        graph.add_node(Box::new(NodeErosion::default()))
     );
 
     // Valid connection
@@ -15,7 +15,10 @@ fn test_node_graph_connections() {
 
     // Invalid connection: NodeErosion has only one input socket (index 0)
     let result_invalid = graph.connect(node_a, 0, node_b, 1);
-    assert!(result_invalid.is_err(), "Graph connection should fail due to invalid socket index");
+    assert!(
+        result_invalid.is_err(),
+        "Graph connection should fail due to invalid socket index"
+    );
 }
 
 #[test]
@@ -24,7 +27,7 @@ fn test_node_graph_validation() {
     let (node_a, node_b, node_c) = (
         graph.add_node(Box::new(NodeGeneratorPerlin::default())),
         graph.add_node(Box::new(NodeErosion::default())),
-        graph.add_node(Box::new(NodeErosion::default())),
+        graph.add_node(Box::new(NodeErosion::default()))
     );
     graph
         .connect(node_a, 0, node_b, 0)
@@ -37,7 +40,7 @@ fn test_node_graph_cycle_detection() {
     let mut graph = NodeGraph::new();
     let (node_a, node_b) = (
         graph.add_node(Box::new(NodeErosion::default())),
-        graph.add_node(Box::new(NodeErosion::default())),
+        graph.add_node(Box::new(NodeErosion::default()))
     );
     graph
         .connect(node_a, 0, node_b, 0)
@@ -54,13 +57,15 @@ fn test_node_graph_remove_node_disconnects_edges() {
     let mut graph = NodeGraph::new();
     let (source, erosion) = (
         graph.add_node(Box::new(NodeGeneratorFlat)),
-        graph.add_node(Box::new(NodeErosion::default())),
+        graph.add_node(Box::new(NodeErosion::default()))
     );
     graph
         .connect(source, 0, erosion, 0)
         .expect("Graph connection should succeed");
 
-    graph.remove_node(source).expect("Removing an existing node should succeed");
+    graph
+        .remove_node(source)
+        .expect("Removing an existing node should succeed");
 
     // The dangling input edge should be gone, so erosion now has an unconnected input.
     let result = graph.process(erosion, 8);
@@ -70,7 +75,10 @@ fn test_node_graph_remove_node_disconnects_edges() {
     );
 
     // The node itself is gone too.
-    assert!(graph.node(source).is_err(), "Removed node should no longer be reachable");
+    assert!(
+        graph.node(source).is_err(),
+        "Removed node should no longer be reachable"
+    );
 }
 
 #[test]
@@ -78,13 +86,15 @@ fn test_node_graph_remove_node_resets_cached_topo() {
     let mut graph = NodeGraph::new();
     let (source, erosion) = (
         graph.add_node(Box::new(NodeGeneratorFlat)),
-        graph.add_node(Box::new(NodeErosion::default())),
+        graph.add_node(Box::new(NodeErosion::default()))
     );
     graph
         .connect(source, 0, erosion, 0)
         .expect("Graph connection should succeed");
 
-    graph.remove_node(source).expect("Removing an existing node should succeed");
+    graph
+        .remove_node(source)
+        .expect("Removing an existing node should succeed");
 
     // The cached topo order from before the removal must not be reused.
     let result = graph.process(erosion, 8);
@@ -98,10 +108,15 @@ fn test_node_graph_remove_node_resets_cached_topo() {
 fn test_node_graph_remove_node_unknown_id_errors() {
     let mut graph = NodeGraph::new();
     let node = graph.add_node(Box::new(NodeGeneratorFlat));
-    graph.remove_node(node).expect("First removal should succeed");
+    graph
+        .remove_node(node)
+        .expect("First removal should succeed");
 
     let result = graph.remove_node(node);
-    assert!(result.is_err(), "Removing an already-removed node should fail");
+    assert!(
+        result.is_err(),
+        "Removing an already-removed node should fail"
+    );
 }
 
 #[test]
@@ -109,7 +124,7 @@ fn test_node_graph_process_grows_internal_tile_size_for_padding() {
     let mut graph = NodeGraph::new();
     let (source, erosion) = (
         graph.add_node(Box::new(NodeGeneratorFlat)),
-        graph.add_node(Box::new(NodeErosion::default())), // size() == 3 -> padding of 2
+        graph.add_node(Box::new(NodeErosion::default())) // size() == 3 -> padding of 2
     );
     graph
         .connect(source, 0, erosion, 0)

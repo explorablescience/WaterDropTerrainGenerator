@@ -1,34 +1,30 @@
 use std::sync::{Arc, OnceLock};
 
-use crate::core::tile_allocator::{TileHandle, TilePool};
 use crate::core::node::{Node, NodeError, NodePortType, NodeSocket};
 use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
+use crate::core::tile_allocator::{TileHandle, TilePool};
 
 /// A minimal thermal-erosion node
 #[derive(Debug)]
 pub struct NodeErosion {
     /// How strongly each texel is pulled towards its neighbours' average height, in `[0, 1]`.
-    strength: f32,
+    strength: f32
 }
 impl Default for NodeErosion {
     fn default() -> Self {
-        Self {
-            strength: 0.5,
-        }
+        Self { strength: 0.5 }
     }
 }
 impl NodeErosion {
     fn params() -> &'static [NParamDesc] {
         static SPECS: OnceLock<Vec<NParamDesc>> = OnceLock::new();
         SPECS.get_or_init(|| {
-            vec![
-                NParamDesc {
-                    key: "strength",
-                    label: "Strength",
-                    default: NParamValue::Float(0.5),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 }),
-                }
-            ]
+            vec![NParamDesc {
+                key: "strength",
+                label: "Strength",
+                default: NParamValue::Float(0.5),
+                constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 })
+            }]
         })
     }
 
@@ -68,13 +64,13 @@ impl Node for NodeErosion {
     fn inputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "height",
-            dtype: NodePortType::Height,
+            dtype: NodePortType::Height
         }]
     }
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "height",
-            dtype: NodePortType::Height,
+            dtype: NodePortType::Height
         }]
     }
 
@@ -84,13 +80,13 @@ impl Node for NodeErosion {
     fn get_param(&self, key: &str) -> Option<NParamValue> {
         match key {
             "strength" => Some(NParamValue::Float(self.strength)),
-            _ => None,
+            _ => None
         }
     }
     fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), String> {
         match (key, value) {
             ("strength", NParamValue::Float(v)) => self.strength = v,
-            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v)),
+            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v))
         }
         Ok(())
     }
@@ -98,7 +94,7 @@ impl Node for NodeErosion {
     fn process(
         &self,
         pool: &Arc<TilePool>,
-        inputs: &[TileHandle],
+        inputs: &[TileHandle]
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![self.process_tile(pool, &inputs[0])])
     }

@@ -1,5 +1,5 @@
-use wde::prelude::*;
 use bevy::prelude::*;
+use wde::prelude::*;
 
 use crate::render::{CELL_SIZE, HEIGHT_SCALE};
 
@@ -22,24 +22,23 @@ pub fn heightmap_to_mesh(label: &str, heightmap: &[f32], size: usize) -> Mesh {
             let position = Vec3::new(
                 (x as f32 - offset) * CELL_SIZE,
                 height,
-                (z as f32 - offset) * CELL_SIZE,
+                (z as f32 - offset) * CELL_SIZE
             );
 
             // Central-difference slope estimate, used as a smooth per-vertex normal.
-            let dx = (sample(x as isize + 1, z as isize) - sample(x as isize - 1, z as isize)) * HEIGHT_SCALE;
-            let dz = (sample(x as isize, z as isize + 1) - sample(x as isize, z as isize - 1)) * HEIGHT_SCALE;
+            let dx = (sample(x as isize + 1, z as isize) - sample(x as isize - 1, z as isize))
+                * HEIGHT_SCALE;
+            let dz = (sample(x as isize, z as isize + 1) - sample(x as isize, z as isize - 1))
+                * HEIGHT_SCALE;
             let normal = Vec3::new(-dx, 2.0 * CELL_SIZE, -dz).normalize();
 
             min = min.min(position);
             max = max.max(position);
             vertices.push(Vertex {
                 position: [position.x, position.y, position.z],
-                uv: [
-                    x as f32 / (size - 1) as f32,
-                    z as f32 / (size - 1) as f32,
-                ],
+                uv: [x as f32 / (size - 1) as f32, z as f32 / (size - 1) as f32],
                 normal: [normal.x, normal.y, normal.z],
-                tangent: [1.0, 0.0, 0.0, 1.0],
+                tangent: [1.0, 0.0, 0.0, 1.0]
             });
         }
     }
@@ -61,6 +60,6 @@ pub fn heightmap_to_mesh(label: &str, heightmap: &[f32], size: usize) -> Mesh {
         vertices,
         indices,
         bbox: MeshBbox { min, max },
-        use_ssbo: true,
+        use_ssbo: true
     }
 }

@@ -4,7 +4,10 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 
-use crate::{core::{graph::{NodeGraph, NodeId}, tile_allocator::TileBuffer}};
+use crate::core::{
+    graph::{NodeGraph, NodeId},
+    tile_allocator::TileBuffer
+};
 
 pub mod core;
 pub mod nodes;
@@ -15,7 +18,7 @@ pub mod ui;
 #[derive(Resource, Default)]
 pub struct TerrainGraph {
     graph: NodeGraph,
-    state: Option<(u32, Vec<Arc<TileBuffer>>)>, // (generation, output tiles)
+    state: Option<(u32, Vec<Arc<TileBuffer>>)> // (generation, output tiles)
 }
 impl TerrainGraph {
     /// Processes the terrain graph starting from the given node ID and tile size.

@@ -13,7 +13,7 @@ struct Edge {
     from_node: NodeId,
     from_socket: usize,
     to_node: NodeId,
-    to_socket: usize,
+    to_socket: usize
 }
 
 /// A directed graph of [`Node`]s, wired together through their input/output sockets.
@@ -27,14 +27,14 @@ pub struct NodeGraph {
     /// Dependency order computed by the last successful [`Self::validate`] call, for the node
     /// it validated. Consumed by [`Self::process`] so the topological sort isn't redone on every
     /// run. Cleared whenever the graph is mutated, since that can invalidate the order.
-    cached_topo: Option<(NodeId, Vec<NodeId>)>,
+    cached_topo: Option<(NodeId, Vec<NodeId>)>
 }
 impl NodeGraph {
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
             edges: Vec::new(),
-            cached_topo: None,
+            cached_topo: None
         }
     }
 
@@ -70,7 +70,7 @@ impl NodeGraph {
         from_node: NodeId,
         from_socket: usize,
         to_node: NodeId,
-        to_socket: usize,
+        to_socket: usize
     ) -> Result<&mut Self, NodeError> {
         // Validate that the socket indices exist and that their types match
         let from = self.node(from_node)?;
@@ -102,7 +102,7 @@ impl NodeGraph {
             from_node,
             from_socket,
             to_node,
-            to_socket,
+            to_socket
         });
         self.cached_topo = None;
         Ok(self)
@@ -120,7 +120,7 @@ impl NodeGraph {
     pub fn node_mut(&mut self, id: NodeId) -> Result<&mut (dyn Node + '_), NodeError> {
         match self.nodes.get_mut(id.0) {
             Some(Some(node)) => Ok(node.as_mut()),
-            _ => Err(NodeError(format!("Unknown node id {:?}", id))),
+            _ => Err(NodeError(format!("Unknown node id {:?}", id)))
         }
     }
 
@@ -172,7 +172,11 @@ impl NodeGraph {
     /// Evaluates `node_id` and produces its output tiles as square tiles of `tile_size` texels per side.
     /// Due to padding requirements of the nodes, the internal tile size used for computation may be larger than `tile_size`.
     /// Returns an error if the graph has not been validated or if any node fails to process.
-    pub fn process(&mut self, node_id: NodeId, tile_size: usize) -> Result<Vec<TileHandle>, NodeError> {
+    pub fn process(
+        &mut self,
+        node_id: NodeId,
+        tile_size: usize
+    ) -> Result<Vec<TileHandle>, NodeError> {
         let order = match &self.cached_topo {
             Some((validated_id, order)) if *validated_id == node_id => order,
             _ => {
@@ -229,7 +233,6 @@ impl NodeGraph {
             .remove(&node_id)
             .ok_or_else(|| NodeError(format!("{:?} was not evaluated", node_id)))
     }
-
 
     pub fn get_nodes_labels(&self) -> Vec<(NodeId, String)> {
         self.nodes

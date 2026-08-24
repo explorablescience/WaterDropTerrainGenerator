@@ -23,12 +23,12 @@ impl Plugin for RenderPlugin {
 pub struct TerrainPreview {
     generation: u32,
     current_go: Option<Entity>,
-    material_handle: Option<Handle<PbrMaterial>>,
+    material_handle: Option<Handle<PbrMaterial>>
 }
 
 pub fn create_material(
     asset_server: Res<AssetServer>,
-    mut terrain_preview: ResMut<TerrainPreview>,
+    mut terrain_preview: ResMut<TerrainPreview>
 ) {
     terrain_preview.material_handle = Some(asset_server.add(PbrMaterial {
         label: "terrain-white".to_string(),
@@ -41,7 +41,7 @@ pub fn update_terrain_preview(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut terrain_preview: ResMut<TerrainPreview>,
-    terrain_graph: Res<TerrainGraph>,
+    terrain_graph: Res<TerrainGraph>
 ) {
     // Check if the terrain graph has new output tiles
     let state = terrain_graph.state();
@@ -64,15 +64,19 @@ pub fn update_terrain_preview(
     let mesh = asset_server.add(heightmap_to_mesh(
         format!("terrain_preview_{}", terrain_preview.generation).as_str(),
         &data,
-        size,
+        size
     ));
-    terrain_preview.current_go = Some(commands.spawn((
-        Name::new("Terrain Preview"),
-        Transform::default(),
-        Mesh3d(mesh),
-        PbrMaterial3d(terrain_preview.material_handle.clone().unwrap()),
-        CastShadow,
-    )).id());
+    terrain_preview.current_go = Some(
+        commands
+            .spawn((
+                Name::new("Terrain Preview"),
+                Transform::default(),
+                Mesh3d(mesh),
+                PbrMaterial3d(terrain_preview.material_handle.clone().unwrap()),
+                CastShadow
+            ))
+            .id()
+    );
 
     // Update the generation to the latest
     terrain_preview.generation = state.unwrap().0;

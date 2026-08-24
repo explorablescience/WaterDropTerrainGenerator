@@ -11,7 +11,7 @@ pub type TileHandle = Arc<TileBuffer>;
 #[derive(Debug, Clone)]
 pub struct TileBuffer {
     data: Vec<f32>,
-    pool: Arc<TilePool>,
+    pool: Arc<TilePool>
 }
 impl TileBuffer {
     /// Returns the size of the tile (number of f32 values).
@@ -51,7 +51,7 @@ impl Drop for TileBuffer {
 #[derive(Debug)]
 pub struct TilePool {
     free: Mutex<Vec<Vec<f32>>>,
-    tile_length: usize,
+    tile_length: usize
 }
 impl TilePool {
     /// Creates a new tile pool with the given tile length.
@@ -63,7 +63,7 @@ impl TilePool {
     pub fn new(tile_length: usize) -> Arc<Self> {
         Arc::new(Self {
             free: Mutex::new(Vec::new()),
-            tile_length,
+            tile_length
         })
     }
 
@@ -78,7 +78,7 @@ impl TilePool {
             .unwrap_or_else(|| vec![0.0; self.tile_length * self.tile_length]);
         TileBuffer {
             data: tile,
-            pool: Arc::clone(self),
+            pool: Arc::clone(self)
         }
     }
 

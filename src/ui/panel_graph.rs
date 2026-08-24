@@ -1,7 +1,13 @@
-use egui_snarl::{InPin, NodeId, OutPin, Snarl, ui::{PinInfo, SnarlPin, SnarlStyle, SnarlViewer, SnarlWidget}};
-use wde::prelude::{ui::egui};
+use egui_snarl::{
+    InPin, NodeId, OutPin, Snarl,
+    ui::{PinInfo, SnarlPin, SnarlStyle, SnarlViewer, SnarlWidget}
+};
+use wde::prelude::ui::egui;
 
-use crate::{core::node::Node, nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin}};
+use crate::{
+    core::node::Node,
+    nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin}
+};
 
 pub type GraphInstance = Snarl<GraphNode>;
 pub enum GraphNode {
@@ -15,7 +21,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
             GraphNode::Main(node) => node.label().to_string()
         }
     }
-    
+
     fn show_header(
         &mut self,
         node: NodeId,
@@ -40,7 +46,12 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         }
     }
 
-    fn show_input(&mut self, pin: &InPin, ui: &mut egui::Ui, instance: &mut GraphInstance) -> impl SnarlPin + 'static {
+    fn show_input(
+        &mut self,
+        pin: &InPin,
+        ui: &mut egui::Ui,
+        instance: &mut GraphInstance
+    ) -> impl SnarlPin + 'static {
         match &instance[pin.id.node] {
             GraphNode::Main(node) => {
                 let pin = &node.inputs()[pin.id.input];
@@ -50,7 +61,12 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         }
     }
 
-    fn show_output(&mut self, pin: &OutPin, ui: &mut egui::Ui, instance: &mut GraphInstance) -> impl SnarlPin + 'static {
+    fn show_output(
+        &mut self,
+        pin: &OutPin,
+        ui: &mut egui::Ui,
+        instance: &mut GraphInstance
+    ) -> impl SnarlPin + 'static {
         match &instance[pin.id.node] {
             GraphNode::Main(node) => {
                 let pin = &node.outputs()[pin.id.output];
@@ -63,7 +79,12 @@ impl SnarlViewer<GraphNode> for GraphViewer {
     fn has_graph_menu(&mut self, _pos: egui::Pos2, _snarl: &mut Snarl<GraphNode>) -> bool {
         true
     }
-    fn show_graph_menu(&mut self, pos: egui::Pos2, ui: &mut egui::Ui, snarl: &mut Snarl<GraphNode>) {
+    fn show_graph_menu(
+        &mut self,
+        pos: egui::Pos2,
+        ui: &mut egui::Ui,
+        snarl: &mut Snarl<GraphNode>
+    ) {
         ui.label("Add Node");
 
         ui.menu_button("Generator", |ui| {
@@ -72,7 +93,10 @@ impl SnarlViewer<GraphNode> for GraphViewer {
                 ui.close();
             }
             if ui.button("Perlin Generator").clicked() {
-                snarl.insert_node(pos, GraphNode::Main(Box::new(NodeGeneratorPerlin::default())));
+                snarl.insert_node(
+                    pos,
+                    GraphNode::Main(Box::new(NodeGeneratorPerlin::default()))
+                );
                 ui.close();
             }
         });

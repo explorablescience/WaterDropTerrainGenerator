@@ -5,7 +5,7 @@ pub enum NParamValue {
     Float(f32),
     Bool(bool),
     String(String),
-    Enum(String),
+    Enum(String)
 }
 
 /// Describes a node parameter, including its name, type, default value, and optional constraints.
@@ -13,7 +13,7 @@ pub struct NParamDesc {
     pub key: &'static str,
     pub label: &'static str,
     pub default: NParamValue,
-    pub constraints: Option<NParamConstraints>,
+    pub constraints: Option<NParamConstraints>
 }
 
 /// Constraints for validating node parameters.
@@ -27,7 +27,7 @@ pub enum NParamConstraints {
     /// The value must be one of the specified options.
     EnumOneOf { options: Vec<&'static str> },
     /// Custom validation function. The function should return `Ok(())` if the value is valid, or an `Err(String)` with an error message if invalid.
-    Custom(NParamValidator),
+    Custom(NParamValidator)
 }
 /// Custom validation function for a node parameter.
 pub type NParamValidator = Box<dyn Fn(&NParamValue) -> Result<(), String> + Send + Sync>;
@@ -70,7 +70,7 @@ impl NParamConstraints {
                 }
             }
             (NParamConstraints::Custom(f), _) => f(value),
-            _ => Err("Type mismatch between constraint and value".to_string()),
+            _ => Err("Type mismatch between constraint and value".to_string())
         }
     }
 }

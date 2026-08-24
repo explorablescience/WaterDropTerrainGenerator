@@ -14,14 +14,14 @@ impl Node for NodeGeneratorFlat {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "height",
-            dtype: NodePortType::Height,
+            dtype: NodePortType::Height
         }]
     }
 
     fn process(
         &self,
         pool: &Arc<TilePool>,
-        _inputs: &[TileHandle],
+        _inputs: &[TileHandle]
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![Arc::new(pool.allocate())])
     }

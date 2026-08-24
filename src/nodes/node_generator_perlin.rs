@@ -9,14 +9,14 @@ use crate::core::tile_allocator::{TileHandle, TilePool};
 pub struct NodeGeneratorPerlin {
     pub frequency: f32,
     pub amplitude: f32,
-    pub octaves: u32,
+    pub octaves: u32
 }
 impl Default for NodeGeneratorPerlin {
     fn default() -> Self {
         Self {
             frequency: 1.0,
             amplitude: 1.0,
-            octaves: 4,
+            octaves: 4
         }
     }
 }
@@ -29,19 +29,25 @@ impl NodeGeneratorPerlin {
                     key: "frequency",
                     label: "Frequency",
                     default: NParamValue::Float(1.0),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 10.0 }),
+                    constraints: Some(NParamConstraints::FloatRange {
+                        min: 0.0,
+                        max: 10.0
+                    })
                 },
                 NParamDesc {
                     key: "amplitude",
                     label: "Amplitude",
                     default: NParamValue::Float(1.0),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 10.0 }),
+                    constraints: Some(NParamConstraints::FloatRange {
+                        min: 0.0,
+                        max: 10.0
+                    })
                 },
                 NParamDesc {
                     key: "octaves",
                     label: "Octaves",
                     default: NParamValue::Int(4),
-                    constraints: Some(NParamConstraints::IntRange { min: 1, max: 10 }),
+                    constraints: Some(NParamConstraints::IntRange { min: 1, max: 10 })
                 },
             ]
         })
@@ -70,7 +76,9 @@ impl NodeGeneratorPerlin {
 
     fn perlin_noise(&self, x: f32, y: f32) -> f32 {
         // For now, simple sin
-        (x * 2.0 * std::f32::consts::PI).sin() * (y * 2.0 * std::f32::consts::PI).sin() * self.amplitude
+        (x * 2.0 * std::f32::consts::PI).sin()
+            * (y * 2.0 * std::f32::consts::PI).sin()
+            * self.amplitude
     }
 }
 impl Node for NodeGeneratorPerlin {
@@ -81,7 +89,7 @@ impl Node for NodeGeneratorPerlin {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "height",
-            dtype: NodePortType::Height,
+            dtype: NodePortType::Height
         }]
     }
 
@@ -93,7 +101,7 @@ impl Node for NodeGeneratorPerlin {
             "frequency" => Some(NParamValue::Float(self.frequency)),
             "amplitude" => Some(NParamValue::Float(self.amplitude)),
             "octaves" => Some(NParamValue::Int(self.octaves as i32)),
-            _ => None,
+            _ => None
         }
     }
     fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), String> {
@@ -101,7 +109,7 @@ impl Node for NodeGeneratorPerlin {
             ("frequency", NParamValue::Float(v)) => self.frequency = v,
             ("amplitude", NParamValue::Float(v)) => self.amplitude = v,
             ("octaves", NParamValue::Int(v)) => self.octaves = v as u32,
-            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v)),
+            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v))
         }
         Ok(())
     }
@@ -109,7 +117,7 @@ impl Node for NodeGeneratorPerlin {
     fn process(
         &self,
         pool: &Arc<TilePool>,
-        _inputs: &[TileHandle],
+        _inputs: &[TileHandle]
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![self.process_tile(pool)])
     }
