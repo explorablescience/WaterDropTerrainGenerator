@@ -249,8 +249,8 @@ pub fn show_graph(
 ) -> Option<SelectedNode> {
     let style = SnarlStyle::default();
 
-    // Initialize the viewer with the currently selected node, if any
-    let selected_node_id = id.with("selected-node");
+    // Initialize the viewer with the currently selected node, if any.
+    let selected_node_id = egui::Id::new("panel-graph-selected-node");
     let mut viewer = GraphViewer {
         selected: ui
             .ctx()
