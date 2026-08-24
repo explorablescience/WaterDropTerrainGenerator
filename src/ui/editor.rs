@@ -8,7 +8,7 @@ use bevy::{
 use egui_tiles::{Linear, LinearDir, TileId, Tiles, Tree};
 use wde::prelude::{ui::egui, *};
 
-use crate::ui::{editor_behavior::EditorBehavior, panel_graph::{self, GraphInstance}};
+use crate::ui::{editor_behavior::EditorBehavior, panel_graph::GraphInstance};
 
 pub struct EditorPanelsPlugin;
 impl Plugin for EditorPanelsPlugin {
@@ -112,7 +112,7 @@ fn draw_editor(
     }
 
     // Create the editor behavior used to render the panels
-    let graph_instance = graph_instance.get_or_insert_with(panel_graph::init_graph);
+    let graph_instance = graph_instance.get_or_insert_default();
     let mut behavior = EditorBehavior {
         graph_id: egui::Id::new("editor-graph-id").with(*generation_id),
         graph_instance

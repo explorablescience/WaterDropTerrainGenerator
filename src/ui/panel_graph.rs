@@ -1,19 +1,18 @@
-use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl, ui::{PinInfo, SnarlPin, SnarlStyle, SnarlViewer, SnarlWidget}};
+use egui_snarl::{InPin, NodeId, OutPin, Snarl, ui::{PinInfo, SnarlPin, SnarlStyle, SnarlViewer, SnarlWidget}};
 use wde::prelude::{ui::egui};
 
-pub type GraphInstance = Snarl<GraphNodes>;
+use crate::{core::node::Node, nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin}};
 
-pub enum GraphNodes {
-    TestInput,
-    TestOutput
+pub type GraphInstance = Snarl<GraphNode>;
+pub enum GraphNode {
+    Main(Box<dyn Node>)
 }
 
 struct GraphViewer;
-impl SnarlViewer<GraphNodes> for GraphViewer {
-    fn title(&mut self, node: &GraphNodes) -> String {
+impl SnarlViewer<GraphNode> for GraphViewer {
+    fn title(&mut self, node: &GraphNode) -> String {
         match node {
-            GraphNodes::TestInput => "Test Input".to_string(),
-            GraphNodes::TestOutput => "Test Output".to_string()
+            GraphNode::Main(node) => node.label().to_string()
         }
     }
     
@@ -23,45 +22,68 @@ impl SnarlViewer<GraphNodes> for GraphViewer {
         _inputs: &[InPin],
         _outputs: &[OutPin],
         ui: &mut egui::Ui,
-        snarl: &mut GraphInstance
+        instance: &mut GraphInstance
     ) {
-        let label = self.title(&snarl[node]);
+        let label = self.title(&instance[node]);
         ui.label(label);
     }
 
-    fn inputs(&mut self, node: &GraphNodes) -> usize {
+    fn inputs(&mut self, node: &GraphNode) -> usize {
         match node {
-            GraphNodes::TestInput => 1,
-            GraphNodes::TestOutput => 0
+            GraphNode::Main(node) => node.inputs().len()
         }
     }
 
-    fn outputs(&mut self, node: &GraphNodes) -> usize {
+    fn outputs(&mut self, node: &GraphNode) -> usize {
         match node {
-            GraphNodes::TestInput => 0,
-            GraphNodes::TestOutput => 1
+            GraphNode::Main(node) => node.outputs().len()
         }
     }
 
-    fn show_input(&mut self, _pin: &InPin, ui: &mut egui::Ui, _snarl: &mut GraphInstance) -> impl SnarlPin + 'static {
-        ui.label("in");
-        PinInfo::circle()
+    fn show_input(&mut self, pin: &InPin, ui: &mut egui::Ui, instance: &mut GraphInstance) -> impl SnarlPin + 'static {
+        match &instance[pin.id.node] {
+            GraphNode::Main(node) => {
+                let pin = &node.inputs()[pin.id.input];
+                ui.label(pin.name);
+                PinInfo::circle()
+            }
+        }
     }
 
-    fn show_output(&mut self, _pin: &OutPin, ui: &mut egui::Ui, _snarl: &mut GraphInstance) -> impl SnarlPin + 'static {
-        ui.label("out");
-        PinInfo::circle()
+    fn show_output(&mut self, pin: &OutPin, ui: &mut egui::Ui, instance: &mut GraphInstance) -> impl SnarlPin + 'static {
+        match &instance[pin.id.node] {
+            GraphNode::Main(node) => {
+                let pin = &node.outputs()[pin.id.output];
+                ui.label(pin.name);
+                PinInfo::circle()
+            }
+        }
     }
-}
 
+    fn has_graph_menu(&mut self, _pos: egui::Pos2, _snarl: &mut Snarl<GraphNode>) -> bool {
+        true
+    }
+    fn show_graph_menu(&mut self, pos: egui::Pos2, ui: &mut egui::Ui, snarl: &mut Snarl<GraphNode>) {
+        ui.label("Add Node");
 
-/// Initializes a new graph instance
-pub fn init_graph() -> GraphInstance {
-    let mut snarl = Snarl::new();
-    let input = snarl.insert_node(egui::pos2(0.0, 0.0), GraphNodes::TestInput);
-    let output = snarl.insert_node(egui::pos2(200.0, 0.0), GraphNodes::TestOutput);
-    snarl.connect(OutPinId { node: input, output: 0 }, InPinId { node: output, input: 0 });
-    snarl
+        ui.menu_button("Generator", |ui| {
+            if ui.button("Flat Generator").clicked() {
+                snarl.insert_node(pos, GraphNode::Main(Box::new(NodeGeneratorFlat)));
+                ui.close();
+            }
+            if ui.button("Perlin Generator").clicked() {
+                snarl.insert_node(pos, GraphNode::Main(Box::new(NodeGeneratorPerlin::default())));
+                ui.close();
+            }
+        });
+
+        ui.menu_button("Simulation", |ui| {
+            if ui.button("Erosion").clicked() {
+                snarl.insert_node(pos, GraphNode::Main(Box::new(NodeErosion::default())));
+                ui.close();
+            }
+        });
+    }
 }
 
 /// Displays the graph editor using egui-snarl.
