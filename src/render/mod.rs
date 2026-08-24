@@ -22,6 +22,7 @@ impl Plugin for RenderPlugin {
 #[derive(Resource, Default)]
 pub struct TerrainPreview {
     current_go: Option<Entity>,
+    mesh_handle: Option<Handle<Mesh>>,
     material_handle: Option<Handle<PbrMaterial>>
 }
 
@@ -38,7 +39,7 @@ pub fn create_material(
 
 pub fn update_terrain_preview(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
     mut terrain_preview: ResMut<TerrainPreview>,
     terrain_graph: Res<TerrainGraphHolder>
 ) {
@@ -60,31 +61,37 @@ pub fn update_terrain_preview(
         }
     };
 
-    // Despawn the previous terrain preview entity if it exists
-    if let Some(entity) = terrain_preview.current_go.take() {
-        commands.entity(entity).despawn();
-    }
-
     // Get the output tiles from the terrain graph state
     let heightmap = &tiles[0]; // For now, just use the first tile for preview (should be heightmap)
     let size = heightmap.size();
     let data: Vec<f32> = heightmap.iter().copied().collect();
-
-    // Spawn the mesh
-    let mesh = asset_server.add(heightmap_to_mesh(
+    let mesh = heightmap_to_mesh(
         &format!("terrain-preview-{}", generation),
         &data,
         size
-    ));
-    terrain_preview.current_go = Some(
-        commands
-            .spawn((
-                Name::new("Terrain Preview"),
-                Transform::default(),
-                Mesh3d(mesh),
-                PbrMaterial3d(terrain_preview.material_handle.clone().unwrap()),
-                CastShadow
-            ))
-            .id()
     );
+
+    // Reuse the existing mesh asset and entity if present, otherwise create a new one
+    match &terrain_preview.mesh_handle {
+        Some(handle) => {
+            if let Err(e) = meshes.insert(handle.id(), mesh) {
+                error!("Failed to update terrain preview mesh: {:?}", e);
+            }
+        }
+        None => {
+            let handle = meshes.add(mesh);
+            terrain_preview.current_go = Some(
+                commands
+                    .spawn((
+                        Name::new("Terrain Preview"),
+                        Transform::default(),
+                        Mesh3d(handle.clone()),
+                        PbrMaterial3d(terrain_preview.material_handle.clone().unwrap()),
+                        CastShadow
+                    ))
+                    .id()
+            );
+            terrain_preview.mesh_handle = Some(handle);
+        }
+    }
 }
