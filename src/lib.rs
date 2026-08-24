@@ -5,8 +5,7 @@ use std::sync::{Arc, RwLock};
 use bevy::prelude::*;
 
 use crate::core::{
-    graph::{NodeGraph, GraphNodeId},
-    tile_allocator::TileBuffer
+    graph::{GraphNodeId, NodeGraph}, node::NodeError, tile_allocator::TileBuffer
 };
 
 pub mod core;
@@ -38,9 +37,9 @@ pub struct TerrainGraph {
 impl TerrainGraph {
     /// Processes the terrain graph starting from the given node ID and tile size.
     /// Returns an error if the processing fails.
-    pub fn process(&mut self, node_id: GraphNodeId, tile_size: usize) -> Result<(), String> {
+    pub fn process(&mut self, node_id: GraphNodeId, tile_size: usize) -> Result<(), NodeError> {
         let generation = self.state.as_ref().map(|(g, _)| *g).unwrap_or(0);
-        let output_tiles = self.graph.process(node_id, tile_size).map_err(|e| e.0)?;
+        let output_tiles = self.graph.process(node_id, tile_size)?;
         self.state = Some((generation + 1, output_tiles));
         Ok(())
     }

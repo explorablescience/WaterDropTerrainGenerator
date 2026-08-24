@@ -1,9 +1,13 @@
 use egui_tiles::{Behavior, UiResponse};
-use wde::prelude::ui::egui;
+use wde::prelude::{ui::egui, *};
 
-use crate::{TerrainGraphHolder, ui::{
-    editor::EditorPanels, panel_graph::{self, GraphInstance, SelectedNode}, panel_properties
-}};
+use crate::{
+    TerrainGraphHolder, core::node::NodeError, ui::{
+        editor::EditorPanels,
+        panel_graph::{self, GraphInstance, SelectedNode},
+        panel_properties,
+    },
+};
 
 /// Define the behavior of the editor's panels, including how they are displayed and interacted with.
 pub struct EditorBehavior<'a> {
@@ -23,7 +27,7 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
         &mut self,
         ui: &mut egui::Ui,
         _tile_id: egui_tiles::TileId,
-        pane: &mut EditorPanels
+        pane: &mut EditorPanels,
     ) -> egui_tiles::UiResponse {
         // Add solid backdrop except for engine viewport (transparent)
         if !matches!(pane, EditorPanels::Engine) {
@@ -35,19 +39,35 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
         match pane {
             EditorPanels::Engine => {}
             EditorPanels::Graph => {
-                let selected_node = panel_graph::show_graph(self.graph_id, ui, self.graph_instance, self.terrain_graph.clone());
+                let selected_node = panel_graph::show_graph(
+                    self.graph_id,
+                    ui,
+                    self.graph_instance,
+                    self.terrain_graph.clone(),
+                );
                 self.selected_node = selected_node;
             }
             EditorPanels::Properties => {
-                panel_properties::draw_properties(ui, &self.terrain_graph, self.selected_node.map(|node| node.graph_id));
+                panel_properties::draw_properties(
+                    ui,
+                    &self.terrain_graph,
+                    self.selected_node.map(|node| node.graph_id),
+                );
 
                 // For now, we just add a button to process the terrain graph starting from the selected node
                 ui.add_space(10.0);
-                if ui.button("Process").clicked() && let Some(node) = self.selected_node {
+                if ui.button("Process").clicked()
+                    && let Some(node) = self.selected_node
+                {
                     // Process the terrain graph starting from the selected node
-                    self.terrain_graph.write()
-                        .process(node.graph_id, 128)
-                        .expect("Graph processing should succeed");
+                    if let Err(e) = self.terrain_graph.write().process(node.graph_id, 128) {
+                        match e {
+                            NodeError::InputNotConnected { node: _, socket: _ } => {} // TODO:
+                            _ => {
+                                error!("Error processing terrain graph: {:?}", e);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -59,12 +79,16 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
     }
 }
 impl<'a> EditorBehavior<'a> {
-    pub fn new(generation_id: &u64, graph_instance: &'a mut GraphInstance, terrain_graph: TerrainGraphHolder) -> Self {
+    pub fn new(
+        generation_id: &u64,
+        graph_instance: &'a mut GraphInstance,
+        terrain_graph: TerrainGraphHolder,
+    ) -> Self {
         EditorBehavior {
             graph_id: egui::Id::new("editor-graph-id").with(*generation_id),
             graph_instance,
             selected_node: None,
-            terrain_graph
+            terrain_graph,
         }
     }
 
@@ -72,7 +96,7 @@ impl<'a> EditorBehavior<'a> {
         match pane {
             EditorPanels::Engine => "Engine",
             EditorPanels::Graph => "Graph Editor",
-            EditorPanels::Properties => "Properties"
+            EditorPanels::Properties => "Properties",
         }
     }
 }

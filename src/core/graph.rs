@@ -52,9 +52,9 @@ impl NodeGraph {
         let slot = self
             .nodes
             .get_mut(node_id.0)
-            .ok_or_else(|| NodeError(format!("Unknown node id {:?}", node_id)))?;
+            .ok_or(NodeError::NodeNotFound(node_id))?;
         if slot.take().is_none() {
-            return Err(NodeError(format!("Unknown node id {:?}", node_id)));
+            return Err(NodeError::NodeNotFound(node_id));
         }
 
         self.edges
@@ -75,26 +75,27 @@ impl NodeGraph {
         // Validate that the socket indices exist and that their types match
         let from = self.node(from_node)?;
         let out_socket = from.outputs().get(from_socket).ok_or_else(|| {
-            NodeError(format!(
-                "{} has no output socket {}",
-                from.label(),
-                from_socket
-            ))
+            NodeError::OutputSocketNotFound {
+                node: from.label().to_string(),
+                socket: from_socket
+            }
         })?;
         let out_dtype = discriminant(&out_socket.dtype);
 
         let to = self.node(to_node)?;
         let in_socket = to.inputs().get(to_socket).ok_or_else(|| {
-            NodeError(format!("{} has no input socket {}", to.label(), to_socket))
+            NodeError::InputSocketNotFound {
+                node: to.label().to_string(),
+                socket: to_socket
+            }
         })?;
         if discriminant(&in_socket.dtype) != out_dtype {
-            return Err(NodeError(format!(
-                "Cannot connect {}:{} to {}:{}, socket types differ",
-                from.label(),
+            return Err(NodeError::SocketTypeMismatch {
+                from_node: from.label().to_string(),
                 from_socket,
-                to.label(),
+                to_node: to.label().to_string(),
                 to_socket
-            )));
+            });
         }
 
         // Add the edge to the graph
@@ -128,10 +129,12 @@ impl NodeGraph {
             self.cached_topo = None;
             Ok(self)
         } else {
-            Err(NodeError(format!(
-                "No connection from {}:{} to {}:{}",
-                from_node.0, from_socket, to_node.0, to_socket
-            )))
+            Err(NodeError::NotConnected {
+                from_node,
+                from_socket,
+                to_node,
+                to_socket
+            })
         }
     }
 
@@ -140,14 +143,14 @@ impl NodeGraph {
         self.nodes
             .get(id.0)
             .and_then(|slot| slot.as_deref())
-            .ok_or_else(|| NodeError(format!("Unknown node id {:?}", id)))
+            .ok_or(NodeError::NodeNotFound(id))
     }
 
     /// Returns a mutable reference to the node with the given [`NodeId`].
     pub fn node_mut(&mut self, id: GraphNodeId) -> Result<&mut (dyn Node + '_), NodeError> {
         match self.nodes.get_mut(id.0) {
             Some(Some(node)) => Ok(node.as_mut()),
-            _ => Err(NodeError(format!("Unknown node id {:?}", id)))
+            _ => Err(NodeError::NodeNotFound(id))
         }
     }
 
@@ -191,7 +194,7 @@ impl NodeGraph {
         }
 
         if order.len() != included.iter().filter(|&&b| b).count() {
-            return Err(NodeError("Graph contains a cycle".to_string()));
+            return Err(NodeError::CyclicGraph);
         }
         Ok(order)
     }
@@ -235,19 +238,16 @@ impl NodeGraph {
                         .iter()
                         .find(|e| e.to_node == id && e.to_socket == socket)
                         .map(|e| (e.from_node, e.from_socket))
-                        .ok_or_else(|| {
-                            NodeError(format!(
-                                "{} input {} is not connected",
-                                node.label(),
-                                socket
-                            ))
+                        .ok_or_else(|| NodeError::InputNotConnected {
+                            node: node.label().to_string(),
+                            socket
                         })?;
                     outputs
                         .get(&from_node)
                         .and_then(|outs| outs.get(from_socket))
                         .cloned()
-                        .ok_or_else(|| {
-                            NodeError(format!("No output available to feed {}", node.label()))
+                        .ok_or_else(|| NodeError::OutputNotAvailable {
+                            node: node.label().to_string()
                         })
                 })
                 .collect::<Result<Vec<_>, NodeError>>()?;
@@ -258,7 +258,7 @@ impl NodeGraph {
 
         outputs
             .remove(&node_id)
-            .ok_or_else(|| NodeError(format!("{:?} was not evaluated", node_id)))
+            .ok_or(NodeError::NodeNotEvaluated(node_id))
     }
 
     pub fn get_nodes_labels(&self) -> Vec<(GraphNodeId, String)> {
