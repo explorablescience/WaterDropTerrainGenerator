@@ -172,6 +172,31 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         });
     }
 
+    fn has_node_menu(&mut self, _node: &GraphNode) -> bool {
+        true
+    }
+    fn show_node_menu(
+        &mut self,
+        node: NodeId,
+        _inputs: &[InPin],
+        _outputs: &[OutPin],
+        ui: &mut egui::Ui,
+        snarl: &mut Snarl<GraphNode>,
+    )
+    {
+        if ui.button("Remove Node").clicked() {
+            let GraphNode::Main(graph_id) = &snarl[node];
+            if self.terrain_graph.write().graph_mut().remove_node(*graph_id).is_ok() {
+                snarl.remove_node(node);
+                if self.selected.is_some_and(|selected| selected.snarl_id == node) {
+                    self.selected = None;
+                }
+            } else {
+                error!("Failed to remove node.");
+            }
+        }
+    }
+
     fn node_frame(
         &mut self,
         default: egui::Frame,
@@ -212,7 +237,11 @@ impl SnarlViewer<GraphNode> for GraphViewer {
 impl GraphViewer {
     fn new_node(&mut self, pos: egui::Pos2, snarl: &mut Snarl<GraphNode>, node: Box<dyn Node>) {
         let graph_id = self.terrain_graph.write().graph_mut().add_node(node);
-        snarl.insert_node(pos, GraphNode::Main(graph_id));
+        let snarl_id = snarl.insert_node(pos, GraphNode::Main(graph_id));
+        self.selected = Some(SelectedNode {
+            snarl_id,
+            graph_id,
+        });
     }
 }
 
