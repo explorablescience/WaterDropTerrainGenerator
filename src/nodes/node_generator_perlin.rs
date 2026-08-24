@@ -1,6 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
-use crate::core::node::{Node, NodeError, NodePortType, NodeSocket};
+use crate::core::node::{Node, NodePortType, NodeSocket};
+use crate::core::node_error::NodeError;
 use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
 use crate::core::tile_allocator::{TileHandle, TilePool};
 

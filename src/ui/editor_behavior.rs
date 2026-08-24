@@ -48,11 +48,8 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
                 }
             }
             EditorPanels::Properties => {
-                panel_properties::draw_properties(
-                    ui,
-                    &self.terrain_graph,
-                    self.terrain_graph.read().selected_node,
-                );
+                let selected_node = self.terrain_graph.read().selected_node; // Watch out for deadlocks
+                panel_properties::draw_properties(ui, &self.terrain_graph, selected_node);
             }
         }
         UiResponse::None

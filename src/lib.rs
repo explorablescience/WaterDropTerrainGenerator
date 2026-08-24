@@ -6,7 +6,7 @@ use bevy::{platform::collections::HashMap, prelude::*};
 
 use crate::core::{
     graph::{GraphNodeId, NodeGraph, NodeGraphProcessResult},
-    node::NodeError,
+    node_error::NodeError,
     tile_allocator::TileHandle,
 };
 

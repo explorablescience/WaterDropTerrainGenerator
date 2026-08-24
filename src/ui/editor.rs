@@ -8,7 +8,10 @@ use bevy::{
 use egui_tiles::{Linear, LinearDir, TileId, Tiles, Tree};
 use wde::prelude::{ui::egui, *};
 
-use crate::{TerrainGraphHolder, ui::{editor_behavior::EditorBehavior, panel_graph::GraphInstance}};
+use crate::{
+    TerrainGraphHolder,
+    ui::{editor_behavior::EditorBehavior, panel_graph::GraphInstance},
+};
 
 pub struct EditorPanelsPlugin;
 impl Plugin for EditorPanelsPlugin {
@@ -120,10 +123,12 @@ fn draw_editor(
     egui::CentralPanel::default()
         .frame(frame)
         .show(&ctx.0, |ui| {
-            layout.tree.ui(
-                &mut EditorBehavior::new(&generation_id, graph_instance.get_or_insert_default(), terrain_graph.clone()),
-                ui,
+            let mut behavior = EditorBehavior::new(
+                &generation_id,
+                graph_instance.get_or_insert_default(),
+                terrain_graph.clone(),
             );
+            layout.tree.ui(&mut behavior, ui);
         });
 
     // Update the engine viewport rectangle

@@ -6,7 +6,7 @@ use waterdrop_terrain_editor::nodes::NodeErosion;
 
 #[test]
 fn test_node_erosion() {
-    let pool = TilePool::new(9); // 3x3 tile
+    let pool = TilePool::new(3); // 3x3 tile
     let mut input = pool.allocate();
     input.copy_from_slice(&[0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0]);
 

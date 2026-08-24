@@ -1,3 +1,5 @@
+use std::hash::Hash;
+
 /// Represents the value of a node parameter, which can be of various types.
 #[derive(Debug, Clone, PartialEq)]
 pub enum NParamValue {
@@ -7,6 +9,18 @@ pub enum NParamValue {
     String(String),
     Enum(String)
 }
+impl Hash for NParamValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            NParamValue::Int(v) => v.hash(state),
+            NParamValue::Float(v) => v.to_bits().hash(state),
+            NParamValue::Bool(v) => v.hash(state),
+            NParamValue::String(v) => v.hash(state),
+            NParamValue::Enum(v) => v.hash(state),
+        }
+    }
+}
 
 /// Describes a node parameter, including its name, type, default value, and optional constraints.
 pub struct NParamDesc {
@@ -14,6 +28,13 @@ pub struct NParamDesc {
     pub label: &'static str,
     pub default: NParamValue,
     pub constraints: Option<NParamConstraints>
+}
+impl Hash for NParamDesc {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.key.hash(state);
+        self.label.hash(state);
+        self.default.hash(state);
+    }
 }
 
 /// Constraints for validating node parameters.

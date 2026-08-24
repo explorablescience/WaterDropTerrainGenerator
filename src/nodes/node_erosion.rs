@@ -1,6 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
-use crate::core::node::{Node, NodeError, NodePortType, NodeSocket};
+use crate::core::node::{Node, NodePortType, NodeSocket};
+use crate::core::node_error::NodeError;
 use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
 use crate::core::tile_allocator::{TileHandle, TilePool};
 
@@ -35,14 +36,12 @@ impl NodeErosion {
             for x in 0..s {
                 let mut sum = 0.0;
                 let mut count = 0;
-                for dy in -1..=1 {
-                    for dx in -1..=1 {
-                        let nx = x as isize + dx;
-                        let ny = y as isize + dy;
-                        if nx >= 0 && nx < s as isize && ny >= 0 && ny < s as isize {
-                            sum += input[ny as usize * s + nx as usize];
-                            count += 1;
-                        }
+                for (dx, dy) in [(-1isize, 0isize), (1, 0), (0, -1), (0, 1)] {
+                    let nx = x as isize + dx;
+                    let ny = y as isize + dy;
+                    if nx >= 0 && nx < s as isize && ny >= 0 && ny < s as isize {
+                        sum += input[ny as usize * s + nx as usize];
+                        count += 1;
                     }
                 }
                 let average = sum / count as f32;

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use crate::core::node::{Node, NodeError, NodePortType, NodeSocket};
+use crate::core::node::{Node, NodePortType, NodeSocket};
+use crate::core::node_error::NodeError;
 use crate::core::tile_allocator::{TileHandle, TilePool};
 
 /// A node that generates a flat terrain tile.
