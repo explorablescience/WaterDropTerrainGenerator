@@ -21,7 +21,6 @@ impl Plugin for RenderPlugin {
 
 #[derive(Resource, Default)]
 pub struct TerrainPreview {
-    generation: u32,
     current_go: Option<Entity>,
     material_handle: Option<Handle<PbrMaterial>>
 }
@@ -43,13 +42,23 @@ pub fn update_terrain_preview(
     mut terrain_preview: ResMut<TerrainPreview>,
     terrain_graph: Res<TerrainGraphHolder>
 ) {
-    let terrain_graph = terrain_graph.read();
+    // Get selected node from terrain graph
+    let selected_node = match terrain_graph.read().selected_node {
+        Some(node_id) => node_id,
+        None => return, // No node selected
+    };
 
     // Check if the terrain graph has new output tiles
-    let state = terrain_graph.state();
-    if state.is_none() || state.unwrap().0 == terrain_preview.generation {
-        return; // No new output tiles, or already processed this generation
-    }
+    let (generation, tiles) = match terrain_graph.write().process(selected_node) {
+        Ok(state) => match state {
+            Some((generation, tiles)) => (generation, tiles),
+            None => return, // No new output tiles available
+        },
+        Err(e) => {
+            error!("Error while processing terrain graph: {:?}", e);
+            return;
+        }
+    };
 
     // Despawn the previous terrain preview entity if it exists
     if let Some(entity) = terrain_preview.current_go.take() {
@@ -57,14 +66,13 @@ pub fn update_terrain_preview(
     }
 
     // Get the output tiles from the terrain graph state
-    let output_tiles = &state.unwrap().1;
-    let heightmap = &output_tiles[0]; // For now, just use the first tile for preview (should be heightmap)
+    let heightmap = &tiles[0]; // For now, just use the first tile for preview (should be heightmap)
     let size = heightmap.size();
     let data: Vec<f32> = heightmap.iter().copied().collect();
 
     // Spawn the mesh
     let mesh = asset_server.add(heightmap_to_mesh(
-        format!("terrain_preview_{}", terrain_preview.generation).as_str(),
+        &format!("terrain-preview-{}", generation),
         &data,
         size
     ));
@@ -79,7 +87,4 @@ pub fn update_terrain_preview(
             ))
             .id()
     );
-
-    // Update the generation to the latest
-    terrain_preview.generation = state.unwrap().0;
 }

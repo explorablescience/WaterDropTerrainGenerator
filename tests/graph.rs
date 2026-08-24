@@ -1,10 +1,10 @@
 
-use waterdrop_terrain_editor::core::graph::NodeGraph;
+use waterdrop_terrain_editor::core::graph::{NodeGraph, NodeGraphProcessResult};
 use waterdrop_terrain_editor::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
 
 #[test]
 fn test_node_graph_connections() {
-    let mut graph = NodeGraph::default();
+    let mut graph = NodeGraph::new(32);
     let (node_a, node_b) = (
         graph.add_node(Box::new(NodeGeneratorPerlin::default())),
         graph.add_node(Box::new(NodeErosion::default()))
@@ -24,7 +24,7 @@ fn test_node_graph_connections() {
 
 #[test]
 fn test_node_graph_validation() {
-    let mut graph = NodeGraph::new();
+    let mut graph = NodeGraph::new(32);
     let (node_a, node_b, node_c) = (
         graph.add_node(Box::new(NodeGeneratorPerlin::default())),
         graph.add_node(Box::new(NodeErosion::default())),
@@ -38,7 +38,7 @@ fn test_node_graph_validation() {
 
 #[test]
 fn test_node_graph_cycle_detection() {
-    let mut graph = NodeGraph::new();
+    let mut graph = NodeGraph::new(32);
     let (node_a, node_b) = (
         graph.add_node(Box::new(NodeErosion::default())),
         graph.add_node(Box::new(NodeErosion::default()))
@@ -49,13 +49,13 @@ fn test_node_graph_cycle_detection() {
         .expect("Graph connections should succeed");
 
     // Run the graph and expect a cycle detection error
-    let result = graph.process(node_b, 8);
+    let result = graph.process(node_b);
     assert!(result.is_err(), "Graph validation should fail due to cycle");
 }
 
 #[test]
 fn test_node_graph_remove_node_disconnects_edges() {
-    let mut graph = NodeGraph::new();
+    let mut graph = NodeGraph::new(32);
     let (source, erosion) = (
         graph.add_node(Box::new(NodeGeneratorFlat)),
         graph.add_node(Box::new(NodeErosion::default()))
@@ -69,7 +69,7 @@ fn test_node_graph_remove_node_disconnects_edges() {
         .expect("Removing an existing node should succeed");
 
     // The dangling input edge should be gone, so erosion now has an unconnected input.
-    let result = graph.process(erosion, 8);
+    let result = graph.process(erosion);
     assert!(
         result.is_err(),
         "Processing should fail once the upstream node feeding erosion is removed"
@@ -84,7 +84,7 @@ fn test_node_graph_remove_node_disconnects_edges() {
 
 #[test]
 fn test_node_graph_remove_node_resets_cached_topo() {
-    let mut graph = NodeGraph::new();
+    let mut graph = NodeGraph::new(32);
     let (source, erosion) = (
         graph.add_node(Box::new(NodeGeneratorFlat)),
         graph.add_node(Box::new(NodeErosion::default()))
@@ -98,7 +98,7 @@ fn test_node_graph_remove_node_resets_cached_topo() {
         .expect("Removing an existing node should succeed");
 
     // The cached topo order from before the removal must not be reused.
-    let result = graph.process(erosion, 8);
+    let result = graph.process(erosion);
     assert!(
         result.is_err(),
         "Processing should require re-validation after a node is removed"
@@ -107,7 +107,7 @@ fn test_node_graph_remove_node_resets_cached_topo() {
 
 #[test]
 fn test_node_graph_remove_node_unknown_id_errors() {
-    let mut graph = NodeGraph::new();
+    let mut graph = NodeGraph::new(32);
     let node = graph.add_node(Box::new(NodeGeneratorFlat));
     graph
         .remove_node(node)
@@ -122,7 +122,8 @@ fn test_node_graph_remove_node_unknown_id_errors() {
 
 #[test]
 fn test_node_graph_process_grows_internal_tile_size_for_padding() {
-    let mut graph = NodeGraph::new();
+    let tile_size = 8;
+    let mut graph = NodeGraph::new(8);
     let (source, erosion) = (
         graph.add_node(Box::new(NodeGeneratorFlat)),
         graph.add_node(Box::new(NodeErosion::default())) // size() == 3 -> padding of 2
@@ -131,10 +132,13 @@ fn test_node_graph_process_grows_internal_tile_size_for_padding() {
         .connect(source, 0, erosion, 0)
         .expect("Graph connection should succeed");
 
-    let tile_size = 8;
     let outputs = graph
-        .process(erosion, tile_size)
+        .process(erosion)
         .expect("Graph processing should succeed");
+    let outputs = match outputs {
+        NodeGraphProcessResult::Processed(_, outputs) => outputs,
+        _ => panic!("Graph processing should have completed"),
+    };
 
     // internal_tile_size = tile_size + 2*padding(erosion) + 2*padding(source)
     //                     = 8 + 2*2 + 2*0 = 12

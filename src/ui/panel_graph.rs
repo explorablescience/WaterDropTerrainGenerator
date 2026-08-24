@@ -12,25 +12,18 @@ use crate::{
 
 pub type GraphInstance = Snarl<GraphNode>;
 pub enum GraphNode {
-    /// Wraps the [`GraphNodeId`] this node was registered under in the underlying
-    /// [`crate::core::graph::NodeGraph`], which is the single owner of the node itself.
-    /// The node's data is looked up through [`TerrainGraphHolder`] on demand, rather than
-    /// duplicated here, since egui-snarl and the processing graph both need long-lived
-    /// access to it.
+    /// Represents a node in the graph that corresponds to a node in the underlying `NodeGraph`.
     Main(GraphNodeId),
 }
 
-/// Identifies a node both in the `egui-snarl` UI graph and in the underlying
-/// [`crate::core::graph::NodeGraph`], so callers can index either graph without a lookup.
+/// Identifies a node both in the `egui-snarl` UI graph and in the underlying `NodeGraph`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SelectedNode {
     pub snarl_id: NodeId,
     pub graph_id: GraphNodeId,
 }
 
-/// Tracks which node is currently selected. `egui-snarl`'s own selection
-/// only reacts to Shift/Cmd-modified clicks or a drag-rectangle, so we
-/// drive selection ourselves from a plain click on the node's header.
+/// Represents the viewer for the graph editor, which manages the interaction between the UI and the underlying terrain graph.
 struct GraphViewer {
     selected: Option<SelectedNode>,
     terrain_graph: TerrainGraphHolder,

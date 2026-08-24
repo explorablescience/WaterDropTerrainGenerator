@@ -1,10 +1,10 @@
 use egui_tiles::{Behavior, UiResponse};
-use wde::prelude::{ui::egui, *};
+use wde::prelude::{ui::egui};
 
 use crate::{
-    TerrainGraphHolder, core::node::NodeError, ui::{
+    TerrainGraphHolder, ui::{
         editor::EditorPanels,
-        panel_graph::{self, GraphInstance, SelectedNode},
+        panel_graph::{self, GraphInstance},
         panel_properties,
     },
 };
@@ -15,9 +15,6 @@ pub struct EditorBehavior<'a> {
     pub graph_id: egui::Id,
     /// Instance of the graph editor's underlying data structure
     pub graph_instance: &'a mut GraphInstance,
-    /// Selected node in the graph editor, if any, tracked as both its `egui-snarl` id and its
-    /// id in the underlying [`crate::core::graph::NodeGraph`].
-    pub selected_node: Option<SelectedNode>,
 
     /// Reference to the terrain graph holder, which manages the terrain graph data
     pub terrain_graph: TerrainGraphHolder,
@@ -45,30 +42,17 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
                     self.graph_instance,
                     self.terrain_graph.clone(),
                 );
-                self.selected_node = selected_node;
+                let old_selected_node = self.terrain_graph.read().selected_node;
+                if old_selected_node != selected_node.map(|node| node.graph_id) {
+                    self.terrain_graph.write().selected_node = selected_node.map(|node| node.graph_id);
+                }
             }
             EditorPanels::Properties => {
                 panel_properties::draw_properties(
                     ui,
                     &self.terrain_graph,
-                    self.selected_node.map(|node| node.graph_id),
+                    self.terrain_graph.read().selected_node,
                 );
-
-                // For now, we just add a button to process the terrain graph starting from the selected node
-                ui.add_space(10.0);
-                if ui.button("Process").clicked()
-                    && let Some(node) = self.selected_node
-                {
-                    // Process the terrain graph starting from the selected node
-                    if let Err(e) = self.terrain_graph.write().process(node.graph_id, 128) {
-                        match e {
-                            NodeError::InputNotConnected { node: _, socket: _ } => {} // TODO:
-                            _ => {
-                                error!("Error processing terrain graph: {:?}", e);
-                            }
-                        }
-                    }
-                }
             }
         }
         UiResponse::None
@@ -87,7 +71,6 @@ impl<'a> EditorBehavior<'a> {
         EditorBehavior {
             graph_id: egui::Id::new("editor-graph-id").with(*generation_id),
             graph_instance,
-            selected_node: None,
             terrain_graph,
         }
     }
