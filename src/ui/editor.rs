@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use bevy::{
     input::mouse::{MouseButtonInput, MouseMotion, MouseWheel},
     prelude::*,
-    window::WindowResized
+    window::WindowResized,
 };
 use egui_tiles::{Linear, LinearDir, TileId, Tiles, Tree};
 use wde::prelude::{ui::egui, *};
@@ -16,7 +16,7 @@ impl Plugin for EditorPanelsPlugin {
         app.init_resource::<EngineViewportRect>()
             .add_systems(
                 PreUpdate,
-                block_camera_input_outside_engine.after(ui::EguiInputSet)
+                block_camera_input_outside_engine.after(ui::EguiInputSet),
             )
             .add_systems(Update, draw_editor.after(EditorMenuBarSet));
     }
@@ -27,13 +27,13 @@ impl Plugin for EditorPanelsPlugin {
 pub enum EditorPanels {
     Engine,
     Graph,
-    Properties
+    Properties,
 }
 
 /// Stores the layout of the different panels
 struct EditorLayout {
     tree: Tree<EditorPanels>,
-    panel_to_id: HashMap<EditorPanels, TileId>
+    panel_to_id: HashMap<EditorPanels, TileId>,
 }
 impl Default for EditorLayout {
     fn default() -> Self {
@@ -50,17 +50,17 @@ impl Default for EditorLayout {
         let main_column = tiles.insert_container(Linear::new_binary(
             LinearDir::Vertical,
             [engine, graph_editor],
-            0.6
+            0.6,
         ));
         let root = tiles.insert_container(Linear::new_binary(
             LinearDir::Horizontal,
             [main_column, node_info],
-            0.75
+            0.75,
         ));
 
         EditorLayout {
             tree: Tree::new("editor", root, tiles),
-            panel_to_id
+            panel_to_id,
         }
     }
 }
@@ -75,7 +75,7 @@ fn block_camera_input_outside_engine(
     mut mouse_input: ResMut<ButtonInput<MouseButton>>,
     mut mouse_wheel_messages: ResMut<Messages<MouseWheel>>,
     mut mouse_button_input_messages: ResMut<Messages<MouseButtonInput>>,
-    mut mouse_motion_messages: ResMut<Messages<MouseMotion>>
+    mut mouse_motion_messages: ResMut<Messages<MouseMotion>>,
 ) {
     let cursor_pos = match windows
         .iter()
@@ -83,7 +83,7 @@ fn block_camera_input_outside_engine(
         .and_then(|window| window.cursor_position())
     {
         Some(pos) => pos,
-        None => return
+        None => return,
     };
     let pointer_pos = egui::pos2(cursor_pos.x, cursor_pos.y);
 
@@ -104,19 +104,12 @@ fn draw_editor(
     mut window_resized: MessageReader<WindowResized>,
     mut generation_id: Local<u64>,
     mut engine_rect: ResMut<EngineViewportRect>,
-    mut graph_instance: Local<Option<GraphInstance>>
+    mut graph_instance: Local<Option<GraphInstance>>,
 ) {
     // Avoid weird resizing issues, so reset the graph generation on window resize
     if window_resized.read().count() > 0 {
         *generation_id += 1;
     }
-
-    // Create the editor behavior used to render the panels
-    let graph_instance = graph_instance.get_or_insert_default();
-    let mut behavior = EditorBehavior {
-        graph_id: egui::Id::new("editor-graph-id").with(*generation_id),
-        graph_instance
-    };
 
     // Create the central panel with the editor layout (transparent background)
     let frame = egui::Frame::central_panel(&ctx.0.style())
@@ -126,7 +119,10 @@ fn draw_editor(
     egui::CentralPanel::default()
         .frame(frame)
         .show(&ctx.0, |ui| {
-            layout.tree.ui(&mut behavior, ui);
+            layout.tree.ui(
+                &mut EditorBehavior::new(&generation_id, graph_instance.get_or_insert_default()),
+                ui,
+            );
         });
 
     // Update the engine viewport rectangle
