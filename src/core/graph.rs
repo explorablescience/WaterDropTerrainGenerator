@@ -108,6 +108,33 @@ impl NodeGraph {
         Ok(self)
     }
 
+    /// Disconnects an output socket of `from_node` from an input socket of `to_node`.
+    /// Fails if the connection doesn't exist.
+    pub fn disconnect(
+        &mut self,
+        from_node: GraphNodeId,
+        from_socket: usize,
+        to_node: GraphNodeId,
+        to_socket: usize
+    ) -> Result<&mut Self, NodeError> {
+        let index = self.edges.iter().position(|e| {
+            e.from_node == from_node
+                && e.from_socket == from_socket
+                && e.to_node == to_node
+                && e.to_socket == to_socket
+        });
+        if let Some(i) = index {
+            self.edges.remove(i);
+            self.cached_topo = None;
+            Ok(self)
+        } else {
+            Err(NodeError(format!(
+                "No connection from {}:{} to {}:{}",
+                from_node.0, from_socket, to_node.0, to_socket
+            )))
+        }
+    }
+
     /// Returns a reference to the node with the given [`NodeId`].
     pub fn node(&self, id: GraphNodeId) -> Result<&dyn Node, NodeError> {
         self.nodes

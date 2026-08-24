@@ -2,10 +2,12 @@ use egui_snarl::{
     InPin, NodeId, OutPin, Snarl,
     ui::{PinInfo, SnarlPin, SnarlStyle, SnarlViewer, SnarlWidget},
 };
-use wde::prelude::ui::egui;
+use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainGraphHolder, core::{graph::GraphNodeId, node::Node}, nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin},
+    TerrainGraphHolder,
+    core::{graph::GraphNodeId, node::Node},
+    nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin},
 };
 
 pub type GraphInstance = Snarl<GraphNode>;
@@ -31,22 +33,70 @@ pub struct SelectedNode {
 /// drive selection ourselves from a plain click on the node's header.
 struct GraphViewer {
     selected: Option<SelectedNode>,
-    terrain_graph: TerrainGraphHolder
+    terrain_graph: TerrainGraphHolder,
 }
 impl SnarlViewer<GraphNode> for GraphViewer {
     fn title(&mut self, node: &GraphNode) -> String {
         let GraphNode::Main(graph_id) = node;
-        self.terrain_graph.read().graph().node(*graph_id).map(|n| n.label().to_string()).unwrap_or_default()
+        self.terrain_graph
+            .read()
+            .graph()
+            .node(*graph_id)
+            .map(|n| n.label().to_string())
+            .unwrap_or_default()
     }
     fn inputs(&mut self, node: &GraphNode) -> usize {
         let GraphNode::Main(graph_id) = node;
-        self.terrain_graph.read().graph().node(*graph_id).map(|n| n.inputs().len()).unwrap_or(0)
+        self.terrain_graph
+            .read()
+            .graph()
+            .node(*graph_id)
+            .map(|n| n.inputs().len())
+            .unwrap_or(0)
     }
     fn outputs(&mut self, node: &GraphNode) -> usize {
         let GraphNode::Main(graph_id) = node;
-        self.terrain_graph.read().graph().node(*graph_id).map(|n| n.outputs().len()).unwrap_or(0)
+        self.terrain_graph
+            .read()
+            .graph()
+            .node(*graph_id)
+            .map(|n| n.outputs().len())
+            .unwrap_or(0)
     }
 
+    fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<GraphNode>) {
+        // Connects pins in terrain graph
+        let GraphNode::Main(from_graph_id) = &snarl[from.id.node];
+        let GraphNode::Main(to_graph_id) = &snarl[to.id.node];
+        if self
+            .terrain_graph
+            .write()
+            .graph_mut()
+            .connect(*from_graph_id, from.id.output, *to_graph_id, to.id.input)
+            .is_err()
+        {
+            error!("Failed to connect nodes.");
+            return;
+        }
+        
+        // Connects pins in ui
+        snarl.connect(from.id, to.id);
+    }
+    fn disconnect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<GraphNode>) {
+        let GraphNode::Main(from_graph_id) = &snarl[from.id.node];
+        let GraphNode::Main(to_graph_id) = &snarl[to.id.node];
+        if self
+            .terrain_graph
+            .write()
+            .graph_mut()
+            .disconnect(*from_graph_id, from.id.output, *to_graph_id, to.id.input)
+            .is_err()
+        {
+            error!("Failed to disconnect nodes.");
+            return;
+        }
+        snarl.disconnect(from.id, to.id);
+    }
 
     fn show_header(
         &mut self,
@@ -67,7 +117,10 @@ impl SnarlViewer<GraphNode> for GraphViewer {
     ) -> impl SnarlPin + 'static {
         let GraphNode::Main(graph_id) = &instance[pin.id.node];
         let terrain_graph = self.terrain_graph.read();
-        let node = terrain_graph.graph().node(*graph_id).expect("selected node should exist in the graph");
+        let node = terrain_graph
+            .graph()
+            .node(*graph_id)
+            .expect("selected node should exist in the graph");
         let socket = &node.inputs()[pin.id.input];
         ui.label(socket.name);
         PinInfo::circle()
@@ -80,12 +133,14 @@ impl SnarlViewer<GraphNode> for GraphViewer {
     ) -> impl SnarlPin + 'static {
         let GraphNode::Main(graph_id) = &instance[pin.id.node];
         let terrain_graph = self.terrain_graph.read();
-        let node = terrain_graph.graph().node(*graph_id).expect("selected node should exist in the graph");
+        let node = terrain_graph
+            .graph()
+            .node(*graph_id)
+            .expect("selected node should exist in the graph");
         let socket = &node.outputs()[pin.id.output];
         ui.label(socket.name);
         PinInfo::circle()
     }
-
 
     fn has_graph_menu(&mut self, _pos: egui::Pos2, _snarl: &mut Snarl<GraphNode>) -> bool {
         true
@@ -117,8 +172,6 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         });
     }
 
-
-
     fn node_frame(
         &mut self,
         default: egui::Frame,
@@ -127,7 +180,10 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         _outputs: &[OutPin],
         _snarl: &Snarl<GraphNode>,
     ) -> egui::Frame {
-        if self.selected.is_some_and(|selected| selected.snarl_id == node) {
+        if self
+            .selected
+            .is_some_and(|selected| selected.snarl_id == node)
+        {
             default.stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(200, 40, 40)))
         } else {
             default
@@ -146,7 +202,10 @@ impl SnarlViewer<GraphNode> for GraphViewer {
             && rect.contains(ui.input(|i| i.pointer.hover_pos().unwrap_or_default()))
         {
             let GraphNode::Main(graph_id) = &snarl[node];
-            self.selected = Some(SelectedNode { snarl_id: node, graph_id: *graph_id });
+            self.selected = Some(SelectedNode {
+                snarl_id: node,
+                graph_id: *graph_id,
+            });
         }
     }
 }
@@ -171,8 +230,10 @@ pub fn show_graph(
     // Initialize the viewer with the currently selected node, if any
     let selected_node_id = id.with("selected-node");
     let mut viewer = GraphViewer {
-        selected: ui.ctx().data(|d| d.get_temp::<SelectedNode>(selected_node_id)),
-        terrain_graph
+        selected: ui
+            .ctx()
+            .data(|d| d.get_temp::<SelectedNode>(selected_node_id)),
+        terrain_graph,
     };
 
     // Show the graph editor
@@ -184,7 +245,9 @@ pub fn show_graph(
     // Update the selected node in the egui context so it can be retrieved later
     match viewer.selected {
         Some(node) => ui.ctx().data_mut(|d| d.insert_temp(selected_node_id, node)),
-        None => ui.ctx().data_mut(|d| d.remove::<SelectedNode>(selected_node_id)),
+        None => ui
+            .ctx()
+            .data_mut(|d| d.remove::<SelectedNode>(selected_node_id)),
     }
     viewer.selected
 }
