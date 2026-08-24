@@ -6,13 +6,13 @@ use crate::core::tile_allocator::{TileHandle, TilePool};
 
 /// Identifies a node within a [`NodeGraph`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct NodeId(usize);
+pub struct GraphNodeId(usize);
 
 /// A connection from an output socket of one node to an input socket of another.
 struct Edge {
-    from_node: NodeId,
+    from_node: GraphNodeId,
     from_socket: usize,
-    to_node: NodeId,
+    to_node: GraphNodeId,
     to_socket: usize
 }
 
@@ -27,7 +27,7 @@ pub struct NodeGraph {
     /// Dependency order computed by the last successful [`Self::validate`] call, for the node
     /// it validated. Consumed by [`Self::process`] so the topological sort isn't redone on every
     /// run. Cleared whenever the graph is mutated, since that can invalidate the order.
-    cached_topo: Option<(NodeId, Vec<NodeId>)>
+    cached_topo: Option<(GraphNodeId, Vec<GraphNodeId>)>
 }
 impl NodeGraph {
     pub fn new() -> Self {
@@ -39,8 +39,8 @@ impl NodeGraph {
     }
 
     /// Adds a node to the graph and returns its [`NodeId`].
-    pub fn add_node(&mut self, node: Box<dyn Node>) -> NodeId {
-        let id = NodeId(self.nodes.len());
+    pub fn add_node(&mut self, node: Box<dyn Node>) -> GraphNodeId {
+        let id = GraphNodeId(self.nodes.len());
         self.nodes.push(Some(node));
         self.cached_topo = None;
         id
@@ -48,7 +48,7 @@ impl NodeGraph {
 
     /// Removes the node with the given [`NodeId`] from the graph, disconnecting any edges to or from it and invalidating the cached topological order.
     /// Returns an error if the node doesn't exist (or was already removed).
-    pub fn remove_node(&mut self, node_id: NodeId) -> Result<(), NodeError> {
+    pub fn remove_node(&mut self, node_id: GraphNodeId) -> Result<(), NodeError> {
         let slot = self
             .nodes
             .get_mut(node_id.0)
@@ -67,9 +67,9 @@ impl NodeGraph {
     /// Fails if either socket doesn't exist or if their data types don't match.
     pub fn connect(
         &mut self,
-        from_node: NodeId,
+        from_node: GraphNodeId,
         from_socket: usize,
-        to_node: NodeId,
+        to_node: GraphNodeId,
         to_socket: usize
     ) -> Result<&mut Self, NodeError> {
         // Validate that the socket indices exist and that their types match
@@ -109,7 +109,7 @@ impl NodeGraph {
     }
 
     /// Returns a reference to the node with the given [`NodeId`].
-    pub fn node(&self, id: NodeId) -> Result<&dyn Node, NodeError> {
+    pub fn node(&self, id: GraphNodeId) -> Result<&dyn Node, NodeError> {
         self.nodes
             .get(id.0)
             .and_then(|slot| slot.as_deref())
@@ -117,7 +117,7 @@ impl NodeGraph {
     }
 
     /// Returns a mutable reference to the node with the given [`NodeId`].
-    pub fn node_mut(&mut self, id: NodeId) -> Result<&mut (dyn Node + '_), NodeError> {
+    pub fn node_mut(&mut self, id: GraphNodeId) -> Result<&mut (dyn Node + '_), NodeError> {
         match self.nodes.get_mut(id.0) {
             Some(Some(node)) => Ok(node.as_mut()),
             _ => Err(NodeError(format!("Unknown node id {:?}", id)))
@@ -125,7 +125,7 @@ impl NodeGraph {
     }
 
     /// Returns `node_id` together with all of its ancestors, in dependency order.
-    fn ancestors_topo(&self, node_id: NodeId) -> Result<Vec<NodeId>, NodeError> {
+    fn ancestors_topo(&self, node_id: GraphNodeId) -> Result<Vec<GraphNodeId>, NodeError> {
         // Walk backward from `node_id` to find the set of nodes it depends on.
         let mut included = vec![false; self.nodes.len()];
         included[node_id.0] = true;
@@ -147,9 +147,9 @@ impl NodeGraph {
             }
         }
         let mut order = Vec::new();
-        let mut ready: Vec<NodeId> = (0..self.nodes.len())
+        let mut ready: Vec<GraphNodeId> = (0..self.nodes.len())
             .filter(|&i| included[i] && in_degree[i] == 0)
-            .map(NodeId)
+            .map(GraphNodeId)
             .collect();
         while let Some(id) = ready.pop() {
             order.push(id);
@@ -174,7 +174,7 @@ impl NodeGraph {
     /// Returns an error if the graph has not been validated or if any node fails to process.
     pub fn process(
         &mut self,
-        node_id: NodeId,
+        node_id: GraphNodeId,
         tile_size: usize
     ) -> Result<Vec<TileHandle>, NodeError> {
         let order = match &self.cached_topo {
@@ -195,7 +195,7 @@ impl NodeGraph {
 
         let pool = TilePool::new(internal_tile_size);
 
-        let mut outputs: HashMap<NodeId, Vec<TileHandle>> = HashMap::new();
+        let mut outputs: HashMap<GraphNodeId, Vec<TileHandle>> = HashMap::new();
         for &id in order {
             let node = self.node(id)?;
             let inputs = node
@@ -234,11 +234,11 @@ impl NodeGraph {
             .ok_or_else(|| NodeError(format!("{:?} was not evaluated", node_id)))
     }
 
-    pub fn get_nodes_labels(&self) -> Vec<(NodeId, String)> {
+    pub fn get_nodes_labels(&self) -> Vec<(GraphNodeId, String)> {
         self.nodes
             .iter()
             .enumerate()
-            .filter_map(|(i, node)| node.as_ref().map(|n| (NodeId(i), n.label().to_string())))
+            .filter_map(|(i, node)| node.as_ref().map(|n| (GraphNodeId(i), n.label().to_string())))
             .collect()
     }
 }

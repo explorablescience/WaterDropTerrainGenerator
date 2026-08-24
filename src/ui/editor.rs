@@ -8,7 +8,7 @@ use bevy::{
 use egui_tiles::{Linear, LinearDir, TileId, Tiles, Tree};
 use wde::prelude::{ui::egui, *};
 
-use crate::ui::{editor_behavior::EditorBehavior, panel_graph::GraphInstance};
+use crate::{TerrainGraphHolder, ui::{editor_behavior::EditorBehavior, panel_graph::GraphInstance}};
 
 pub struct EditorPanelsPlugin;
 impl Plugin for EditorPanelsPlugin {
@@ -105,6 +105,7 @@ fn draw_editor(
     mut generation_id: Local<u64>,
     mut engine_rect: ResMut<EngineViewportRect>,
     mut graph_instance: Local<Option<GraphInstance>>,
+    terrain_graph: Res<TerrainGraphHolder>,
 ) {
     // Avoid weird resizing issues, so reset the graph generation on window resize
     if window_resized.read().count() > 0 {
@@ -120,7 +121,7 @@ fn draw_editor(
         .frame(frame)
         .show(&ctx.0, |ui| {
             layout.tree.ui(
-                &mut EditorBehavior::new(&generation_id, graph_instance.get_or_insert_default()),
+                &mut EditorBehavior::new(&generation_id, graph_instance.get_or_insert_default(), terrain_graph.clone()),
                 ui,
             );
         });

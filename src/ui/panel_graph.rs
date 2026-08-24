@@ -5,36 +5,46 @@ use egui_snarl::{
 use wde::prelude::ui::egui;
 
 use crate::{
-    core::node::Node,
-    nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin},
+    TerrainGraphHolder, core::{graph::GraphNodeId, node::Node}, nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin},
 };
 
 pub type GraphInstance = Snarl<GraphNode>;
 pub enum GraphNode {
-    Main(Box<dyn Node>),
+    /// Wraps the [`GraphNodeId`] this node was registered under in the underlying
+    /// [`crate::core::graph::NodeGraph`], which is the single owner of the node itself.
+    /// The node's data is looked up through [`TerrainGraphHolder`] on demand, rather than
+    /// duplicated here, since egui-snarl and the processing graph both need long-lived
+    /// access to it.
+    Main(GraphNodeId),
+}
+
+/// Identifies a node both in the `egui-snarl` UI graph and in the underlying
+/// [`crate::core::graph::NodeGraph`], so callers can index either graph without a lookup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelectedNode {
+    pub snarl_id: NodeId,
+    pub graph_id: GraphNodeId,
 }
 
 /// Tracks which node is currently selected. `egui-snarl`'s own selection
 /// only reacts to Shift/Cmd-modified clicks or a drag-rectangle, so we
 /// drive selection ourselves from a plain click on the node's header.
 struct GraphViewer {
-    selected: Option<NodeId>,
+    selected: Option<SelectedNode>,
+    terrain_graph: TerrainGraphHolder
 }
 impl SnarlViewer<GraphNode> for GraphViewer {
     fn title(&mut self, node: &GraphNode) -> String {
-        match node {
-            GraphNode::Main(node) => node.label().to_string(),
-        }
+        let GraphNode::Main(graph_id) = node;
+        self.terrain_graph.read().graph().node(*graph_id).map(|n| n.label().to_string()).unwrap_or_default()
     }
     fn inputs(&mut self, node: &GraphNode) -> usize {
-        match node {
-            GraphNode::Main(node) => node.inputs().len(),
-        }
+        let GraphNode::Main(graph_id) = node;
+        self.terrain_graph.read().graph().node(*graph_id).map(|n| n.inputs().len()).unwrap_or(0)
     }
     fn outputs(&mut self, node: &GraphNode) -> usize {
-        match node {
-            GraphNode::Main(node) => node.outputs().len(),
-        }
+        let GraphNode::Main(graph_id) = node;
+        self.terrain_graph.read().graph().node(*graph_id).map(|n| n.outputs().len()).unwrap_or(0)
     }
 
 
@@ -55,13 +65,12 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         ui: &mut egui::Ui,
         instance: &mut GraphInstance,
     ) -> impl SnarlPin + 'static {
-        match &instance[pin.id.node] {
-            GraphNode::Main(node) => {
-                let pin = &node.inputs()[pin.id.input];
-                ui.label(pin.name);
-                PinInfo::circle()
-            }
-        }
+        let GraphNode::Main(graph_id) = &instance[pin.id.node];
+        let terrain_graph = self.terrain_graph.read();
+        let node = terrain_graph.graph().node(*graph_id).expect("selected node should exist in the graph");
+        let socket = &node.inputs()[pin.id.input];
+        ui.label(socket.name);
+        PinInfo::circle()
     }
     fn show_output(
         &mut self,
@@ -69,13 +78,12 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         ui: &mut egui::Ui,
         instance: &mut GraphInstance,
     ) -> impl SnarlPin + 'static {
-        match &instance[pin.id.node] {
-            GraphNode::Main(node) => {
-                let pin = &node.outputs()[pin.id.output];
-                ui.label(pin.name);
-                PinInfo::circle()
-            }
-        }
+        let GraphNode::Main(graph_id) = &instance[pin.id.node];
+        let terrain_graph = self.terrain_graph.read();
+        let node = terrain_graph.graph().node(*graph_id).expect("selected node should exist in the graph");
+        let socket = &node.outputs()[pin.id.output];
+        ui.label(socket.name);
+        PinInfo::circle()
     }
 
 
@@ -92,21 +100,18 @@ impl SnarlViewer<GraphNode> for GraphViewer {
 
         ui.menu_button("Generator", |ui| {
             if ui.button("Flat Generator").clicked() {
-                snarl.insert_node(pos, GraphNode::Main(Box::new(NodeGeneratorFlat)));
+                self.new_node(pos, snarl, Box::new(NodeGeneratorFlat));
                 ui.close();
             }
             if ui.button("Perlin Generator").clicked() {
-                snarl.insert_node(
-                    pos,
-                    GraphNode::Main(Box::new(NodeGeneratorPerlin::default())),
-                );
+                self.new_node(pos, snarl, Box::new(NodeGeneratorPerlin::default()));
                 ui.close();
             }
         });
 
         ui.menu_button("Simulation", |ui| {
             if ui.button("Erosion").clicked() {
-                snarl.insert_node(pos, GraphNode::Main(Box::new(NodeErosion::default())));
+                self.new_node(pos, snarl, Box::new(NodeErosion::default()));
                 ui.close();
             }
         });
@@ -122,26 +127,33 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         _outputs: &[OutPin],
         _snarl: &Snarl<GraphNode>,
     ) -> egui::Frame {
-        if self.selected == Some(node) {
+        if self.selected.is_some_and(|selected| selected.snarl_id == node) {
             default.stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(200, 40, 40)))
         } else {
             default
         }
     }
-    
+
     fn final_node_rect(
         &mut self,
         node: NodeId,
         rect: egui::Rect,
         ui: &mut egui::Ui,
-        _snarl: &mut Snarl<GraphNode>,
+        snarl: &mut Snarl<GraphNode>,
     ) {
         // Detect clicks on the node to select it
         if ui.input(|i| i.pointer.any_click())
             && rect.contains(ui.input(|i| i.pointer.hover_pos().unwrap_or_default()))
         {
-            self.selected = Some(node);
+            let GraphNode::Main(graph_id) = &snarl[node];
+            self.selected = Some(SelectedNode { snarl_id: node, graph_id: *graph_id });
         }
+    }
+}
+impl GraphViewer {
+    fn new_node(&mut self, pos: egui::Pos2, snarl: &mut Snarl<GraphNode>, node: Box<dyn Node>) {
+        let graph_id = self.terrain_graph.write().graph_mut().add_node(node);
+        snarl.insert_node(pos, GraphNode::Main(graph_id));
     }
 }
 
@@ -152,13 +164,15 @@ pub fn show_graph(
     id: egui::Id,
     ui: &mut egui::Ui,
     graph_instance: &mut GraphInstance,
-) -> Option<NodeId> {
+    terrain_graph: TerrainGraphHolder,
+) -> Option<SelectedNode> {
     let style = SnarlStyle::default();
 
     // Initialize the viewer with the currently selected node, if any
     let selected_node_id = id.with("selected-node");
     let mut viewer = GraphViewer {
-        selected: ui.ctx().data(|d| d.get_temp::<NodeId>(selected_node_id)),
+        selected: ui.ctx().data(|d| d.get_temp::<SelectedNode>(selected_node_id)),
+        terrain_graph
     };
 
     // Show the graph editor
@@ -170,7 +184,7 @@ pub fn show_graph(
     // Update the selected node in the egui context so it can be retrieved later
     match viewer.selected {
         Some(node) => ui.ctx().data_mut(|d| d.insert_temp(selected_node_id, node)),
-        None => ui.ctx().data_mut(|d| d.remove::<NodeId>(selected_node_id)),
+        None => ui.ctx().data_mut(|d| d.remove::<SelectedNode>(selected_node_id)),
     }
     viewer.selected
 }

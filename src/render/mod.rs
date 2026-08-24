@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use wde::prelude::*;
 
-use crate::{TerrainGraph, render::mesh_generation::heightmap_to_mesh};
+use crate::{TerrainGraphHolder, render::mesh_generation::heightmap_to_mesh};
 
 mod mesh_generation;
 
@@ -41,8 +41,10 @@ pub fn update_terrain_preview(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut terrain_preview: ResMut<TerrainPreview>,
-    terrain_graph: Res<TerrainGraph>
+    terrain_graph: Res<TerrainGraphHolder>
 ) {
+    let terrain_graph = terrain_graph.read();
+
     // Check if the terrain graph has new output tiles
     let state = terrain_graph.state();
     if state.is_none() || state.unwrap().0 == terrain_preview.generation {

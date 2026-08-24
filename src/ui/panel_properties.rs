@@ -1,22 +1,25 @@
 use wde::prelude::{ui::egui, *};
 
 use crate::{
+    TerrainGraphHolder,
     core::{
+        graph::GraphNodeId,
         node::Node,
         node_parameters::{NParamConstraints, NParamValue},
     },
-    ui::panel_graph::{GraphInstance, GraphNode},
 };
-use egui_snarl::NodeId;
 
 pub fn draw_properties(
     ui: &mut egui::Ui,
-    graph_instance: &mut GraphInstance,
-    selected_node: Option<NodeId>,
+    terrain_graph: &TerrainGraphHolder,
+    selected_node: Option<GraphNodeId>,
 ) {
-    if let Some(node_id) = selected_node {
-        let node = &mut graph_instance[node_id];
-        let GraphNode::Main(node) = node;
+    if let Some(graph_id) = selected_node {
+        let mut terrain_graph = terrain_graph.write();
+        let node = terrain_graph
+            .graph_mut()
+            .node_mut(graph_id)
+            .expect("selected node should exist in the graph");
         ui.label(format!("{} - Properties", node.label()));
 
         show_node_params(ui, node);
@@ -35,7 +38,7 @@ enum ParamRange {
 }
 
 /// Draws the UI for editing the parameters of a node.
-fn show_node_params(ui: &mut egui::Ui, node: &mut Box<dyn Node + 'static>) {
+fn show_node_params(ui: &mut egui::Ui, node: &mut dyn Node) {
     if node.desc_params().is_empty() {
         ui.label("No parameters available.");
         return;
