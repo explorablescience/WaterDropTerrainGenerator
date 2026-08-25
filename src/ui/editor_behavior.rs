@@ -18,7 +18,11 @@ pub struct EditorBehavior<'a> {
     pub graph_instance: &'a mut GraphInstance,
 
     /// Reference to the terrain graph holder, which manages the terrain graph data
-    pub terrain_graph: TerrainGraphHolder
+    pub terrain_graph: TerrainGraphHolder,
+
+    /// Rect of the whole tile tree, used to tell a tile's outer edges (which get the full
+    /// border inset) apart from edges shared with a neighboring tile (which get half of it).
+    pub outer_rect: egui::Rect
 }
 impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
     fn pane_ui(
@@ -27,51 +31,55 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
         _tile_id: egui_tiles::TileId,
         pane: &mut EditorPanels
     ) -> egui_tiles::UiResponse {
-        let title = Self::get_pane_title(pane);
-
+        // Every panel gets its own inset "inside panel"
+        let tile_rect = ui.max_rect();
+        let border_rect = panel_border_rect(tile_rect, self.outer_rect);
         if matches!(pane, EditorPanels::Engine) {
-            // Minimal floating HUD label over the transparent viewport (no backdrop).
-            egui::Frame::NONE
-                .inner_margin(egui::Margin::symmetric(10, 6))
-                .show(ui, |_ui| {});
+            paint_frame_gap(ui.painter(), tile_rect, border_rect, theme::palette::BG_EXTREME);
         } else {
-            // // Solid panel backdrop with a proper header + separator, like a docked tool panel.
-            // ui.painter()
-            //     .rect_filled(ui.max_rect(), 0.0, egui::Color32::from_rgb(200, 20, 20)); //ui.visuals().panel_fill
-
-            // egui::Frame::NONE
-            //     .inner_margin(egui::Margin::symmetric(12, 8))
-            //     .show(ui, |ui| {
-            //         ui.label(
-            //             egui::RichText::new(title)
-            //                 .font(theme::heading_font(13.0))
-            //                 .color(theme::palette::TEXT)
-            //         );
-            //     });
-            // ui.separator();
-            // ui.add_space(2.0);
+            ui.painter().rect_filled(tile_rect, 0, theme::palette::BG_EXTREME);
         }
 
-        match pane {
-            EditorPanels::Engine => {}
-            EditorPanels::Graph => {
-                // let selected_node = panel_graph::show_graph(
-                //     self.graph_id,
-                //     ui,
-                //     self.graph_instance,
-                //     self.terrain_graph.clone()
-                // );
-                // let old_selected_node = self.terrain_graph.read().selected_node;
-                // if old_selected_node != selected_node.map(|node| node.graph_id) {
-                //     self.terrain_graph.write().selected_node =
-                //         selected_node.map(|node| node.graph_id);
-                // }
+        // Graph/Properties get an extra content "card" on top of the panel background, inset
+        // from the border by a further padding. Their content is drawn inside it. The engine
+        // has no card — content is drawn straight into its (transparent) inside panel.
+        let content_rect = if matches!(pane, EditorPanels::Engine) {
+            border_rect
+        } else {
+            let card_rect = border_rect.shrink(theme::layout::CARD_PADDING);
+            ui.painter().rect_filled(
+                card_rect,
+                egui::CornerRadius::same(theme::layout::CARD_ROUNDING),
+                theme::palette::BG_CARD
+            );
+            card_rect
+        };
+
+        let content_clip = ui.clip_rect().intersect(content_rect);
+        ui.scope_builder(egui::UiBuilder::new().max_rect(content_rect), |ui| {
+            ui.set_clip_rect(content_clip);
+            match pane {
+                EditorPanels::Engine => {}
+                EditorPanels::Graph => {
+                    let selected_node = panel_graph::show_graph(
+                        self.graph_id,
+                        ui,
+                        self.graph_instance,
+                        self.terrain_graph.clone()
+                    );
+                    let old_selected_node = self.terrain_graph.read().selected_node;
+                    if old_selected_node != selected_node.map(|node| node.graph_id) {
+                        self.terrain_graph.write().selected_node =
+                            selected_node.map(|node| node.graph_id);
+                    }
+                }
+                EditorPanels::Properties => {
+                    let selected_node = self.terrain_graph.read().selected_node; // Watch out for deadlocks
+                    panel_properties::draw_properties(ui, &self.terrain_graph, selected_node);
+                }
             }
-            EditorPanels::Properties => {
-                // let selected_node = self.terrain_graph.read().selected_node; // Watch out for deadlocks
-                // panel_properties::draw_properties(ui, &self.terrain_graph, selected_node);
-            }
-        }
+        });
+
         UiResponse::None
     }
 
@@ -99,12 +107,14 @@ impl<'a> EditorBehavior<'a> {
     pub fn new(
         generation_id: &u64,
         graph_instance: &'a mut GraphInstance,
-        terrain_graph: TerrainGraphHolder
+        terrain_graph: TerrainGraphHolder,
+        outer_rect: egui::Rect
     ) -> Self {
         EditorBehavior {
             graph_id: egui::Id::new("editor-graph-id").with(*generation_id),
             graph_instance,
-            terrain_graph
+            terrain_graph,
+            outer_rect
         }
     }
 
@@ -115,4 +125,53 @@ impl<'a> EditorBehavior<'a> {
             EditorPanels::Properties => "Properties"
         }
     }
+}
+
+/// The "inside panel" rect for a tile: inset from `tile_rect` by the full panel border inset on
+/// any side that touches the outer edge of the whole tile tree (`outer_rect`), or by half that
+/// inset on any side shared with a neighboring tile — so the gap between two adjacent panels'
+/// borders matches the gap between a panel and the outer edge, instead of being twice as wide.
+pub fn panel_border_rect(tile_rect: egui::Rect, outer_rect: egui::Rect) -> egui::Rect {
+    const EPS: f32 = 0.5;
+    let full = theme::layout::PANEL_BORDER_INSET;
+    let half = full * 0.5;
+
+    let left = if (tile_rect.left() - outer_rect.left()).abs() < EPS { full } else { half };
+    let top = if (tile_rect.top() - outer_rect.top()).abs() < EPS {
+        theme::layout::PANEL_TOP_INSET
+    } else {
+        half
+    };
+    let right = if (tile_rect.right() - outer_rect.right()).abs() < EPS { full } else { half };
+    let bottom = if (tile_rect.bottom() - outer_rect.bottom()).abs() < EPS { full } else { half };
+
+    egui::Rect::from_min_max(
+        egui::pos2(tile_rect.left() + left, tile_rect.top() + top),
+        egui::pos2(tile_rect.right() - right, tile_rect.bottom() - bottom)
+    )
+}
+
+/// Fills `outer` with `color`, except for the `inner` rect carved out of its middle. Used to
+/// backdrop the margin around the engine pane's live viewport without ever painting over it.
+fn paint_frame_gap(painter: &egui::Painter, outer: egui::Rect, inner: egui::Rect, color: egui::Color32) {
+    painter.rect_filled(
+        egui::Rect::from_min_max(outer.left_top(), egui::pos2(outer.right(), inner.top())),
+        0,
+        color
+    );
+    painter.rect_filled(
+        egui::Rect::from_min_max(egui::pos2(outer.left(), inner.bottom()), outer.right_bottom()),
+        0,
+        color
+    );
+    painter.rect_filled(
+        egui::Rect::from_min_max(egui::pos2(outer.left(), inner.top()), egui::pos2(inner.left(), inner.bottom())),
+        0,
+        color
+    );
+    painter.rect_filled(
+        egui::Rect::from_min_max(egui::pos2(inner.right(), inner.top()), egui::pos2(outer.right(), inner.bottom())),
+        0,
+        color
+    );
 }

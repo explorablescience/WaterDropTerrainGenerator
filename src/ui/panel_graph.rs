@@ -293,12 +293,11 @@ pub fn show_graph(
         pin_stroke: Some(egui::Stroke::new(1.5, theme::palette::BG_EXTREME)),
         wire_width: Some(2.2),
         wire_style: Some(WireStyle::Bezier5),
-        bg_frame: Some(egui::Frame::NONE.fill(theme::palette::BG_EXTREME)),
+        // Left transparent
+        bg_frame: Some(egui::Frame::NONE.fill(egui::Color32::TRANSPARENT)),
         bg_pattern: Some(BackgroundPattern::grid(egui::vec2(24.0, 24.0), 0.0)),
         bg_pattern_stroke: Some(egui::Stroke::new(1.0, theme::palette::BORDER)),
         collapsible: Some(true),
-        // Pre-render node content at `max_scale` and only ever scale it *down* for the current
-        // zoom, instead of magnifying already-rasterized text — keeps labels sharp when zoomed in.
         crisp_magnified_text: Some(true),
         max_scale: Some(2.5),
         ..SnarlStyle::default()

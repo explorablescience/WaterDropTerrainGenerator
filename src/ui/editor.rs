@@ -10,7 +10,7 @@ use wde::prelude::{ui::egui, *};
 
 use crate::{
     TerrainGraphHolder,
-    ui::{editor_behavior::EditorBehavior, panel_graph::GraphInstance}
+    ui::{editor_behavior, editor_behavior::EditorBehavior, panel_graph::GraphInstance}
 };
 
 pub struct EditorPanelsPlugin;
@@ -115,25 +115,30 @@ fn draw_editor(
         *generation_id += 1;
     }
 
-    // Create the central panel with the editor layout (transparent background)
+    // Create the central panel with the editor layout
     let frame = egui::Frame::central_panel(&ctx.0.style())
         .inner_margin(0.0)
         .fill(egui::Color32::TRANSPARENT);
     let layout = layout.get_or_insert_default();
+    let mut outer_rect = egui::Rect::NOTHING;
     egui::CentralPanel::default()
         .frame(frame)
         .show(&ctx.0, |ui| {
+            outer_rect = ui.max_rect();
             let mut behavior = EditorBehavior::new(
                 &generation_id,
                 graph_instance.get_or_insert_default(),
-                terrain_graph.clone()
+                terrain_graph.clone(),
+                outer_rect
             );
             layout.tree.ui(&mut behavior, ui);
         });
 
-    // Update the engine viewport rectangle
+    // Update the engine viewport rectangle to the same inset border rect the engine pane draws
+    // (see `editor_behavior::panel_border_rect`).
     engine_rect.0 = layout
         .tree
         .tiles
-        .rect(layout.panel_to_id[&EditorPanels::Engine]);
+        .rect(layout.panel_to_id[&EditorPanels::Engine])
+        .map(|rect| editor_behavior::panel_border_rect(rect, outer_rect));
 }

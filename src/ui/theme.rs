@@ -16,7 +16,7 @@ pub mod palette {
     pub const BG_EXTREME: Color32 = Color32::from_rgb(16, 16, 16);
     pub const BG_PANEL: Color32 = Color32::from_rgb(25, 25, 25);
     pub const BG_WINDOW: Color32 = ERROR;
-    pub const BG_CARD: Color32 = ERROR;
+    pub const BG_CARD: Color32 = Color32::from_rgb(34, 34, 34);
     pub const BG_WIDGET: Color32 = BG_PANEL;
     pub const BG_WIDGET_HOVERED: Color32 = Color32::from_rgb(50, 50, 50);
     pub const BG_WIDGET_ACTIVE: Color32 = Color32::from_rgb(80, 80, 80);
@@ -55,6 +55,21 @@ pub mod palette {
     pub const PORT_COLOR: Color32 = ERROR;
     pub const PORT_VECTOR: Color32 = ERROR;
     pub const PORT_SCALAR: Color32 = ERROR;
+}
+
+/// Layout constants for the editor's per-panel chrome.
+pub mod layout {
+    /// Gap left between a tile's edge and its own "inside panel" border.
+    pub const PANEL_BORDER_INSET: f32 = 9.0;
+    /// Gap between the top menu bar and the panels directly below it
+    pub const PANEL_TOP_INSET: f32 = 2.0;
+    /// Corner radius of each panel's inside border.
+    pub const PANEL_BORDER_ROUNDING: u8 = 8;
+
+    /// Padding between a panel's inside border and its content card (Graph/Properties only).
+    pub const CARD_PADDING: f32 = 4.0;
+    /// Corner radius of the content card.
+    pub const CARD_ROUNDING: u8 = 3;
 }
 
 pub mod fonts {
