@@ -71,7 +71,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
             error!("Failed to connect nodes.");
             return;
         }
-        
+
         // Connects pins in ui
         snarl.connect(from.id, to.id);
     }
@@ -175,13 +175,21 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         _outputs: &[OutPin],
         ui: &mut egui::Ui,
         snarl: &mut Snarl<GraphNode>,
-    )
-    {
+    ) {
         if ui.button("Remove Node").clicked() {
             let GraphNode::Main(graph_id) = &snarl[node];
-            if self.terrain_graph.write().graph_mut().remove_node(*graph_id).is_ok() {
+            if self
+                .terrain_graph
+                .write()
+                .graph_mut()
+                .remove_node(*graph_id)
+                .is_ok()
+            {
                 snarl.remove_node(node);
-                if self.selected.is_some_and(|selected| selected.snarl_id == node) {
+                if self
+                    .selected
+                    .is_some_and(|selected| selected.snarl_id == node)
+                {
                     self.selected = None;
                 }
             } else {
@@ -215,10 +223,20 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         ui: &mut egui::Ui,
         snarl: &mut Snarl<GraphNode>,
     ) {
-        // Detect clicks on the node to select it
-        if ui.input(|i| i.pointer.any_click())
-            && rect.contains(ui.input(|i| i.pointer.hover_pos().unwrap_or_default()))
-        {
+        let to_global = ui
+            .ctx()
+            .layer_transform_to_global(ui.layer_id())
+            .unwrap_or_default();
+        let screen_rect = to_global * rect;
+
+        let clicked_inside = ui.input(|i| {
+            i.pointer.primary_released()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|pos| screen_rect.contains(pos))
+        });
+
+        if clicked_inside {
             let GraphNode::Main(graph_id) = &snarl[node];
             self.selected = Some(SelectedNode {
                 snarl_id: node,
@@ -231,10 +249,7 @@ impl GraphViewer {
     fn new_node(&mut self, pos: egui::Pos2, snarl: &mut Snarl<GraphNode>, node: Box<dyn Node>) {
         let graph_id = self.terrain_graph.write().graph_mut().add_node(node);
         let snarl_id = snarl.insert_node(pos, GraphNode::Main(graph_id));
-        self.selected = Some(SelectedNode {
-            snarl_id,
-            graph_id,
-        });
+        self.selected = Some(SelectedNode { snarl_id, graph_id });
     }
 }
 
