@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use wde::prelude::*;
 
-use crate::{TerrainGraphHolder, render::mesh_generation::heightmap_to_mesh};
+use crate::{TerrainGraphHolder, core::node_error::NodeError::InputNotConnected, render::mesh_generation::heightmap_to_mesh};
 
 mod mesh_generation;
 
@@ -56,7 +56,14 @@ pub fn update_terrain_preview(
             None => return, // No new output tiles available
         },
         Err(e) => {
-            error!("Error while processing terrain graph: {:?}", e);
+            match e {
+                InputNotConnected { node, socket } => {
+                    trace!("Cannot generate terrain preview: Input not connected for node '{}' at socket {}", node, socket);
+                }
+                _ => {
+                    error!("Error while processing terrain graph: {:?}", e);
+                }
+            }
             return;
         }
     };
