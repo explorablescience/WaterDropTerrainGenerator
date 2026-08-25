@@ -13,17 +13,17 @@ pub mod palette {
 
 
     // Backgrounds, darkest to lightest
-    pub const BG_EXTREME: Color32 = Color32::from_rgb(12, 12, 12);
-    pub const BG_PANEL: Color32 = Color32::from_rgb(20, 20, 20);
+    pub const BG_EXTREME: Color32 = Color32::from_rgb(16, 16, 16);
+    pub const BG_PANEL: Color32 = Color32::from_rgb(25, 25, 25);
     pub const BG_WINDOW: Color32 = ERROR;
     pub const BG_CARD: Color32 = ERROR;
-    pub const BG_WIDGET: Color32 = BG_EXTREME;
-    pub const BG_WIDGET_HOVERED: Color32 = Color32::from_rgb(30, 30, 30);
-    pub const BG_WIDGET_ACTIVE: Color32 = Color32::from_rgb(50, 50, 50);
-    pub const BG_WIDGET_OPEN: Color32 = ERROR;
+    pub const BG_WIDGET: Color32 = BG_PANEL;
+    pub const BG_WIDGET_HOVERED: Color32 = Color32::from_rgb(50, 50, 50);
+    pub const BG_WIDGET_ACTIVE: Color32 = Color32::from_rgb(80, 80, 80);
+    pub const BG_WIDGET_OPEN: Color32 = BG_EXTREME;
 
     // Borders / separators
-    pub const BORDER: Color32 = Color32::from_rgb(60, 60, 60);
+    pub const BORDER: Color32 = BG_WIDGET_HOVERED;
     pub const BORDER_STRONG: Color32 = ERROR;
 
     // Text
@@ -226,25 +226,77 @@ fn style() -> egui::Style {
     visuals.extreme_bg_color = BG_EXTREME;
     visuals.window_fill = BG_PANEL;
     visuals.window_stroke = Stroke::new(1.0, BORDER);
+    visuals.selection.bg_fill = BG_WIDGET_HOVERED;
+    visuals.selection.stroke = Stroke::new(1.0, TEXT);
 
     visuals.override_text_color = None;
     visuals.weak_text_color = Some(ERROR);
     visuals.hyperlink_color = ERROR;
     visuals.faint_bg_color = ERROR;
-    visuals.code_bg_color = ERROR;
+    visuals.code_bg_color = BG_EXTREME;
     visuals.warn_fg_color = ERROR;
     visuals.error_fg_color = ERROR;
+    visuals.panel_fill = ERROR;
     visuals.window_corner_radius = CornerRadius::same(3);
     visuals.menu_corner_radius = CornerRadius::same(3);
-    visuals.panel_fill = ERROR;
     visuals.resize_corner_size = 10.0;
     visuals.indent_has_left_vline = true;
     visuals.collapsing_header_frame = false;
     visuals.interact_cursor = Some(egui::CursorIcon::PointingHand);
-    visuals.selection.bg_fill = ERROR;
-    visuals.selection.stroke = Stroke::new(1.0, ERROR);
 
     // Set the default visuals for all widgets, which will be overridden by specific widget types below.
+    let widgets = &mut visuals.widgets;
+    let default_widget = egui::style::WidgetVisuals {
+        bg_fill: ERROR,
+        weak_bg_fill: ERROR,
+        bg_stroke: Stroke::new(1.0, ERROR),
+        fg_stroke: Stroke::new(1.0, ERROR),
+        corner_radius: CornerRadius::same(3),
+        expansion: 0.0
+    };
+    widgets.noninteractive = egui::style::WidgetVisuals {
+        bg_stroke: Stroke::NONE, // Includes separators, borders of panels, etc.
+        fg_stroke: Stroke::new(1.0, TEXT_MUTED),
+        ..default_widget
+    };
+    widgets.inactive = egui::style::WidgetVisuals {
+        weak_bg_fill: BG_WIDGET,
+        fg_stroke: Stroke::new(1.0, TEXT_MUTED),
+        bg_stroke: Stroke::NONE,
+        ..default_widget
+    };
+    widgets.hovered = egui::style::WidgetVisuals {
+        weak_bg_fill: BG_WIDGET_HOVERED,
+        fg_stroke: Stroke::new(1.0, TEXT),
+        bg_stroke: Stroke::NONE,
+        ..default_widget
+    };
+    widgets.active = egui::style::WidgetVisuals {
+        weak_bg_fill: BG_WIDGET_ACTIVE,
+        fg_stroke: Stroke::new(1.0, TEXT),
+        bg_stroke: Stroke::NONE,
+        ..default_widget
+    };
+    widgets.open = egui::style::WidgetVisuals {
+        weak_bg_fill: BG_WIDGET_OPEN,
+        fg_stroke: Stroke::new(1.0, TEXT_MUTED),
+        ..default_widget
+    };
+
+    style
+}
+
+pub fn menu_style() -> egui::Style {
+    let mut style = style();
+
+    // Set spacing and sizing for various UI elements.
+    let spacing = &mut style.spacing;
+    spacing.item_spacing = egui::vec2(20.0, 8.0);
+    spacing.menu_margin = egui::Margin::same(10);
+    spacing.button_padding = egui::vec2(20.0, 8.0);
+
+    // Set the default visuals for all widgets, which will be overridden by specific widget types below.
+    let visuals = &mut style.visuals;
     let widgets = &mut visuals.widgets;
     let default_widget = egui::style::WidgetVisuals {
         bg_fill: ERROR,
@@ -259,7 +311,7 @@ fn style() -> egui::Style {
         ..default_widget
     };
     widgets.inactive = egui::style::WidgetVisuals {
-        weak_bg_fill: BG_WIDGET,
+        weak_bg_fill: BG_EXTREME,
         bg_stroke: Stroke::NONE,
         fg_stroke: Stroke::new(1.0, TEXT_MUTED),
         ..default_widget
@@ -281,8 +333,4 @@ fn style() -> egui::Style {
     };
 
     style
-}
-
-pub fn menu_style() -> egui::Style {
-    style()
 }
