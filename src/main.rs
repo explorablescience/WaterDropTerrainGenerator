@@ -16,7 +16,14 @@ impl Plugin for CustomWdePlugins {
                 ..default()
             }
             .with_crate_level("waterdrop_terrain_editor", wde::wde_logger::LogLevel::DEBUG),
-            wde::wde_renderer::RenderPlugin,
+            wde::wde_renderer::RenderPlugin {
+                window_title: "WaterDrop Terrain Editor".into(),
+                window_resolution: (1600, 900),
+                // Drop a PNG at assets/icon.png to have it picked up as the taskbar/title bar icon.
+                window_icon: std::fs::read("assets/icon.png")
+                    .ok()
+                    .and_then(|bytes| wde::wde_renderer::core::WindowIcon::from_bytes(&bytes).ok())
+            },
             wde::wde_pbr::PbrPlugin,
             wde::wde_camera::CameraPlugin,
             wde::wde_camera_controller::CameraControllerPlugin,

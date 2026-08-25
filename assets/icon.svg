@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="drop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8CC2FF"/>
+      <stop offset="100%" stop-color="#5C98E8"/>
+    </linearGradient>
+    <clipPath id="dropClip">
+      <path d="M100,8 C62,52 30,93 30,130 A70,70 0 1,0 170,130 C170,93 138,52 100,8 Z"/>
+    </clipPath>
+  </defs>
+
+  <g transform="translate(10,6.4) scale(0.9)">
+    <!-- Droplet body -->
+    <path d="M100,8 C62,52 30,93 30,130 A70,70 0 1,0 170,130 C170,93 138,52 100,8 Z" fill="url(#drop)"/>
+
+    <!-- Terrain silhouette, clipped to the droplet -->
+    <g clip-path="url(#dropClip)">
+      <polygon points="10,206 45,145 75,170 105,130 140,165 170,145 200,206" fill="#2B3E5C"/>
+      <polygon points="10,206 55,128 88,158 116,100 150,158 178,132 200,206" fill="#101010"/>
+    </g>
+
+    <!-- Highlight shine, echoing the engine mark -->
+    <path d="M132,58 C147,76 156,96 158,116" fill="none" stroke="#F5F9FF" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="159" cy="132" r="5" fill="#F5F9FF"/>
+  </g>
+</svg>
