@@ -2,15 +2,17 @@
 
 use wde::prelude::ui::egui;
 
-use crate::{core::node::NodePortType, ui::theme::palette::BG_PANEL};
+use crate::{
+    core::node::{NodeCategory, NodeIcon},
+    ui::theme::palette::BG_PANEL
+};
 use egui::{CornerRadius, FontFamily, FontId, Stroke, TextStyle};
 use palette::*;
 
 /// Color palette used throughout the editor
 pub mod palette {
     use wde::prelude::ui::egui::Color32;
-    pub const ERROR: Color32 = Color32::from_rgb(255, 0, 255);
-
+    pub const UNSET_ERROR: Color32 = Color32::from_rgb(255, 0, 255);
 
     // Backgrounds, darkest to lightest
     pub const BG_EXTREME: Color32 = Color32::from_rgb(16, 16, 16);
@@ -21,6 +23,7 @@ pub mod palette {
     pub const BG_WIDGET_HOVERED: Color32 = Color32::from_rgb(50, 50, 50);
     pub const BG_WIDGET_ACTIVE: Color32 = Color32::from_rgb(80, 80, 80);
     pub const BG_WIDGET_OPEN: Color32 = BG_EXTREME;
+    pub const BG_GRAPH: Color32 = BG_PANEL;
 
     // Borders / separators
     pub const BORDER: Color32 = BG_WIDGET_HOVERED;
@@ -46,16 +49,17 @@ pub mod palette {
     pub const HIGHLIGHT_ERROR: Color32 = Color32::from_rgb(255, 100, 100);
     pub const HIGHLIGHT_WARNING: Color32 = Color32::from_rgb(255, 200, 0);
 
-    // Neutral highlight used for the currently selected node in the graph editor. Reuses the
-    // accent so focus/selection reads as one consistent color across the editor.
+    // Fallback highlight for a selected node whose category can't be resolved. Reuses the accent
+    // so focus/selection still reads as intentional.
     pub const NODE_SELECTED: Color32 = ACCENT;
 
-    // Node-graph socket colors - one distinct hue per port data type.
-    pub const PORT_HEIGHT: Color32 = Color32::from_rgb(196, 154, 108);
-    pub const PORT_MASK: Color32 = Color32::from_rgb(140, 150, 165);
-    pub const PORT_COLOR: Color32 = Color32::from_rgb(216, 118, 150);
-    pub const PORT_VECTOR: Color32 = Color32::from_rgb(118, 194, 128);
-    pub const PORT_SCALAR: Color32 = Color32::from_rgb(94, 190, 196);
+    // Node-graph category colors - one distinct hue per `NodeCategory`, used for a node's
+    // outline, title, pins and icon.
+    pub const CATEGORY_GENERATOR: Color32 = Color32::from_rgb(122, 168, 116);
+    pub const CATEGORY_SIMULATION: Color32 = Color32::from_rgb(96, 150, 186);
+
+    // Neutral default fill for graph pins before a category color is applied.
+    pub const PIN_DEFAULT: Color32 = Color32::from_rgb(120, 120, 120);
 }
 
 /// Layout constants for the editor's per-panel chrome.
@@ -71,6 +75,13 @@ pub mod layout {
     pub const CARD_PADDING: f32 = 4.0;
     /// Corner radius of the content card.
     pub const CARD_ROUNDING: u8 = 3;
+
+    /// Gap between a graph node's pin dot and its label, kept small and identical on both the
+    /// input (left) and output (right) sides so the two columns read as symmetric.
+    pub const NODE_PIN_LABEL_SPACING: f32 = 6.0;
+    /// Minimum height of a pin row. Taller than the pin dot/label content itself, so
+    /// `egui-snarl` centers that content within the row, giving it vertical breathing room.
+    pub const NODE_PIN_ROW_HEIGHT: f32 = 28.0;
 }
 
 pub mod fonts {
@@ -82,18 +93,85 @@ pub mod fonts {
     pub const FONT_SIZE_BUTTON: f32 = 13.0;
     pub const FONT_SIZE_HEADING: f32 = 15.0;
     pub const FONT_SIZE_MONOSPACE: f32 = 13.0;
-    /// Graph-editor node title, sized clearly above body text so nodes read at a glance.
-    pub const FONT_SIZE_NODE_TITLE: f32 = 17.0;
+    
+    pub const FONT_SIZE_NODE_TITLE: f32 = 18.0;
+    pub const FONT_SIZE_NODE_PIN: f32 = 14.0;
 }
 
-/// The color used for a node-graph pin/wire of the given data type.
-pub fn port_color(dtype: NodePortType) -> egui::Color32 {
-    match dtype {
-        NodePortType::Height => palette::PORT_HEIGHT,
-        NodePortType::Mask => palette::PORT_MASK,
-        NodePortType::Color => palette::PORT_COLOR,
-        NodePortType::Vector => palette::PORT_VECTOR,
-        NodePortType::Scalar => palette::PORT_SCALAR
+/// The color associated with a node category, used for its outline, title, pins and icon in the
+/// graph editor.
+pub fn category_color(category: NodeCategory) -> egui::Color32 {
+    match category {
+        NodeCategory::Generator => palette::CATEGORY_GENERATOR,
+        NodeCategory::Simulation => palette::CATEGORY_SIMULATION
+    }
+}
+
+/// Paints a small flat-design icon representing `icon` inside `rect`, tinted with `color` so it
+/// always matches its node's category color.
+pub fn paint_node_icon(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    icon: NodeIcon,
+    color: egui::Color32
+) {
+    let stroke = egui::Stroke::new(1.4, color);
+    match icon {
+        NodeIcon::Plane => {
+            // A flat plateau sitting on a baseline - flat terrain.
+            let top = rect.top() + rect.height() * 0.34;
+            let base = rect.bottom() - rect.height() * 0.22;
+            let left_in = rect.left() + rect.width() * 0.24;
+            let right_in = rect.right() - rect.width() * 0.24;
+            let points = vec![
+                egui::pos2(rect.left(), base),
+                egui::pos2(left_in, top),
+                egui::pos2(right_in, top),
+                egui::pos2(rect.right(), base),
+            ];
+            painter.add(egui::Shape::convex_polygon(
+                points,
+                color.gamma_multiply(0.35),
+                stroke
+            ));
+        }
+        NodeIcon::Wave => {
+            // A single sine-like wave - noise.
+            let points: Vec<egui::Pos2> = (0..=16)
+                .map(|i| {
+                    let t = i as f32 / 16.0;
+                    let x = egui::lerp(rect.left()..=rect.right(), t);
+                    let y =
+                        rect.center().y - (t * std::f32::consts::TAU).sin() * rect.height() * 0.3;
+                    egui::pos2(x, y)
+                })
+                .collect();
+            painter.add(egui::Shape::line(points, stroke));
+        }
+        NodeIcon::Droplet => {
+            // A rounded body under a pointed tip - water / erosion. The tip sits directly above
+            // the circle's center, so the arc must leave its gap at the top (angle -FRAC_PI_2)
+            // rather than to the side, otherwise the two straight edges cross the arc instead of
+            // meeting it cleanly.
+            let tip = egui::pos2(rect.center().x, rect.top());
+            let radius = rect.width() * 0.32;
+            let center = egui::pos2(rect.center().x, rect.bottom() - radius);
+            let gap_half_angle = 0.5;
+            let start = -std::f32::consts::FRAC_PI_2 + gap_half_angle;
+            let sweep = std::f32::consts::TAU - 2.0 * gap_half_angle;
+            let segments = 20;
+            let mut points = vec![tip];
+            for i in 0..=segments {
+                let t = i as f32 / segments as f32;
+                let angle = start + t * sweep;
+                points.push(center + radius * egui::vec2(angle.cos(), angle.sin()));
+            }
+            painter.add(egui::Shape::convex_polygon(
+                points,
+                color.gamma_multiply(0.35),
+                stroke
+            ));
+        }
     }
 }
 
@@ -129,7 +207,8 @@ pub mod widgets {
             } else {
                 palette::BG_WIDGET
             };
-            let track_stroke = egui::Stroke::new(1.0, if *on { track_fill } else { palette::BORDER });
+            let track_stroke =
+                egui::Stroke::new(1.0, if *on { track_fill } else { palette::BORDER });
             ui.painter().rect(
                 rect,
                 radius,
@@ -141,7 +220,11 @@ pub mod widgets {
             let knob_radius = radius - 2.5;
             let knob_x = egui::lerp((rect.left() + radius)..=(rect.right() - radius), how_on);
             let knob_center = egui::pos2(knob_x, rect.center().y);
-            let knob_color = if *on { palette::BG_EXTREME } else { palette::TEXT_MUTED };
+            let knob_color = if *on {
+                palette::BG_EXTREME
+            } else {
+                palette::TEXT_MUTED
+            };
             ui.painter()
                 .circle(knob_center, knob_radius, knob_color, egui::Stroke::NONE);
         }
@@ -193,9 +276,10 @@ fn fonts() -> egui::FontDefinitions {
         .cloned()
         .unwrap_or_default();
     heading_family.insert(0, fonts::FONT_SEMIBOLD.to_owned());
-    fonts
-        .families
-        .insert(egui::FontFamily::Name(fonts::FONT_SEMIBOLD.into()), heading_family);
+    fonts.families.insert(
+        egui::FontFamily::Name(fonts::FONT_SEMIBOLD.into()),
+        heading_family
+    );
 
     fonts
 }
@@ -207,7 +291,10 @@ fn style() -> egui::Style {
                 TextStyle::Small,
                 FontId::new(fonts::FONT_SIZE_SMALL, FontFamily::Proportional)
             ),
-            (TextStyle::Body, FontId::new(fonts::FONT_SIZE_BODY, FontFamily::Proportional)),
+            (
+                TextStyle::Body,
+                FontId::new(fonts::FONT_SIZE_BODY, FontFamily::Proportional)
+            ),
             (
                 TextStyle::Button,
                 FontId::new(fonts::FONT_SIZE_BUTTON, FontFamily::Proportional)
@@ -221,6 +308,9 @@ fn style() -> egui::Style {
         .into(),
         ..Default::default()
     };
+
+    // Text is not selectable with the mouse; the editor's UI is not meant for copying text out.
+    style.interaction.selectable_labels = false;
 
     // Set spacing and sizing for various UI elements.
     let spacing = &mut style.spacing;
@@ -353,9 +443,7 @@ pub fn menu_style() -> egui::Style {
         bg_stroke: Stroke::NONE,
         ..default_widget
     };
-    widgets.open = egui::style::WidgetVisuals {
-        ..default_widget
-    };
+    widgets.open = egui::style::WidgetVisuals { ..default_widget };
 
     style
 }

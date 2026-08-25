@@ -1,8 +1,9 @@
 use std::sync::{Arc, OnceLock};
 
-use crate::core::node::{Node, NodePortType, NodeSocket};
+use crate::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
 use crate::core::node_error::NodeError;
 use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
+use crate::core::node_registry::NodeDescriptor;
 use crate::core::tile_allocator::{TileHandle, TilePool};
 
 /// A node that generates a perlin noise terrain tile.
@@ -90,9 +91,16 @@ impl Node for NodeGeneratorPerlin {
         "Generator Perlin Noise"
     }
 
+    fn category(&self) -> NodeCategory {
+        NodeCategory::Generator
+    }
+    fn icon(&self) -> NodeIcon {
+        NodeIcon::Wave
+    }
+
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
-            name: "height",
+            name: "Height",
             dtype: NodePortType::Height
         }]
     }
@@ -124,5 +132,14 @@ impl Node for NodeGeneratorPerlin {
         _inputs: &[TileHandle]
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![self.process_tile(pool)])
+    }
+}
+
+inventory::submit! {
+    NodeDescriptor {
+        label: "Perlin Generator",
+        category: NodeCategory::Generator,
+        icon: NodeIcon::Wave,
+        factory: || Box::new(NodeGeneratorPerlin::default())
     }
 }

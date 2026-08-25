@@ -14,6 +14,12 @@ use crate::core::{
 pub trait Node: Debug + Send + Sync {
     fn label(&self) -> &str;
 
+    /// The category this node belongs to. Drives the color the graph editor uses for the node's
+    /// outline, title, pins and icon.
+    fn category(&self) -> NodeCategory;
+    /// The icon shown next to this node's title, hinting at what the node does.
+    fn icon(&self) -> NodeIcon;
+
     /// Size of the kernel (in texels) that this node operates on. Used to determine padding.
     fn size(&self) -> usize {
         0
@@ -71,4 +77,34 @@ pub enum NodePortType {
     Color,  // RGBA texture
     Vector, // Vector field (f32x3 per texel)
     Scalar  // Scalar value (f32) - Used for parameters, not textures
+}
+
+/// High-level grouping of nodes, used to color-code and organize nodes in the graph editor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeCategory {
+    Generator,
+    Simulation
+}
+impl NodeCategory {
+    /// Every category, in the order they should be listed in the "Add Node" menu.
+    pub const ALL: [NodeCategory; 2] = [NodeCategory::Generator, NodeCategory::Simulation];
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            NodeCategory::Generator => "Generator",
+            NodeCategory::Simulation => "Simulation"
+        }
+    }
+}
+
+/// Identifies the small glyph drawn next to a node's title in the graph editor. Kept independent
+/// from any rendering backend - the UI layer decides how each shape is actually drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeIcon {
+    /// A flat plateau - flat terrain generator.
+    Plane,
+    /// A sine-like wave - noise-based generator.
+    Wave,
+    /// A water droplet - erosion / hydraulic simulation.
+    Droplet
 }

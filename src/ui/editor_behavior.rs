@@ -35,9 +35,15 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
         let tile_rect = ui.max_rect();
         let border_rect = panel_border_rect(tile_rect, self.outer_rect);
         if matches!(pane, EditorPanels::Engine) {
-            paint_frame_gap(ui.painter(), tile_rect, border_rect, theme::palette::BG_EXTREME);
+            paint_frame_gap(
+                ui.painter(),
+                tile_rect,
+                border_rect,
+                theme::palette::BG_EXTREME
+            );
         } else {
-            ui.painter().rect_filled(tile_rect, 0, theme::palette::BG_EXTREME);
+            ui.painter()
+                .rect_filled(tile_rect, 0, theme::palette::BG_EXTREME);
         }
 
         // Graph/Properties get an extra content "card" on top of the panel background, inset
@@ -136,14 +142,26 @@ pub fn panel_border_rect(tile_rect: egui::Rect, outer_rect: egui::Rect) -> egui:
     let full = theme::layout::PANEL_BORDER_INSET;
     let half = full * 0.5;
 
-    let left = if (tile_rect.left() - outer_rect.left()).abs() < EPS { full } else { half };
+    let left = if (tile_rect.left() - outer_rect.left()).abs() < EPS {
+        full
+    } else {
+        half
+    };
     let top = if (tile_rect.top() - outer_rect.top()).abs() < EPS {
         theme::layout::PANEL_TOP_INSET
     } else {
         half
     };
-    let right = if (tile_rect.right() - outer_rect.right()).abs() < EPS { full } else { half };
-    let bottom = if (tile_rect.bottom() - outer_rect.bottom()).abs() < EPS { full } else { half };
+    let right = if (tile_rect.right() - outer_rect.right()).abs() < EPS {
+        full
+    } else {
+        half
+    };
+    let bottom = if (tile_rect.bottom() - outer_rect.bottom()).abs() < EPS {
+        full
+    } else {
+        half
+    };
 
     egui::Rect::from_min_max(
         egui::pos2(tile_rect.left() + left, tile_rect.top() + top),
@@ -153,24 +171,38 @@ pub fn panel_border_rect(tile_rect: egui::Rect, outer_rect: egui::Rect) -> egui:
 
 /// Fills `outer` with `color`, except for the `inner` rect carved out of its middle. Used to
 /// backdrop the margin around the engine pane's live viewport without ever painting over it.
-fn paint_frame_gap(painter: &egui::Painter, outer: egui::Rect, inner: egui::Rect, color: egui::Color32) {
+fn paint_frame_gap(
+    painter: &egui::Painter,
+    outer: egui::Rect,
+    inner: egui::Rect,
+    color: egui::Color32
+) {
     painter.rect_filled(
         egui::Rect::from_min_max(outer.left_top(), egui::pos2(outer.right(), inner.top())),
         0,
         color
     );
     painter.rect_filled(
-        egui::Rect::from_min_max(egui::pos2(outer.left(), inner.bottom()), outer.right_bottom()),
+        egui::Rect::from_min_max(
+            egui::pos2(outer.left(), inner.bottom()),
+            outer.right_bottom()
+        ),
         0,
         color
     );
     painter.rect_filled(
-        egui::Rect::from_min_max(egui::pos2(outer.left(), inner.top()), egui::pos2(inner.left(), inner.bottom())),
+        egui::Rect::from_min_max(
+            egui::pos2(outer.left(), inner.top()),
+            egui::pos2(inner.left(), inner.bottom())
+        ),
         0,
         color
     );
     painter.rect_filled(
-        egui::Rect::from_min_max(egui::pos2(inner.right(), inner.top()), egui::pos2(outer.right(), inner.bottom())),
+        egui::Rect::from_min_max(
+            egui::pos2(inner.right(), inner.top()),
+            egui::pos2(outer.right(), inner.bottom())
+        ),
         0,
         color
     );

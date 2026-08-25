@@ -1,8 +1,9 @@
 use std::sync::{Arc, OnceLock};
 
-use crate::core::node::{Node, NodePortType, NodeSocket};
+use crate::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
 use crate::core::node_error::NodeError;
 use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
+use crate::core::node_registry::NodeDescriptor;
 use crate::core::tile_allocator::{TileHandle, TilePool};
 
 /// A minimal thermal-erosion node
@@ -58,18 +59,25 @@ impl Node for NodeErosion {
         "Erosion"
     }
 
+    fn category(&self) -> NodeCategory {
+        NodeCategory::Simulation
+    }
+    fn icon(&self) -> NodeIcon {
+        NodeIcon::Droplet
+    }
+
     fn size(&self) -> usize {
         3 // 3x3 kernel
     }
     fn inputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
-            name: "height",
+            name: "Height",
             dtype: NodePortType::Height
         }]
     }
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
-            name: "height",
+            name: "Height",
             dtype: NodePortType::Height
         }]
     }
@@ -97,5 +105,14 @@ impl Node for NodeErosion {
         inputs: &[TileHandle]
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![self.process_tile(pool, &inputs[0])])
+    }
+}
+
+inventory::submit! {
+    NodeDescriptor {
+        label: "Erosion",
+        category: NodeCategory::Simulation,
+        icon: NodeIcon::Droplet,
+        factory: || Box::new(NodeErosion::default())
     }
 }
