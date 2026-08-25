@@ -52,7 +52,7 @@ fn default_scene(mut commands: Commands) {
     // Main camera
     commands.spawn((
         Name::new("Main Camera"),
-        Transform::from_xyz(2.0, 2.0, 2.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(-6.0, 13.0, -4.0),
         ActiveCamera,
         ThirdPersonController::default()
     ));
