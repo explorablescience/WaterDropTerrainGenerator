@@ -1,4 +1,3 @@
-
 use waterdrop_terrain_editor::core::graph::{NodeGraph, NodeGraphProcessResult};
 use waterdrop_terrain_editor::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
 
@@ -137,7 +136,7 @@ fn test_node_graph_process_grows_internal_tile_size_for_padding() {
         .expect("Graph processing should succeed");
     let outputs = match outputs {
         NodeGraphProcessResult::Processed(_, outputs) => outputs,
-        _ => panic!("Graph processing should have completed"),
+        _ => panic!("Graph processing should have completed")
     };
 
     // internal_tile_size = tile_size + 2*padding(erosion) + 2*padding(source)

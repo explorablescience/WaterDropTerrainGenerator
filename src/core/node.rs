@@ -1,11 +1,12 @@
-use std::hash::{Hash, Hasher};
-use std::{hash::DefaultHasher};
 use std::fmt::Debug;
+use std::hash::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::core::node_error::NodeError;
 use crate::core::{
-    node_parameters::{NParamDesc, NParamValue}, tile_allocator::{TileHandle, TilePool}
+    node_parameters::{NParamDesc, NParamValue},
+    tile_allocator::{TileHandle, TilePool}
 };
 
 /// Represents a node in the node graph, which can have input and output sockets for connecting to other nodes.

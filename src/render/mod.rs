@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 use wde::prelude::*;
 
-use crate::{TerrainGraphHolder, core::node_error::NodeError::InputNotConnected, render::mesh_generation::heightmap_to_mesh};
+use crate::{
+    TerrainGraphHolder, core::node_error::NodeError::InputNotConnected,
+    render::mesh_generation::heightmap_to_mesh
+};
 
 mod mesh_generation;
 
@@ -46,19 +49,22 @@ pub fn update_terrain_preview(
     // Get selected node from terrain graph
     let selected_node = match terrain_graph.read().selected_node {
         Some(node_id) => node_id,
-        None => return, // No node selected
+        None => return // No node selected
     };
 
     // Check if the terrain graph has new output tiles
     let (generation, tiles) = match terrain_graph.write().process(selected_node) {
         Ok(state) => match state {
             Some((generation, tiles)) => (generation, tiles),
-            None => return, // No new output tiles available
+            None => return // No new output tiles available
         },
         Err(e) => {
             match e {
                 InputNotConnected { node, socket } => {
-                    trace!("Cannot generate terrain preview: Input not connected for node '{}' at socket {}", node, socket);
+                    trace!(
+                        "Cannot generate terrain preview: Input not connected for node '{}' at socket {}",
+                        node, socket
+                    );
                 }
                 _ => {
                     error!("Error while processing terrain graph: {:?}", e);
@@ -72,11 +78,7 @@ pub fn update_terrain_preview(
     let heightmap = &tiles[0]; // For now, just use the first tile for preview (should be heightmap)
     let size = heightmap.size();
     let data: Vec<f32> = heightmap.iter().copied().collect();
-    let mesh = heightmap_to_mesh(
-        &format!("terrain-preview-{}", generation),
-        &data,
-        size
-    );
+    let mesh = heightmap_to_mesh(&format!("terrain-preview-{}", generation), &data, size);
 
     // Reuse the existing mesh asset and entity if present, otherwise create a new one
     match &terrain_preview.mesh_handle {

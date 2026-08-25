@@ -7,16 +7,16 @@ use std::sync::Arc;
 use crate::core::node_error::NodeError;
 use crate::core::{
     graph::{
-        state::{cache_key_of, CacheKey, EvalCache, NodeState},
-        topology::{GraphNodeId, Topology},
+        state::{CacheKey, EvalCache, NodeState, cache_key_of},
+        topology::{GraphNodeId, Topology}
     },
-    node::{Node},
-    tile_allocator::{TileHandle, TilePool},
+    node::Node,
+    tile_allocator::{TileHandle, TilePool}
 };
 
 pub enum NodeGraphProcessResult {
     Processed(u32, Vec<TileHandle>),
-    Processing,
+    Processing
 }
 
 pub struct NodeGraph {
@@ -26,7 +26,7 @@ pub struct NodeGraph {
     tile_size: usize,
     topology: Topology,
     cache: EvalCache,
-    generation: u32,
+    generation: u32
 }
 
 impl NodeGraph {
@@ -36,7 +36,7 @@ impl NodeGraph {
             tile_size,
             topology: Topology::default(),
             cache: EvalCache::default(),
-            generation: 0,
+            generation: 0
         }
     }
 
@@ -58,9 +58,10 @@ impl NodeGraph {
         from_node: GraphNodeId,
         from_socket: usize,
         to_node: GraphNodeId,
-        to_socket: usize,
+        to_socket: usize
     ) -> Result<&mut Self, NodeError> {
-        self.topology.connect(from_node, from_socket, to_node, to_socket)?;
+        self.topology
+            .connect(from_node, from_socket, to_node, to_socket)?;
         self.mark_dirty(to_node);
         Ok(self)
     }
@@ -70,9 +71,10 @@ impl NodeGraph {
         from_node: GraphNodeId,
         from_socket: usize,
         to_node: GraphNodeId,
-        to_socket: usize,
+        to_socket: usize
     ) -> Result<&mut Self, NodeError> {
-        self.topology.disconnect(from_node, from_socket, to_node, to_socket)?;
+        self.topology
+            .disconnect(from_node, from_socket, to_node, to_socket)?;
         self.mark_dirty(to_node);
         Ok(self)
     }
@@ -105,9 +107,17 @@ impl NodeGraph {
 
     /// Downstream nodes still depending on `id`'s cached output.
     fn refcount(&self, id: GraphNodeId) -> usize {
-        let Ok(outputs) = self.topology.outputs(id) else { return 0 };
-        outputs.iter()
-            .filter(|o| matches!(self.cache.state(**o), NodeState::Dirty | NodeState::Processing))
+        let Ok(outputs) = self.topology.outputs(id) else {
+            return 0;
+        };
+        outputs
+            .iter()
+            .filter(|o| {
+                matches!(
+                    self.cache.state(**o),
+                    NodeState::Dirty | NodeState::Processing
+                )
+            })
             .count()
     }
 
@@ -139,7 +149,8 @@ impl NodeGraph {
     /// Tile size the pool needs so that every node feeding `node_id` has enough padding
     /// around the requested `tile_size` output to sample its kernel without going out of bounds.
     fn required_internal_tile_size(&self, node_id: GraphNodeId) -> Result<usize, NodeError> {
-        let padding: usize = self.collect_ancestors(node_id)?
+        let padding: usize = self
+            .collect_ancestors(node_id)?
             .iter()
             .map(|&id| self.topology.node(id).map(|n| n.size().div_ceil(2)))
             .collect::<Result<Vec<_>, _>>()?
@@ -162,7 +173,10 @@ impl NodeGraph {
     fn process_node(&mut self, node_id: GraphNodeId) -> Result<NodeGraphProcessResult, NodeError> {
         match self.cache.state(node_id) {
             NodeState::Cached((_, tiles)) => {
-                return Ok(NodeGraphProcessResult::Processed(self.generation, tiles.clone()))
+                return Ok(NodeGraphProcessResult::Processed(
+                    self.generation,
+                    tiles.clone()
+                ));
             }
             NodeState::Baked(_) => todo!("load baked tiles from disk"),
             // Re-entering a node that is still on the current call stack means the
@@ -184,7 +198,10 @@ impl NodeGraph {
         result
     }
 
-    fn process_node_body(&mut self, node_id: GraphNodeId) -> Result<NodeGraphProcessResult, NodeError> {
+    fn process_node_body(
+        &mut self,
+        node_id: GraphNodeId
+    ) -> Result<NodeGraphProcessResult, NodeError> {
         let inputs = self.topology.inputs(node_id)?.to_vec();
         let mut input_tiles = Vec::with_capacity(inputs.len());
         let mut input_keys = Vec::with_capacity(inputs.len());
@@ -193,20 +210,22 @@ impl NodeGraph {
             let Some((from_node, from_socket)) = input else {
                 return Err(NodeError::InputNotConnected {
                     node: self.topology.node(node_id)?.label().to_string(),
-                    socket: input_tiles.len(),
+                    socket: input_tiles.len()
                 });
             };
             match self.process_node(*from_node)? {
                 NodeGraphProcessResult::Processed(_, tiles) => {
                     let tile = match tiles.get(*from_socket) {
                         Some(tile) => tile.clone(),
-                        None => return Err(NodeError::OutputNotAvailable {
-                            node: self.topology.node(*from_node)?.label().to_string(),
-                        }),
+                        None => {
+                            return Err(NodeError::OutputNotAvailable {
+                                node: self.topology.node(*from_node)?.label().to_string()
+                            });
+                        }
                     };
                     input_tiles.push(tile);
                 }
-                NodeGraphProcessResult::Processing => return Ok(NodeGraphProcessResult::Processing),
+                NodeGraphProcessResult::Processing => return Ok(NodeGraphProcessResult::Processing)
             }
             input_keys.push(cache_key_of(self.cache.state(*from_node)));
         }
@@ -215,7 +234,8 @@ impl NodeGraph {
         let key = compute_cache_key(node, node_id, &input_keys);
         let output = node.process(&self.pool, &input_tiles)?;
 
-        self.cache.set(node_id, NodeState::Cached((key, output.clone())));
+        self.cache
+            .set(node_id, NodeState::Cached((key, output.clone())));
         self.generation += 1;
 
         for input in inputs.into_iter().flatten() {
@@ -226,7 +246,11 @@ impl NodeGraph {
     }
 }
 
-fn compute_cache_key(node: &dyn Node, node_id: GraphNodeId, input_keys: &[Option<CacheKey>]) -> CacheKey {
+fn compute_cache_key(
+    node: &dyn Node,
+    node_id: GraphNodeId,
+    input_keys: &[Option<CacheKey>]
+) -> CacheKey {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     node_id.0.hash(&mut hasher);
     node.params_hash().hash(&mut hasher);
@@ -236,17 +260,23 @@ fn compute_cache_key(node: &dyn Node, node_id: GraphNodeId, input_keys: &[Option
 
 pub struct NodeMutGuard<'a> {
     graph: &'a mut NodeGraph,
-    id: GraphNodeId,
+    id: GraphNodeId
 }
 impl<'a> Deref for NodeMutGuard<'a> {
     type Target = dyn Node;
     fn deref(&self) -> &Self::Target {
-        self.graph.topology.node(self.id).expect("Validated in node_mut")
+        self.graph
+            .topology
+            .node(self.id)
+            .expect("Validated in node_mut")
     }
 }
 impl<'a> DerefMut for NodeMutGuard<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.graph.topology.node_mut(self.id).expect("Validated in node_mut")
+        self.graph
+            .topology
+            .node_mut(self.id)
+            .expect("Validated in node_mut")
     }
 }
 impl Drop for NodeMutGuard<'_> {

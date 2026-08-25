@@ -29,6 +29,7 @@ impl NodeGeneratorPerlin {
                 NParamDesc {
                     key: "frequency",
                     label: "Frequency",
+                    category: "Noise",
                     default: NParamValue::Float(1.0),
                     constraints: Some(NParamConstraints::FloatRange {
                         min: 0.0,
@@ -38,6 +39,7 @@ impl NodeGeneratorPerlin {
                 NParamDesc {
                     key: "amplitude",
                     label: "Amplitude",
+                    category: "Noise",
                     default: NParamValue::Float(1.0),
                     constraints: Some(NParamConstraints::FloatRange {
                         min: 0.0,
@@ -47,6 +49,7 @@ impl NodeGeneratorPerlin {
                 NParamDesc {
                     key: "octaves",
                     label: "Octaves",
+                    category: "Noise",
                     default: NParamValue::Int(4),
                     constraints: Some(NParamConstraints::IntRange { min: 1, max: 10 })
                 },

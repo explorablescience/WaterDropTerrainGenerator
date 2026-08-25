@@ -17,7 +17,7 @@ impl Hash for NParamValue {
             NParamValue::Float(v) => v.to_bits().hash(state),
             NParamValue::Bool(v) => v.hash(state),
             NParamValue::String(v) => v.hash(state),
-            NParamValue::Enum(v) => v.hash(state),
+            NParamValue::Enum(v) => v.hash(state)
         }
     }
 }
@@ -26,6 +26,9 @@ impl Hash for NParamValue {
 pub struct NParamDesc {
     pub key: &'static str,
     pub label: &'static str,
+    /// Groups this parameter with others of the same category in the properties panel (e.g.
+    /// `"Noise"`, `"Simulation"`). Purely presentational; has no effect on processing.
+    pub category: &'static str,
     pub default: NParamValue,
     pub constraints: Option<NParamConstraints>
 }

@@ -7,7 +7,7 @@ use bevy::{platform::collections::HashMap, prelude::*};
 use crate::core::{
     graph::{GraphNodeId, NodeGraph, NodeGraphProcessResult},
     node_error::NodeError,
-    tile_allocator::TileHandle,
+    tile_allocator::TileHandle
 };
 
 pub mod core;
@@ -37,26 +37,29 @@ pub struct TerrainGraph {
     /// Mapping from a node's unique id to its latest resulting generation.
     generations: HashMap<GraphNodeId, u32>,
     /// The currently selected node in the graph editor, if any.
-    pub selected_node: Option<GraphNodeId>,
+    pub selected_node: Option<GraphNodeId>
 }
 impl Default for TerrainGraph {
     fn default() -> Self {
         Self {
             graph: NodeGraph::new(128),
             generations: HashMap::new(),
-            selected_node: None,
+            selected_node: None
         }
     }
 }
 impl TerrainGraph {
     /// Processes the terrain graph starting from the specified node ID.
     /// Each instance of a node graph contains an internal state that tracks the latest generation of output tiles for each node.
-    /// 
+    ///
     /// # Returns
     /// - `Ok(Some((generation, output_tiles)))` if the graph has been processed successfully and new output tiles are available since the last processing.
     /// - `Ok(None)` if the graph is still processing or if no new output tiles are available since the last processing.
     /// - `Err(NodeError)` if an error occurs during processing.
-    pub fn process(&mut self, node_id: GraphNodeId) -> Result<Option<(u32, Vec<TileHandle>)>, NodeError> {
+    pub fn process(
+        &mut self,
+        node_id: GraphNodeId
+    ) -> Result<Option<(u32, Vec<TileHandle>)>, NodeError> {
         let generation = self.generations.get(&node_id).copied().unwrap_or(0);
         match self.graph.process(node_id) {
             Ok(NodeGraphProcessResult::Processed(new_generation, output_tiles)) => {
@@ -73,7 +76,7 @@ impl TerrainGraph {
                 // Graph is still processing
                 Ok(None)
             }
-            Err(e) => Err(e),
+            Err(e) => Err(e)
         }
     }
 

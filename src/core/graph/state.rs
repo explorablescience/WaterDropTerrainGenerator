@@ -10,13 +10,13 @@ pub enum NodeState {
     Dirty,
     Processing,
     Cached((CacheKey, Vec<TileHandle>)),
-    Baked((CacheKey, PathBuf)),
+    Baked((CacheKey, PathBuf))
 }
 
 /// Represents the evaluation state of a node graph, including cached outputs and processing status.
 #[derive(Default)]
 pub struct EvalCache {
-    states: HashMap<GraphNodeId, NodeState>,
+    states: HashMap<GraphNodeId, NodeState>
 }
 impl EvalCache {
     pub fn state(&self, id: GraphNodeId) -> &NodeState {
@@ -36,6 +36,6 @@ impl EvalCache {
 pub(super) fn cache_key_of(state: &NodeState) -> Option<CacheKey> {
     match state {
         NodeState::Cached((k, _)) | NodeState::Baked((k, _)) => Some(*k),
-        _ => None,
+        _ => None
     }
 }

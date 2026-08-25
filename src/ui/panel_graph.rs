@@ -1,6 +1,6 @@
 use egui_snarl::{
     InPin, NodeId, OutPin, Snarl,
-    ui::{PinInfo, SnarlPin, SnarlStyle, SnarlViewer, SnarlWidget},
+    ui::{BackgroundPattern, PinInfo, SnarlPin, SnarlStyle, SnarlViewer, SnarlWidget, WireStyle}
 };
 use wde::prelude::{ui::egui, *};
 
@@ -8,25 +8,26 @@ use crate::{
     TerrainGraphHolder,
     core::{graph::GraphNodeId, node::Node},
     nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin},
+    ui::theme
 };
 
 pub type GraphInstance = Snarl<GraphNode>;
 pub enum GraphNode {
     /// Represents a node in the graph that corresponds to a node in the underlying `NodeGraph`.
-    Main(GraphNodeId),
+    Main(GraphNodeId)
 }
 
 /// Identifies a node both in the `egui-snarl` UI graph and in the underlying `NodeGraph`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SelectedNode {
     pub snarl_id: NodeId,
-    pub graph_id: GraphNodeId,
+    pub graph_id: GraphNodeId
 }
 
 /// Represents the viewer for the graph editor, which manages the interaction between the UI and the underlying terrain graph.
 struct GraphViewer {
     selected: Option<SelectedNode>,
-    terrain_graph: TerrainGraphHolder,
+    terrain_graph: TerrainGraphHolder
 }
 impl SnarlViewer<GraphNode> for GraphViewer {
     fn title(&mut self, node: &GraphNode) -> String {
@@ -97,16 +98,16 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         _inputs: &[InPin],
         _outputs: &[OutPin],
         ui: &mut egui::Ui,
-        instance: &mut GraphInstance,
+        instance: &mut GraphInstance
     ) {
         let label = self.title(&instance[node]);
-        ui.label(label);
+        ui.label(egui::RichText::new(label).font(theme::heading_font(13.0)));
     }
     fn show_input(
         &mut self,
         pin: &InPin,
         ui: &mut egui::Ui,
-        instance: &mut GraphInstance,
+        instance: &mut GraphInstance
     ) -> impl SnarlPin + 'static {
         let GraphNode::Main(graph_id) = &instance[pin.id.node];
         let terrain_graph = self.terrain_graph.read();
@@ -116,13 +117,13 @@ impl SnarlViewer<GraphNode> for GraphViewer {
             .expect("selected node should exist in the graph");
         let socket = &node.inputs()[pin.id.input];
         ui.label(socket.name);
-        PinInfo::circle()
+        PinInfo::circle().with_fill(theme::port_color(socket.dtype))
     }
     fn show_output(
         &mut self,
         pin: &OutPin,
         ui: &mut egui::Ui,
-        instance: &mut GraphInstance,
+        instance: &mut GraphInstance
     ) -> impl SnarlPin + 'static {
         let GraphNode::Main(graph_id) = &instance[pin.id.node];
         let terrain_graph = self.terrain_graph.read();
@@ -132,7 +133,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
             .expect("selected node should exist in the graph");
         let socket = &node.outputs()[pin.id.output];
         ui.label(socket.name);
-        PinInfo::circle()
+        PinInfo::circle().with_fill(theme::port_color(socket.dtype))
     }
 
     fn has_graph_menu(&mut self, _pos: egui::Pos2, _snarl: &mut Snarl<GraphNode>) -> bool {
@@ -142,7 +143,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         &mut self,
         pos: egui::Pos2,
         ui: &mut egui::Ui,
-        snarl: &mut Snarl<GraphNode>,
+        snarl: &mut Snarl<GraphNode>
     ) {
         ui.label("Add Node");
 
@@ -174,7 +175,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         _inputs: &[InPin],
         _outputs: &[OutPin],
         ui: &mut egui::Ui,
-        snarl: &mut Snarl<GraphNode>,
+        snarl: &mut Snarl<GraphNode>
     ) {
         if ui.button("Remove Node").clicked() {
             let GraphNode::Main(graph_id) = &snarl[node];
@@ -204,13 +205,13 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         node: NodeId,
         _inputs: &[InPin],
         _outputs: &[OutPin],
-        _snarl: &Snarl<GraphNode>,
+        _snarl: &Snarl<GraphNode>
     ) -> egui::Frame {
         if self
             .selected
             .is_some_and(|selected| selected.snarl_id == node)
         {
-            default.stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(200, 40, 40)))
+            default.stroke(egui::Stroke::new(1.5, theme::palette::NODE_SELECTED))
         } else {
             default
         }
@@ -221,7 +222,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         node: NodeId,
         rect: egui::Rect,
         ui: &mut egui::Ui,
-        snarl: &mut Snarl<GraphNode>,
+        snarl: &mut Snarl<GraphNode>
     ) {
         let to_global = ui
             .ctx()
@@ -240,7 +241,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
             let GraphNode::Main(graph_id) = &snarl[node];
             self.selected = Some(SelectedNode {
                 snarl_id: node,
-                graph_id: *graph_id,
+                graph_id: *graph_id
             });
         }
     }
@@ -260,9 +261,48 @@ pub fn show_graph(
     id: egui::Id,
     ui: &mut egui::Ui,
     graph_instance: &mut GraphInstance,
-    terrain_graph: TerrainGraphHolder,
+    terrain_graph: TerrainGraphHolder
 ) -> Option<SelectedNode> {
-    let style = SnarlStyle::default();
+    let style = SnarlStyle {
+        node_frame: Some(
+            egui::Frame::NONE
+                .fill(theme::palette::BG_WINDOW)
+                .stroke(egui::Stroke::new(1.0, theme::palette::BORDER))
+                .corner_radius(egui::CornerRadius::same(8))
+                .inner_margin(egui::Margin::symmetric(10, 8))
+                .shadow(egui::Shadow {
+                    offset: [0, 3],
+                    blur: 10,
+                    spread: 0,
+                    color: egui::Color32::from_black_alpha(90)
+                })
+        ),
+        header_frame: Some(
+            egui::Frame::NONE
+                .fill(theme::palette::BG_WIDGET)
+                .corner_radius(egui::CornerRadius {
+                    nw: 7,
+                    ne: 7,
+                    sw: 0,
+                    se: 0
+                })
+                .inner_margin(egui::Margin::symmetric(10, 8))
+        ),
+        pin_size: Some(9.0),
+        pin_fill: Some(theme::palette::PORT_SCALAR),
+        pin_stroke: Some(egui::Stroke::new(1.5, theme::palette::BG_EXTREME)),
+        wire_width: Some(2.2),
+        wire_style: Some(WireStyle::Bezier5),
+        bg_frame: Some(egui::Frame::NONE.fill(theme::palette::BG_EXTREME)),
+        bg_pattern: Some(BackgroundPattern::grid(egui::vec2(24.0, 24.0), 0.0)),
+        bg_pattern_stroke: Some(egui::Stroke::new(1.0, theme::palette::BORDER)),
+        collapsible: Some(true),
+        // Pre-render node content at `max_scale` and only ever scale it *down* for the current
+        // zoom, instead of magnifying already-rasterized text — keeps labels sharp when zoomed in.
+        crisp_magnified_text: Some(true),
+        max_scale: Some(2.5),
+        ..SnarlStyle::default()
+    };
 
     // Initialize the viewer with the currently selected node, if any.
     let selected_node_id = egui::Id::new("panel-graph-selected-node");
@@ -270,7 +310,7 @@ pub fn show_graph(
         selected: ui
             .ctx()
             .data(|d| d.get_temp::<SelectedNode>(selected_node_id)),
-        terrain_graph,
+        terrain_graph
     };
 
     // Show the graph editor
@@ -284,7 +324,7 @@ pub fn show_graph(
         Some(node) => ui.ctx().data_mut(|d| d.insert_temp(selected_node_id, node)),
         None => ui
             .ctx()
-            .data_mut(|d| d.remove::<SelectedNode>(selected_node_id)),
+            .data_mut(|d| d.remove::<SelectedNode>(selected_node_id))
     }
     viewer.selected
 }

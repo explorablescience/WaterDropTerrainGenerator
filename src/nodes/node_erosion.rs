@@ -23,6 +23,7 @@ impl NodeErosion {
             vec![NParamDesc {
                 key: "strength",
                 label: "Strength",
+                category: "Simulation",
                 default: NParamValue::Float(0.5),
                 constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 })
             }]

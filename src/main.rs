@@ -1,7 +1,5 @@
 use bevy::prelude::*;
-use waterdrop_terrain_editor::{
-    TerrainGraphHolder, render, ui
-};
+use waterdrop_terrain_editor::{TerrainGraphHolder, render, ui};
 use wde::{CustomBevyPlugins, prelude::*};
 
 /// Custom WaterDropEngine plugins.

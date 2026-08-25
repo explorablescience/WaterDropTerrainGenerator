@@ -35,7 +35,7 @@ pub enum NodeError {
     /// The requested node was never evaluated, so it has no output (internal scheduling bug).
     NodeNotEvaluated(GraphNodeId),
     /// A node failed while processing its inputs, with a node-specific message.
-    ProcessingFailed(String),
+    ProcessingFailed(String)
 }
 
 impl std::fmt::Display for NodeError {
