@@ -21,4 +21,5 @@ impl Plugin for UIPlugin {
 fn install_theme(ctx: Res<UIContext>, mut ui_menu: ResMut<UIMenu>) {
     theme::install(&ctx.0);
     ui_menu.set_style(Some(theme::menu_style()));
+    ui_menu.set_title_color(Some(theme::palette::ACCENT));
 }

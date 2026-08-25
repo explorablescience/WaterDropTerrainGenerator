@@ -15,7 +15,7 @@ pub mod palette {
     // Backgrounds, darkest to lightest
     pub const BG_EXTREME: Color32 = Color32::from_rgb(16, 16, 16);
     pub const BG_PANEL: Color32 = Color32::from_rgb(25, 25, 25);
-    pub const BG_WINDOW: Color32 = ERROR;
+    pub const BG_WINDOW: Color32 = BG_CARD;
     pub const BG_CARD: Color32 = Color32::from_rgb(34, 34, 34);
     pub const BG_WIDGET: Color32 = BG_PANEL;
     pub const BG_WIDGET_HOVERED: Color32 = Color32::from_rgb(50, 50, 50);
@@ -24,37 +24,38 @@ pub mod palette {
 
     // Borders / separators
     pub const BORDER: Color32 = BG_WIDGET_HOVERED;
-    pub const BORDER_STRONG: Color32 = ERROR;
+    pub const BORDER_STRONG: Color32 = Color32::from_rgb(72, 72, 72);
 
     // Text
     pub const TEXT: Color32 = Color32::from_rgb(240, 240, 240);
     pub const TEXT_MUTED: Color32 = Color32::from_rgb(210, 210, 210);
-    pub const TEXT_DISABLED: Color32 = ERROR;
+    pub const TEXT_DISABLED: Color32 = Color32::from_rgb(110, 110, 110);
 
-    // Accent - the editor's one interactive color
-    pub const ACCENT: Color32 = ERROR;
-    pub const ACCENT_HOVERED: Color32 = ERROR;
-    pub const ACCENT_ACTIVE: Color32 = ERROR;
-    pub const ACCENT_MUTED: Color32 = ERROR;
+    // Accent - the editor's one interactive color. A light, airy blue used sparingly: the
+    // active-tab outline, selected node, hyperlinks, and the "WDE" header mark.
+    pub const ACCENT: Color32 = Color32::from_rgb(128, 186, 255);
+    pub const ACCENT_HOVERED: Color32 = Color32::from_rgb(168, 210, 255);
+    pub const ACCENT_ACTIVE: Color32 = Color32::from_rgb(92, 152, 232);
+    pub const ACCENT_MUTED: Color32 = Color32::from_rgb(70, 95, 135);
 
     // Secondary accent - For parameters that have been edited away from their default value, or toggles in their "on"
-    pub const MODIFIED: Color32 = ERROR;
-    pub const MODIFIED_HOVERED: Color32 = ERROR;
+    pub const MODIFIED: Color32 = Color32::from_rgb(224, 168, 82);
+    pub const MODIFIED_HOVERED: Color32 = Color32::from_rgb(240, 190, 110);
 
-    // Neutral highlight used for the currently selected node in the graph editor.
-    pub const NODE_SELECTED: Color32 = ERROR;
+    // Semantic
+    pub const HIGHLIGHT_ERROR: Color32 = Color32::from_rgb(255, 100, 100);
+    pub const HIGHLIGHT_WARNING: Color32 = Color32::from_rgb(255, 200, 0);
 
-    // Semantic.
-    pub const HIGHLIGHT_ERROR: Color32 = ERROR;
-    pub const HIGHLIGHT_WARNING: Color32 = ERROR;
-    pub const HIGHLIGHT_SUCCESS: Color32 = ERROR;
+    // Neutral highlight used for the currently selected node in the graph editor. Reuses the
+    // accent so focus/selection reads as one consistent color across the editor.
+    pub const NODE_SELECTED: Color32 = ACCENT;
 
-    // Node-graph socket colors
-    pub const PORT_HEIGHT: Color32 = ERROR;
-    pub const PORT_MASK: Color32 = ERROR;
-    pub const PORT_COLOR: Color32 = ERROR;
-    pub const PORT_VECTOR: Color32 = ERROR;
-    pub const PORT_SCALAR: Color32 = ERROR;
+    // Node-graph socket colors - one distinct hue per port data type.
+    pub const PORT_HEIGHT: Color32 = Color32::from_rgb(196, 154, 108);
+    pub const PORT_MASK: Color32 = Color32::from_rgb(140, 150, 165);
+    pub const PORT_COLOR: Color32 = Color32::from_rgb(216, 118, 150);
+    pub const PORT_VECTOR: Color32 = Color32::from_rgb(118, 194, 128);
+    pub const PORT_SCALAR: Color32 = Color32::from_rgb(94, 190, 196);
 }
 
 /// Layout constants for the editor's per-panel chrome.
@@ -81,6 +82,8 @@ pub mod fonts {
     pub const FONT_SIZE_BUTTON: f32 = 13.0;
     pub const FONT_SIZE_HEADING: f32 = 15.0;
     pub const FONT_SIZE_MONOSPACE: f32 = 13.0;
+    /// Graph-editor node title, sized clearly above body text so nodes read at a glance.
+    pub const FONT_SIZE_NODE_TITLE: f32 = 17.0;
 }
 
 /// The color used for a node-graph pin/wire of the given data type.
@@ -245,13 +248,13 @@ fn style() -> egui::Style {
     visuals.selection.stroke = Stroke::new(1.0, TEXT);
 
     visuals.override_text_color = None;
-    visuals.weak_text_color = Some(ERROR);
-    visuals.hyperlink_color = ERROR;
-    visuals.faint_bg_color = ERROR;
+    visuals.weak_text_color = Some(TEXT_DISABLED);
+    visuals.hyperlink_color = ACCENT;
+    visuals.faint_bg_color = BG_CARD;
     visuals.code_bg_color = BG_EXTREME;
-    visuals.warn_fg_color = ERROR;
-    visuals.error_fg_color = ERROR;
-    visuals.panel_fill = ERROR;
+    visuals.warn_fg_color = HIGHLIGHT_WARNING;
+    visuals.error_fg_color = HIGHLIGHT_ERROR;
+    visuals.panel_fill = BG_PANEL;
     visuals.window_corner_radius = CornerRadius::same(3);
     visuals.menu_corner_radius = CornerRadius::same(3);
     visuals.resize_corner_size = 10.0;
@@ -262,10 +265,10 @@ fn style() -> egui::Style {
     // Set the default visuals for all widgets, which will be overridden by specific widget types below.
     let widgets = &mut visuals.widgets;
     let default_widget = egui::style::WidgetVisuals {
-        bg_fill: ERROR,
-        weak_bg_fill: ERROR,
-        bg_stroke: Stroke::new(1.0, ERROR),
-        fg_stroke: Stroke::new(1.0, ERROR),
+        bg_fill: BG_WIDGET,
+        weak_bg_fill: BG_WIDGET,
+        bg_stroke: Stroke::new(1.0, BORDER),
+        fg_stroke: Stroke::new(1.0, TEXT),
         corner_radius: CornerRadius::same(3),
         expansion: 0.0
     };
@@ -275,18 +278,24 @@ fn style() -> egui::Style {
         ..default_widget
     };
     widgets.inactive = egui::style::WidgetVisuals {
+        // `bg_fill` is what egui::Slider paints its rail with (always in the "inactive" state,
+        // regardless of hover) - keep it a clear mid-grey so it reads against BG_EXTREME/BG_CARD
+        // instead of blending into them.
+        bg_fill: BG_WIDGET_HOVERED,
         weak_bg_fill: BG_WIDGET,
         fg_stroke: Stroke::new(1.0, TEXT_MUTED),
         bg_stroke: Stroke::NONE,
         ..default_widget
     };
     widgets.hovered = egui::style::WidgetVisuals {
+        bg_fill: BG_WIDGET_ACTIVE,
         weak_bg_fill: BG_WIDGET_HOVERED,
         fg_stroke: Stroke::new(1.0, TEXT),
         bg_stroke: Stroke::NONE,
         ..default_widget
     };
     widgets.active = egui::style::WidgetVisuals {
+        bg_fill: BG_WIDGET_ACTIVE,
         weak_bg_fill: BG_WIDGET_ACTIVE,
         fg_stroke: Stroke::new(1.0, TEXT),
         bg_stroke: Stroke::NONE,
@@ -314,15 +323,16 @@ pub fn menu_style() -> egui::Style {
     let visuals = &mut style.visuals;
     let widgets = &mut visuals.widgets;
     let default_widget = egui::style::WidgetVisuals {
-        bg_fill: ERROR,
-        weak_bg_fill: ERROR,
-        bg_stroke: Stroke::new(1.0, ERROR),
-        fg_stroke: Stroke::new(1.0, ERROR),
+        bg_fill: BG_WIDGET,
+        weak_bg_fill: BG_WIDGET,
+        bg_stroke: Stroke::new(1.0, BORDER),
+        fg_stroke: Stroke::new(1.0, TEXT),
         corner_radius: CornerRadius::same(3),
         expansion: 0.0
     };
     widgets.noninteractive = egui::style::WidgetVisuals {
         bg_stroke: Stroke::NONE, // Includes separators, borders of panels, etc.
+        fg_stroke: Stroke::new(1.0, TEXT_MUTED),
         ..default_widget
     };
     widgets.inactive = egui::style::WidgetVisuals {

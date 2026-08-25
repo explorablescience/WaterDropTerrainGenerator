@@ -101,7 +101,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         instance: &mut GraphInstance
     ) {
         let label = self.title(&instance[node]);
-        ui.label(egui::RichText::new(label).font(theme::heading_font(13.0)));
+        ui.label(egui::RichText::new(label).font(theme::heading_font(theme::fonts::FONT_SIZE_NODE_TITLE)));
     }
     fn show_input(
         &mut self,
@@ -286,7 +286,7 @@ pub fn show_graph(
                     sw: 0,
                     se: 0
                 })
-                .inner_margin(egui::Margin::symmetric(10, 8))
+                .inner_margin(egui::Margin::symmetric(10, 10))
         ),
         pin_size: Some(9.0),
         pin_fill: Some(theme::palette::PORT_SCALAR),
