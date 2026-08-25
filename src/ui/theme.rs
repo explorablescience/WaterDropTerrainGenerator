@@ -229,14 +229,14 @@ fn style() -> egui::Style {
     spacing.menu_margin = egui::Margin::same(8);
     spacing.button_padding = egui::vec2(18.0, 7.0);
     spacing.indent = 28.0;
-    // spacing.interact_size = egui::vec2(28.0, 22.0);
-    // spacing.slider_width = 76.0;
-    // spacing.combo_width = 90.0;
-    // spacing.icon_width = 15.0;
-    // spacing.icon_width_inner = 9.0;
-    // spacing.icon_spacing = 6.0;
-    // spacing.scroll.bar_width = 10.0;
-    // spacing.scroll.floating = true;
+    spacing.interact_size = egui::vec2(32.0, 26.0);
+    spacing.slider_width = 140.0;
+    spacing.combo_width = 120.0;
+    spacing.icon_width = 16.0;
+    spacing.icon_width_inner = 10.0;
+    spacing.icon_spacing = 8.0;
+    spacing.scroll.bar_width = 8.0;
+    spacing.scroll.floating = true;
 
     // Set the default visuals for all widgets, which will be overridden by specific widget types below.
     let visuals = &mut style.visuals;
