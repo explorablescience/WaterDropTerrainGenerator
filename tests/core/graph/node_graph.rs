@@ -431,3 +431,72 @@ fn a_global_nodes_output_is_resampled_to_fit_the_requesting_chunks_tile() {
     // averaging neighbours (erosion's own effect) should leave it unchanged.
     assert!(tiles[0].iter().all(|&v| (v - 1.0).abs() < 1e-5));
 }
+
+/// A `Global` node whose output encodes each texel's world-space x position, so a test can check
+/// that a *directly requested* chunk gets its own slice of the whole-terrain result rather than an
+/// identical crop repeated for every chunk.
+#[derive(Debug)]
+struct FakeGlobalWorldXMarker {
+    native_resolution: usize
+}
+impl Node for FakeGlobalWorldXMarker {
+    fn label(&self) -> &str {
+        "Fake Global World X Marker"
+    }
+    fn category(&self) -> NodeCategory {
+        NodeCategory::Generator
+    }
+    fn icon(&self) -> NodeIcon {
+        TEST_ICON
+    }
+    fn locality(&self) -> NodeLocality {
+        NodeLocality::Global { native_resolution: self.native_resolution }
+    }
+    fn outputs(&self) -> &[NodeSocket] {
+        &[NodeSocket { name: "Height", dtype: NodePortType::Height, required: true }]
+    }
+    fn process(
+        &self,
+        pool: &Arc<TilePool>,
+        _inputs: &[TileHandle],
+        ctx: &TileContext
+    ) -> Result<Vec<TileHandle>, NodeError> {
+        let mut output = pool.allocate();
+        let s = output.size();
+        for y in 0..s {
+            for x in 0..s {
+                output[y * s + x] = ctx.world_pos(x, y).0;
+            }
+        }
+        Ok(vec![Arc::new(output)])
+    }
+}
+
+#[test]
+fn a_directly_requested_global_node_returns_each_chunks_own_slice_not_the_same_crop_every_time() {
+    // Regression test: `process_chunk` on a `Global` node used to skip the integration step
+    // entirely and hand back the same whole-buffer result no matter which chunk asked for it -
+    // e.g. previewing a "Mountain" node directly would show the exact same crop on every chunk
+    // instead of that chunk's own piece of the shared shape.
+    let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
+    let source = graph.add_node(Box::new(FakeGlobalWorldXMarker { native_resolution: 8 }));
+
+    let chunk0 = match graph.process_chunk(source, ChunkCoord(0, 0)).unwrap() {
+        NodeGraphProcessResult::Processed(_, tiles) => tiles[0].clone(),
+        _ => panic!("expected the graph to finish processing")
+    };
+    let chunk1 = match graph.process_chunk(source, ChunkCoord(1, 0)).unwrap() {
+        NodeGraphProcessResult::Processed(_, tiles) => tiles[0].clone(),
+        _ => panic!("expected the graph to finish processing")
+    };
+
+    assert_ne!(
+        chunk0.to_vec(),
+        chunk1.to_vec(),
+        "each chunk should get its own slice of the global result, not an identical crop"
+    );
+    // Chunk 0 covers world x in [0, 4), chunk 1 covers world x in [4, 8) (world_scale = 1.0,
+    // tile_size = 4) - so every texel of chunk 1's slice should read a strictly larger world x
+    // than chunk 0's, matching where it actually sits in the terrain.
+    assert!(chunk1[0] > chunk0[chunk0.size() - 1]);
+}

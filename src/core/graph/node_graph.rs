@@ -233,13 +233,24 @@ impl NodeGraph {
     }
 
     /// Evaluates `node_id` for a specific `chunk` of this graph's [`ChunkGrid`]. If `node_id` is a
-    /// `Global` node, `chunk` is irrelevant - its output covers the whole terrain regardless of
-    /// which chunk asked for it.
+    /// `Global` node
     pub fn process_chunk(&mut self, node_id: GraphNodeId, chunk: ChunkCoord) -> Result<NodeGraphProcessResult, NodeError> {
         if let NodeLocality::Global { native_resolution } = self.topology.node(node_id)?.locality() {
-            let pool = TilePool::new(native_resolution);
-            let ctx = self.chunk_grid.whole_context(native_resolution);
-            return self.process_scoped(node_id, EvalScope::Global, &pool, &ctx);
+            let global_pool = TilePool::new(native_resolution);
+            let global_ctx = self.chunk_grid.whole_context(native_resolution);
+            let (generation, tiles) =
+                match self.process_scoped(node_id, EvalScope::Global, &global_pool, &global_ctx)? {
+                    NodeGraphProcessResult::Processed(generation, tiles) => (generation, tiles),
+                    processing @ NodeGraphProcessResult::Processing => return Ok(processing)
+                };
+
+            let chunk_pool = TilePool::new(self.chunk_grid.tile_size());
+            let chunk_ctx = self.chunk_grid.chunk_context(chunk, 0);
+            let cropped = tiles
+                .iter()
+                .map(|tile| resample(tile, &global_ctx, &chunk_pool, &chunk_ctx))
+                .collect();
+            return Ok(NodeGraphProcessResult::Processed(generation, cropped));
         }
 
         let internal_tile_size = self.required_internal_tile_size(node_id)?;
