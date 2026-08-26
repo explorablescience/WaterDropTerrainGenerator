@@ -1,13 +1,14 @@
 use bevy::prelude::*;
 use wde::prelude::*;
 
-use crate::ui::{editor::EditorPanelsPlugin, footer::FooterPlugin};
+use crate::ui::{editor::EditorPanelsPlugin, footer::FooterPlugin, panel_terrain_settings::draw_terrain_settings};
 
 mod editor;
 mod editor_behavior;
 mod footer;
 mod panel_graph;
 mod panel_properties;
+mod panel_terrain_settings;
 mod project_io;
 pub mod theme;
 pub mod widgets;
@@ -16,7 +17,8 @@ pub struct UIPlugin;
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((EditorPanelsPlugin, FooterPlugin))
-            .add_systems(Startup, install_theme);
+            .add_systems(Startup, install_theme)
+            .add_systems(Update, draw_terrain_settings.after(EditorMenuBarSet));
     }
 }
 

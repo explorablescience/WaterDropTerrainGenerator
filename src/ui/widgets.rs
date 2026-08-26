@@ -49,14 +49,80 @@ pub fn slider(
         _ => (f32::MIN, f32::MAX)
     };
     let is_int = matches!(desc.default, NParamValue::Int(_));
+    let width = ui.available_width();
+    let response = value_pill(ui, id, width, desc.label, color, value, min, max, is_int);
+
+    ui.add_space(2.0);
+
+    response
+}
+
+/// A row of two draggable numeric pills (X/Y) sharing one range/type, for a `Vector2`/`Vector2Int`
+/// node parameter. Sits below a small dim header carrying the parameter's own label, matching the
+/// category-header style used elsewhere in the properties panel.
+pub fn vector2(
+    ui: &mut egui::Ui,
+    desc: &NParamDesc,
+    color: egui::Color32,
+    value: &mut (f32, f32)
+) -> egui::Response {
+    let id = ui.make_persistent_id(desc.key);
+    let (min, max) = match &desc.constraints {
+        Some(NParamConstraints::Vector2Range { min, max }) => (*min, *max),
+        Some(NParamConstraints::Vector2IntRange { min, max }) => {
+            ((min.0 as f32, min.1 as f32), (max.0 as f32, max.1 as f32))
+        }
+        _ => ((f32::MIN, f32::MIN), (f32::MAX, f32::MAX))
+    };
+    let is_int = matches!(desc.default, NParamValue::Vector2Int(_, _));
+
+    ui.label(
+        egui::RichText::new(desc.label)
+            .font(theme::body_font(theme::fonts::FONT_SIZE_BODY))
+            .color(palette::TEXT_DISABLED)
+    );
+
+    let gap = 6.0;
+    let half_width = (ui.available_width() - gap) * 0.5;
+    let response = ui
+        .horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            let x_response =
+                value_pill(ui, id.with("x"), half_width, "X", color, &mut value.0, min.0, max.0, is_int);
+            let y_response =
+                value_pill(ui, id.with("y"), half_width, "Y", color, &mut value.1, min.1, max.1, is_int);
+            x_response | y_response
+        })
+        .inner;
+
+    ui.add_space(2.0);
+
+    response
+}
+
+/// Shared painting/interaction logic behind [`slider`] and [`vector2`]: a `width`-wide draggable
+/// pill showing `label` on the left and the current value on the right, with double-click-to-type
+/// editing. Each pill needs its own persistent `id` so co-located pills (e.g. a vector2's X/Y)
+/// don't fight over drag/edit state.
+#[allow(clippy::too_many_arguments)]
+fn value_pill(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    width: f32,
+    label: &str,
+    color: egui::Color32,
+    value: &mut f32,
+    min: f32,
+    max: f32,
+    is_int: bool
+) -> egui::Response {
     let decimals = if is_int { 0 } else { 2 };
-    let label = desc.label;
     let has_range = min.is_finite() && max.is_finite();
 
     let padding = 5.0;
-    let desired_size = egui::Vec2::new(ui.available_width(), 20.0);
+    let desired_size = egui::Vec2::new(width, 20.0);
     let (rect, mut response) = ui.allocate_exact_size(desired_size, egui::Sense::click_and_drag());
- 
+
     // Handle double-click to enter edit mode
     let mut editing = ui.data_mut(|d| d.get_temp::<String>(id));
     if response.double_clicked() {
@@ -160,8 +226,6 @@ pub fn slider(
         text_response.request_focus();
     }
 
-    ui.add_space(2.0);
- 
     response
 }
 

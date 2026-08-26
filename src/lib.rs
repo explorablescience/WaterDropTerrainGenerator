@@ -9,9 +9,11 @@ use std::time::Duration;
 use bevy::{platform::collections::HashMap, prelude::*};
 
 use crate::core::{
+    chunk_grid::ChunkCoord,
     graph::{GraphNodeId, NodeGraph, NodeGraphProcessResult},
     node_error::NodeError,
     node_message::{MessageLifetime, NodeMessage, TimedNodeMessage},
+    terrain_export::assemble_terrain,
     tile_allocator::TileHandle
 };
 
@@ -41,6 +43,8 @@ pub struct TerrainGraph {
     graph: NodeGraph,
     /// Mapping from a node's unique id to its latest resulting generation.
     generations: HashMap<GraphNodeId, u32>,
+    /// Like `generations`, but keyed per chunk for a chunked preview (see [`Self::process_chunk`]).
+    chunk_generations: HashMap<(GraphNodeId, ChunkCoord), u32>,
     /// The node whose output the preview last displayed, if any. Used to force a refresh when
     /// the selection changes even if the newly selected node's generation hasn't advanced.
     displayed_node: Option<GraphNodeId>,
@@ -55,6 +59,7 @@ impl Default for TerrainGraph {
         Self {
             graph: NodeGraph::new(128),
             generations: HashMap::new(),
+            chunk_generations: HashMap::new(),
             displayed_node: None,
             selected_node: None,
             action_messages: HashMap::new()
@@ -145,10 +150,72 @@ impl TerrainGraph {
         }
     }
 
+    /// Whether `node_id` differs from the node the preview last displayed. Reports `true` at most
+    /// once per selection change - calling it marks `node_id` as now displayed - so the caller can
+    /// use it to force every chunk of a newly selected node to redraw once, even one whose own
+    /// cached generation hasn't advanced (e.g. reselecting a node that was already computed before
+    /// the selection moved away from it).
+    pub fn note_selection(&mut self, node_id: GraphNodeId) -> bool {
+        let just_selected = self.displayed_node != Some(node_id);
+        self.displayed_node = Some(node_id);
+        just_selected
+    }
+
+    /// Like [`Self::process`], but for one chunk of a chunked preview: tracks generations per
+    /// `(node, chunk)` pair instead of per node, so every chunk gets its own "is this new"
+    /// bookkeeping. `force` bypasses that check - pass the result of [`Self::note_selection`].
+    ///
+    /// # Returns
+    /// Same contract as [`Self::process`], scoped to `chunk`.
+    pub fn process_chunk(
+        &mut self,
+        node_id: GraphNodeId,
+        chunk: ChunkCoord,
+        force: bool
+    ) -> Result<Option<(u32, Vec<TileHandle>)>, NodeError> {
+        let key = (node_id, chunk);
+        let generation = self.chunk_generations.get(&key).copied().unwrap_or(0);
+        match self.graph.process_chunk(node_id, chunk) {
+            Ok(NodeGraphProcessResult::Processed(new_generation, output_tiles)) => {
+                if !force && new_generation <= generation {
+                    // No new generation is available
+                    return Ok(None);
+                }
+
+                self.chunk_generations.insert(key, new_generation);
+                Ok(Some((new_generation, output_tiles)))
+            }
+            Ok(NodeGraphProcessResult::Processing) => {
+                // Graph is still processing
+                Ok(None)
+            }
+            Err(e) => Err(e)
+        }
+    }
+
     pub fn graph(&self) -> &NodeGraph {
         &self.graph
     }
     pub fn graph_mut(&mut self) -> &mut NodeGraph {
         &mut self.graph
+    }
+
+    /// Evaluates every chunk of the graph for `node_id` and stitches the results into one PNG
+    /// covering the whole terrain, saved to `path`. A one-shot export, unlike `process`'s
+    /// per-chunk preview: it isn't cached against the preview's "new generation" bookkeeping.
+    pub fn export_stitched_png(&mut self, node_id: GraphNodeId, path: &std::path::Path) -> Result<(), NodeError> {
+        let (data, width, height) = assemble_terrain(&mut self.graph, node_id)?;
+
+        let mut img = image::GrayImage::new(width as u32, height as u32);
+        for (pixel, &value) in img.pixels_mut().zip(data.iter()) {
+            pixel.0 = [(value.clamp(0.0, 1.0) * 255.0).round() as u8];
+        }
+
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir)
+                .map_err(|e| format!("Failed to create directory '{}': {}", dir.display(), e))?;
+        }
+        img.save(path)
+            .map_err(|e| format!("Failed to save '{}': {}", path.display(), e).into())
     }
 }

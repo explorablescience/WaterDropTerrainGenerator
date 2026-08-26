@@ -7,6 +7,7 @@ use crate::core::node_error::NodeError;
 use crate::core::node_parameters::{NParamDesc, NParamValue};
 use crate::core::node_registry::NodeDescriptor;
 use crate::core::tile_allocator::{TileHandle, TilePool};
+use crate::core::tile_context::TileContext;
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-load",
@@ -164,6 +165,7 @@ impl Node for NodeLoadHeightmap {
         &self,
         pool: &Arc<TilePool>,
         _inputs: &[TileHandle],
+        ctx: &TileContext,
     ) -> Result<Vec<TileHandle>, NodeError> {
         let Some(image) = &self.loaded else {
             return Err(NodeError::ProcessingFailed(
@@ -171,12 +173,13 @@ impl Node for NodeLoadHeightmap {
             ));
         };
 
+        // The loaded image is treated as covering the whole terrain, so each chunk samples its
+        // own footprint of it rather than every chunk redundantly showing the whole image.
         let mut output = pool.allocate();
         let s = output.size();
         for y in 0..s {
             for x in 0..s {
-                let u = (x as f32 + 0.5) / s as f32;
-                let v = (y as f32 + 0.5) / s as f32;
+                let (u, v) = ctx.normalize(ctx.world_pos(x, y));
                 output[y * s + x] = Self::sample(image, u, v);
             }
         }

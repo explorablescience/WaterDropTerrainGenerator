@@ -7,12 +7,14 @@ use std::time::{Duration, Instant};
 
 use crate::core::node_error::NodeError;
 use crate::core::{
+    chunk_grid::{ChunkCoord, ChunkGrid},
     graph::{
-        state::{CacheKey, EvalCache, NodeState, cache_key_of},
+        state::{CacheKey, EvalCache, EvalScope, NodeState, cache_key_of},
         topology::{GraphNodeId, Topology}
     },
-    node::Node,
-    tile_allocator::{TileHandle, TilePool}
+    node::{Node, NodeLocality},
+    tile_allocator::{TileHandle, TilePool},
+    tile_context::TileContext
 };
 
 pub enum NodeGraphProcessResult {
@@ -21,10 +23,11 @@ pub enum NodeGraphProcessResult {
 }
 
 pub struct NodeGraph {
+    /// The pool backing `Local` nodes' per-chunk outputs. `Global` nodes allocate from their own,
+    /// separately-sized pool instead (see `process_scoped`'s `NodeLocality::Global` branch), so
+    /// resizing this one doesn't disturb their cached results.
     pool: Arc<TilePool>,
-    /// Requested output tile size; the pool's actual tile size may be larger to
-    /// accommodate the padding required by the nodes feeding the last processed node.
-    tile_size: usize,
+    chunk_grid: ChunkGrid,
     topology: Topology,
     cache: EvalCache,
     generation: u32,
@@ -39,10 +42,11 @@ impl NodeGraph {
     /// purely a UI hold time - long enough to read, short enough to feel live.
     const PROCESSING_INDICATOR_HOLD: Duration = Duration::from_millis(400);
 
-    pub fn new(tile_size: usize) -> Self {
+    pub fn new(chunk_grid: impl Into<ChunkGrid>) -> Self {
+        let chunk_grid = chunk_grid.into();
         Self {
-            pool: TilePool::new(tile_size),
-            tile_size,
+            pool: TilePool::new(chunk_grid.tile_size()),
+            chunk_grid,
             topology: Topology::default(),
             cache: EvalCache::default(),
             generation: 0,
@@ -50,9 +54,28 @@ impl NodeGraph {
         }
     }
 
-    /// The tile pool currently backing this graph's node outputs.
+    /// The tile pool currently backing this graph's per-chunk node outputs.
     pub fn pool(&self) -> &Arc<TilePool> {
         &self.pool
+    }
+
+    /// The terrain-level chunk layout this graph evaluates against.
+    pub fn chunk_grid(&self) -> &ChunkGrid {
+        &self.chunk_grid
+    }
+
+    /// Replaces this graph's chunk grid, keeping every node and connection intact - only the
+    /// cached tiles and pool are invalidated, since they were sized and positioned for the old
+    /// grid and can't be reused under a different one.
+    pub fn set_chunk_grid(&mut self, chunk_grid: ChunkGrid) {
+        self.chunk_grid = chunk_grid;
+        self.pool = TilePool::new(chunk_grid.tile_size());
+        self.cache = EvalCache::default();
+    }
+
+    /// Requested output tile size (core, non-margin texels per chunk edge).
+    pub fn tile_size(&self) -> usize {
+        self.chunk_grid.tile_size()
     }
 
     /// Whether a node was recomputed recently enough that the UI should show "Processing"
@@ -63,9 +86,7 @@ impl NodeGraph {
     }
 
     pub fn add_node(&mut self, node: Box<dyn Node>) -> GraphNodeId {
-        let id = self.topology.add_node(node);
-        self.cache.set(id, NodeState::Dirty);
-        id
+        self.topology.add_node(node)
     }
 
     pub fn remove_node(&mut self, node_id: GraphNodeId) -> Result<(), NodeError> {
@@ -116,18 +137,14 @@ impl NodeGraph {
         self.topology.inputs(node_id)
     }
 
-    /// Requested output tile size
-    pub fn tile_size(&self) -> usize {
-        self.tile_size
-    }
-
     /// Guard marks the node (and its downstream) dirty when mutation is done.
     pub fn node_mut(&mut self, id: GraphNodeId) -> Result<NodeMutGuard<'_>, NodeError> {
         self.topology.node(id)?; // validate existence up front
         Ok(NodeMutGuard { graph: self, id })
     }
 
-    /// Marks a node dirty and propagates downstream, stopping at baked nodes.
+    /// Marks a node dirty (in every scope it's cached under) and propagates downstream, stopping
+    /// at baked nodes.
     fn mark_dirty(&mut self, id: GraphNodeId) {
         let mut stack = vec![id];
         let mut visited = HashSet::new();
@@ -135,18 +152,18 @@ impl NodeGraph {
             if !visited.insert(n) {
                 continue;
             }
-            if matches!(self.cache.state(n), NodeState::Baked(..)) {
+            if self.cache.is_baked(n) {
                 continue; // opaque to invalidation
             }
-            self.cache.set(n, NodeState::Dirty);
+            self.cache.mark_all_dirty(n);
             if let Ok(outputs) = self.topology.outputs(n) {
                 stack.extend(outputs.iter().copied());
             }
         }
     }
 
-    /// Downstream nodes still depending on `id`'s cached output.
-    fn refcount(&self, id: GraphNodeId) -> usize {
+    /// Downstream nodes, within `scope`, still depending on `id`'s cached output.
+    fn refcount(&self, id: GraphNodeId, scope: EvalScope) -> usize {
         let Ok(outputs) = self.topology.outputs(id) else {
             return 0;
         };
@@ -154,29 +171,37 @@ impl NodeGraph {
             .iter()
             .filter(|o| {
                 matches!(
-                    self.cache.state(**o),
+                    self.cache.state(**o, scope),
                     NodeState::Dirty | NodeState::Processing
                 )
             })
             .count()
     }
 
-    /// Drops a node's cached tiles once nothing dirty still needs them.
-    fn try_evict(&mut self, id: GraphNodeId) {
-        if self.refcount(id) > 0 {
+    /// Drops a node's cached tiles, within `scope`, once nothing dirty still needs them. Only
+    /// meaningful for `Chunk` scopes: a `Global` node's result is meant to be reused across every
+    /// chunk that integrates it, so it's left cached until explicitly invalidated (see
+    /// `mark_dirty`) rather than evicted the moment one consumer is done with it.
+    fn try_evict(&mut self, id: GraphNodeId, scope: EvalScope) {
+        if matches!(scope, EvalScope::Global) || self.refcount(id, scope) > 0 {
             return;
         }
-        if matches!(self.cache.state(id), NodeState::Cached(_)) {
-            self.cache.set(id, NodeState::Dirty); // tiles freed via TileHandle's own drop
+        if matches!(self.cache.state(id, scope), NodeState::Cached(_)) {
+            self.cache.set(id, scope, NodeState::Dirty); // tiles freed via TileHandle's own drop
         }
     }
 
-    /// Nodes feeding into `node_id`, transitively, including `node_id` itself.
+    /// Nodes feeding into `node_id`, transitively, including `node_id` itself. Stops at a `Global`
+    /// ancestor: its own kernel padding (if any) is handled entirely within its own whole-terrain
+    /// pass, so there's nothing further upstream of it to account for here.
     fn collect_ancestors(&self, node_id: GraphNodeId) -> Result<HashSet<GraphNodeId>, NodeError> {
         self.topology.node(node_id)?; // validate existence up front
         let mut seen = HashSet::from([node_id]);
         let mut stack = vec![node_id];
         while let Some(id) = stack.pop() {
+            if id != node_id && matches!(self.topology.node(id)?.locality(), NodeLocality::Global { .. }) {
+                continue;
+            }
             for (from_node, _) in self.topology.inputs(id)?.iter().flatten() {
                 if seen.insert(*from_node) {
                     stack.push(*from_node);
@@ -186,37 +211,66 @@ impl NodeGraph {
         Ok(seen)
     }
 
-    /// Tile size the pool needs so that every node feeding `node_id` has enough padding
+    /// Tile size the pool needs so that every `Local` node feeding `node_id` has enough padding
     /// around the requested `tile_size` output to sample its kernel without going out of bounds.
+    /// `Global` ancestors contribute no padding of their own: the crop/resample step that
+    /// integrates their output already produces exactly the size asked of it.
     fn required_internal_tile_size(&self, node_id: GraphNodeId) -> Result<usize, NodeError> {
         let padding: usize = self
             .collect_ancestors(node_id)?
             .iter()
-            .map(|&id| self.topology.node(id).map(|n| n.size().div_ceil(2)))
+            .map(|&id| {
+                let node = self.topology.node(id)?;
+                Ok::<usize, NodeError>(match node.locality() {
+                    NodeLocality::Global { .. } => 0,
+                    NodeLocality::Local => node.size().div_ceil(2)
+                })
+            })
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .sum();
-        Ok(self.tile_size + 2 * padding)
+        Ok(self.chunk_grid.tile_size() + 2 * padding)
     }
 
-    pub fn process(&mut self, node_id: GraphNodeId) -> Result<NodeGraphProcessResult, NodeError> {
+    /// Evaluates `node_id` for a specific `chunk` of this graph's [`ChunkGrid`]. If `node_id` is a
+    /// `Global` node, `chunk` is irrelevant - its output covers the whole terrain regardless of
+    /// which chunk asked for it.
+    pub fn process_chunk(&mut self, node_id: GraphNodeId, chunk: ChunkCoord) -> Result<NodeGraphProcessResult, NodeError> {
+        if let NodeLocality::Global { native_resolution } = self.topology.node(node_id)?.locality() {
+            let pool = TilePool::new(native_resolution);
+            let ctx = self.chunk_grid.whole_context(native_resolution);
+            return self.process_scoped(node_id, EvalScope::Global, &pool, &ctx);
+        }
+
         let internal_tile_size = self.required_internal_tile_size(node_id)?;
         if internal_tile_size != self.pool.tile_length() {
             // Cached tiles were allocated for the previous tile size; they can't be mixed
             // with tiles from the new pool, so start over.
             self.pool = TilePool::new(internal_tile_size);
-            self.cache = EvalCache::default();
+            self.cache.clear_chunk_states();
         }
-        self.process_node(node_id)
+        let margin = (internal_tile_size - self.chunk_grid.tile_size()) / 2;
+        let ctx = self.chunk_grid.chunk_context(chunk, margin);
+        let pool = self.pool.clone();
+        self.process_scoped(node_id, EvalScope::Chunk(chunk), &pool, &ctx)
     }
 
-    fn process_node(&mut self, node_id: GraphNodeId) -> Result<NodeGraphProcessResult, NodeError> {
-        match self.cache.state(node_id) {
+    /// Evaluates `node_id` for the sole chunk of a single-chunk grid - the entry point every call
+    /// site used before chunking existed, kept as the degenerate `1x1` case rather than removed.
+    pub fn process(&mut self, node_id: GraphNodeId) -> Result<NodeGraphProcessResult, NodeError> {
+        self.process_chunk(node_id, ChunkCoord(0, 0))
+    }
+
+    fn process_scoped(
+        &mut self,
+        node_id: GraphNodeId,
+        scope: EvalScope,
+        pool: &Arc<TilePool>,
+        ctx: &TileContext
+    ) -> Result<NodeGraphProcessResult, NodeError> {
+        match self.cache.state(node_id, scope) {
             NodeState::Cached((_, tiles)) => {
-                return Ok(NodeGraphProcessResult::Processed(
-                    self.generation,
-                    tiles.clone()
-                ));
+                return Ok(NodeGraphProcessResult::Processed(self.generation, tiles.clone()));
             }
             NodeState::Baked(_) => todo!("load baked tiles from disk"),
             // Re-entering a node that is still on the current call stack means the
@@ -225,26 +279,32 @@ impl NodeGraph {
             NodeState::Dirty => {}
         }
 
-        self.cache.set(node_id, NodeState::Processing);
+        self.cache.set(node_id, scope, NodeState::Processing);
 
         // Any failure past this point must not leave the node stuck in `Processing`
         // forever - that would make every future call see it as an unresolved cycle
         // instead of retrying, even after the user fixes the underlying issue (e.g. by
         // connecting a missing input).
-        let result = self.process_node_body(node_id);
+        let result = self.process_scoped_body(node_id, scope, pool, ctx);
         if result.is_err() {
-            self.cache.set(node_id, NodeState::Dirty);
+            self.cache.set(node_id, scope, NodeState::Dirty);
         }
         result
     }
 
-    fn process_node_body(
+    fn process_scoped_body(
         &mut self,
-        node_id: GraphNodeId
+        node_id: GraphNodeId,
+        scope: EvalScope,
+        pool: &Arc<TilePool>,
+        ctx: &TileContext
     ) -> Result<NodeGraphProcessResult, NodeError> {
         let inputs = self.topology.inputs(node_id)?.to_vec();
         let mut input_tiles = Vec::with_capacity(inputs.len());
         let mut input_keys = Vec::with_capacity(inputs.len());
+        // Tracks which (node, scope) each input tile actually came from, so it can be considered
+        // for eviction below once this node's own output has been produced from it.
+        let mut consumed = Vec::with_capacity(inputs.len());
 
         for (socket, input) in inputs.iter().enumerate() {
             let Some((from_node, from_socket)) = input else {
@@ -260,42 +320,105 @@ impl NodeGraph {
                     });
                 }
                 // Optional and unconnected: feed the node a neutral, zero-filled tile.
-                input_tiles.push(Arc::new(self.pool.allocate()));
+                input_tiles.push(Arc::new(pool.allocate()));
                 input_keys.push(None);
                 continue;
             };
-            match self.process_node(*from_node)? {
-                NodeGraphProcessResult::Processed(_, tiles) => {
-                    let tile = match tiles.get(*from_socket) {
-                        Some(tile) => tile.clone(),
-                        None => {
-                            return Err(NodeError::OutputNotAvailable {
-                                node: self.topology.node(*from_node)?.label().to_string()
-                            });
-                        }
-                    };
-                    input_tiles.push(tile);
-                }
+
+            // Crossing into a `Global` ancestor switches to its own whole-terrain pool/context
+            // (independent of `native_resolution`, however that compares to the current tile
+            // size) and its result is resampled into the shape this call expects. A `Local`
+            // ancestor is evaluated directly in the current scope/pool/context - chunk-by-chunk
+            // if `scope` is a `Chunk`, or as one more part of the whole-terrain pass if `scope`
+            // is `Global`.
+            let from_locality = self.topology.node(*from_node)?.locality();
+            let (child_scope, child_pool, child_ctx) = match from_locality {
+                NodeLocality::Global { native_resolution } => (
+                    EvalScope::Global,
+                    TilePool::new(native_resolution),
+                    self.chunk_grid.whole_context(native_resolution)
+                ),
+                NodeLocality::Local => (scope, pool.clone(), *ctx)
+            };
+
+            let tile = match self.process_scoped(*from_node, child_scope, &child_pool, &child_ctx)? {
+                NodeGraphProcessResult::Processed(_, tiles) => match tiles.get(*from_socket) {
+                    Some(tile) => tile.clone(),
+                    None => {
+                        return Err(NodeError::OutputNotAvailable {
+                            node: self.topology.node(*from_node)?.label().to_string()
+                        });
+                    }
+                },
                 NodeGraphProcessResult::Processing => return Ok(NodeGraphProcessResult::Processing)
-            }
-            input_keys.push(cache_key_of(self.cache.state(*from_node)));
+            };
+            let tile = if matches!(from_locality, NodeLocality::Global { .. }) {
+                resample(&tile, &child_ctx, pool, ctx)
+            } else {
+                tile
+            };
+            input_tiles.push(tile);
+            input_keys.push(cache_key_of(self.cache.state(*from_node, child_scope)));
+            consumed.push((*from_node, child_scope));
         }
 
         let node = self.topology.node(node_id)?;
         let key = compute_cache_key(node, node_id, &input_keys);
-        let output = node.process(&self.pool, &input_tiles)?;
+        let output = node.process(pool, &input_tiles, ctx)?;
         self.last_activity = Some(Instant::now());
 
         self.cache
-            .set(node_id, NodeState::Cached((key, output.clone())));
+            .set(node_id, scope, NodeState::Cached((key, output.clone())));
         self.generation += 1;
 
-        for input in inputs.into_iter().flatten() {
-            self.try_evict(input.0);
+        for (from_node, from_scope) in consumed {
+            if matches!(from_scope, EvalScope::Chunk(_)) {
+                self.try_evict(from_node, from_scope);
+            }
         }
 
         Ok(NodeGraphProcessResult::Processed(self.generation, output))
     }
+}
+
+/// Resamples `src` (covering `src_ctx`'s region at its own resolution) into a freshly allocated
+/// tile from `dst_pool`, covering `dst_ctx`'s region. This is the "integration" step that lets a
+/// `Local` node consume a `Global` node's whole-extent output as if it were an ordinary per-chunk
+/// input tile, and lets a `Global` node itself consume another `Global` node's output at a
+/// different native resolution. Uses bilinear filtering; positions outside `src`'s extent clamp to
+/// its edge.
+fn resample(src: &TileHandle, src_ctx: &TileContext, dst_pool: &Arc<TilePool>, dst_ctx: &TileContext) -> TileHandle {
+    let mut dst = dst_pool.allocate();
+    let dst_size = dst.size();
+    let src_size = src.size();
+    for y in 0..dst_size {
+        for x in 0..dst_size {
+            let (wx, wy) = dst_ctx.world_pos(x, y);
+            let sx = (wx - src_ctx.world_origin.0) / src_ctx.world_step.0;
+            let sy = (wy - src_ctx.world_origin.1) / src_ctx.world_step.1;
+            dst[y * dst_size + x] = bilinear_sample(src, src_size, sx, sy);
+        }
+    }
+    Arc::new(dst)
+}
+
+/// Bilinearly samples a `size x size` grid at texel coordinates `x, y`, clamping to the grid's
+/// edge when they fall outside `[0, size - 1]`.
+fn bilinear_sample(data: &[f32], size: usize, x: f32, y: f32) -> f32 {
+    let px = |x: usize, y: usize| data[y * size + x];
+
+    let fx = x.clamp(0.0, (size - 1) as f32);
+    let fy = y.clamp(0.0, (size - 1) as f32);
+    let x0 = fx as usize;
+    let y0 = fy as usize;
+    let x1 = (x0 + 1).min(size - 1);
+    let y1 = (y0 + 1).min(size - 1);
+    let tx = fx - x0 as f32;
+    let ty = fy - y0 as f32;
+
+    let top = px(x0, y0) * (1.0 - tx) + px(x1, y0) * tx;
+    let bottom = px(x0, y1) * (1.0 - tx) + px(x1, y1) * tx;
+    top * (1.0 - ty) + bottom * ty
 }
 
 fn compute_cache_key(

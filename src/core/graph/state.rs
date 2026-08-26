@@ -1,10 +1,18 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::core::{graph::topology::GraphNodeId, tile_allocator::TileHandle};
+use crate::core::{chunk_grid::ChunkCoord, graph::topology::GraphNodeId, tile_allocator::TileHandle};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CacheKey(pub u64); // hash(params, input keys, node_type, node_id)
+
+/// Where a cached node output is scoped: a specific chunk, or the single whole-terrain pass used
+/// to evaluate a `Global` node (and any `Local` node pulled into that pass as one of its inputs).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EvalScope {
+    Chunk(ChunkCoord),
+    Global
+}
 
 pub enum NodeState {
     Dirty,
@@ -13,22 +21,47 @@ pub enum NodeState {
     Baked((CacheKey, PathBuf))
 }
 
-/// Represents the evaluation state of a node graph, including cached outputs and processing status.
+/// Represents the evaluation state of a node graph, including cached outputs and processing
+/// status. A node's cached output differs per [`EvalScope`], since the same `Local` node produces
+/// a different tile for each chunk it's evaluated for.
 #[derive(Default)]
 pub struct EvalCache {
-    states: HashMap<GraphNodeId, NodeState>
+    states: HashMap<(GraphNodeId, EvalScope), NodeState>
 }
 impl EvalCache {
-    pub fn state(&self, id: GraphNodeId) -> &NodeState {
-        self.states.get(&id).unwrap_or(&NodeState::Dirty)
+    pub fn state(&self, id: GraphNodeId, scope: EvalScope) -> &NodeState {
+        self.states.get(&(id, scope)).unwrap_or(&NodeState::Dirty)
     }
 
-    pub fn set(&mut self, id: GraphNodeId, state: NodeState) {
-        self.states.insert(id, state);
+    pub fn set(&mut self, id: GraphNodeId, scope: EvalScope, state: NodeState) {
+        self.states.insert((id, scope), state);
     }
 
+    /// Drops every cached scope of `id` (every chunk's output, plus its global one if any).
     pub fn remove(&mut self, id: GraphNodeId) {
-        self.states.remove(&id);
+        self.states.retain(|(node_id, _), _| *node_id != id);
+    }
+
+    /// Whether `id` has a `Baked` entry in any scope - baked nodes are opaque to invalidation.
+    pub fn is_baked(&self, id: GraphNodeId) -> bool {
+        self.states
+            .iter()
+            .any(|((node_id, _), state)| *node_id == id && matches!(state, NodeState::Baked(_)))
+    }
+
+    /// Marks every cached scope of `id` dirty (used when its parameters or connections change,
+    /// since that invalidates its output for every chunk as well as its global pass).
+    pub fn mark_all_dirty(&mut self, id: GraphNodeId) {
+        for (_, state) in self.states.iter_mut().filter(|((node_id, _), _)| *node_id == id) {
+            *state = NodeState::Dirty;
+        }
+    }
+
+    /// Drops every `Chunk`-scoped entry, leaving `Global`-scoped entries (which live in their own,
+    /// independently-sized pools, unrelated to the chunk pool) untouched. Used when the chunk
+    /// pool is resized to accommodate a different padding requirement.
+    pub fn clear_chunk_states(&mut self) {
+        self.states.retain(|(_, scope), _| matches!(scope, EvalScope::Global));
     }
 }
 

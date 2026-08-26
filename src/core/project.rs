@@ -9,6 +9,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::core::{
+    chunk_grid::ChunkGrid,
     graph::{GraphNodeId, NodeGraph},
     node_parameters::NParamValue,
     node_registry
@@ -18,8 +19,35 @@ use crate::core::{
 #[derive(Serialize, Deserialize)]
 struct ProjectFile {
     version: u32,
+    /// Absent in `version: 1` files, saved before chunking existed - `load_project` falls back to
+    /// a single-chunk grid built from the caller-supplied tile size in that case.
+    #[serde(default)]
+    chunk_grid: Option<ChunkGridDto>,
     nodes: Vec<ProjectNode>,
     edges: Vec<ProjectEdge>
+}
+
+/// On-disk representation of a [`ChunkGrid`]: the terrain-level layout is a deliberate,
+/// persisted property of the project, not a runtime/session setting.
+#[derive(Serialize, Deserialize)]
+struct ChunkGridDto {
+    chunks_x: u32,
+    chunks_y: u32,
+    tile_size: usize,
+    world_scale: f32
+}
+impl ChunkGridDto {
+    fn from_grid(grid: &ChunkGrid) -> Self {
+        Self {
+            chunks_x: grid.chunks_x(),
+            chunks_y: grid.chunks_y(),
+            tile_size: grid.tile_size(),
+            world_scale: grid.world_scale()
+        }
+    }
+    fn into_grid(self) -> ChunkGrid {
+        ChunkGrid::new(self.chunks_x, self.chunks_y, self.tile_size, self.world_scale)
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -49,7 +77,9 @@ enum ParamValueDto {
     Float(f32),
     Bool(bool),
     String(String),
-    Enum(String)
+    Enum(String),
+    Vector2(f32, f32),
+    Vector2Int(i32, i32)
 }
 impl ParamValueDto {
     fn from_value(value: &NParamValue) -> Option<Self> {
@@ -59,6 +89,8 @@ impl ParamValueDto {
             NParamValue::Bool(v) => Some(Self::Bool(*v)),
             NParamValue::String(v) => Some(Self::String(v.clone())),
             NParamValue::Enum(v) => Some(Self::Enum(v.clone())),
+            NParamValue::Vector2(x, y) => Some(Self::Vector2(*x, *y)),
+            NParamValue::Vector2Int(x, y) => Some(Self::Vector2Int(*x, *y)),
             NParamValue::Action { .. } => None
         }
     }
@@ -68,7 +100,9 @@ impl ParamValueDto {
             Self::Float(v) => NParamValue::Float(v),
             Self::Bool(v) => NParamValue::Bool(v),
             Self::String(v) => NParamValue::String(v),
-            Self::Enum(v) => NParamValue::Enum(v)
+            Self::Enum(v) => NParamValue::Enum(v),
+            Self::Vector2(x, y) => NParamValue::Vector2(x, y),
+            Self::Vector2Int(x, y) => NParamValue::Vector2Int(x, y)
         }
     }
 }
@@ -129,7 +163,12 @@ pub fn save_project(
         }
     }
 
-    let file = ProjectFile { version: 1, nodes, edges };
+    let file = ProjectFile {
+        version: 2,
+        chunk_grid: Some(ChunkGridDto::from_grid(graph.chunk_grid())),
+        nodes,
+        edges
+    };
     let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
     std::fs::write(path, json).map_err(|e| e.to_string())
 }
@@ -139,7 +178,11 @@ pub fn load_project(path: &Path, tile_size: usize) -> Result<BuiltGraph, String>
     let json = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let file: ProjectFile = serde_json::from_str(&json).map_err(|e| e.to_string())?;
 
-    let mut graph = NodeGraph::new(tile_size);
+    let chunk_grid = file
+        .chunk_grid
+        .map(ChunkGridDto::into_grid)
+        .unwrap_or_else(|| ChunkGrid::single(tile_size));
+    let mut graph = NodeGraph::new(chunk_grid);
     let mut positions = HashMap::new();
     let mut id_map: HashMap<usize, GraphNodeId> = HashMap::new();
 

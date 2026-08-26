@@ -3,13 +3,18 @@ use wde::prelude::*;
 
 use crate::render::{CELL_SIZE, HEIGHT_SCALE};
 
-/// Builds a grid [`Mesh`] from a square, row-major heightmap, centered on the origin in the XZ plane.
-/// Per-vertex normals are estimated from the heightmap slope so the PBR shading (and shadows) read correctly.
+/// Builds a grid [`Mesh`] of `size x size` vertices, centered on the origin in the XZ plane, from a
+/// `(size + 2) x (size + 2)` row-major heightmap: a `size x size` core plus a 1-texel halo on every
+/// edge. Per-vertex normals are estimated from the heightmap slope, sampling into the halo so edge
+/// vertices' normals account for the neighboring chunk's actual slope instead of clamping at the
+/// tile's own boundary - which is what would otherwise produce a visible shading seam between
+/// adjacent chunks (see `render::padded_heightmap`, which fills the halo from neighboring chunks).
 pub fn heightmap_to_mesh(label: &str, heightmap: &[f32], size: usize) -> Mesh {
+    let padded = size + 2;
     let sample = |x: isize, z: isize| -> f32 {
-        let x = x.clamp(0, size as isize - 1) as usize;
-        let z = z.clamp(0, size as isize - 1) as usize;
-        heightmap[z * size + x]
+        let x = (x + 1).clamp(0, padded as isize - 1) as usize;
+        let z = (z + 1).clamp(0, padded as isize - 1) as usize;
+        heightmap[z * padded + x]
     };
 
     let offset = (size - 1) as f32 * 0.5;

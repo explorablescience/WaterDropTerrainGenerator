@@ -4,6 +4,7 @@ use waterdrop_terrain_generator::core::graph::{NodeGraph, NodeGraphProcessResult
 use waterdrop_terrain_generator::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
 use waterdrop_terrain_generator::core::node_error::NodeError;
 use waterdrop_terrain_generator::core::tile_allocator::{TileHandle, TilePool};
+use waterdrop_terrain_generator::core::tile_context::TileContext;
 use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
 
 const TEST_ICON: NodeIcon = NodeIcon { id: "test-icon", png_bytes: &[] };
@@ -25,7 +26,12 @@ impl Node for FakeHeightSource {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket { name: "Height", dtype: NodePortType::Height, required: true }]
     }
-    fn process(&self, pool: &Arc<TilePool>, _inputs: &[TileHandle]) -> Result<Vec<TileHandle>, NodeError> {
+    fn process(
+        &self,
+        pool: &Arc<TilePool>,
+        _inputs: &[TileHandle],
+        _ctx: &TileContext
+    ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![Arc::new(pool.allocate())])
     }
 }
@@ -69,7 +75,12 @@ impl Node for FakeOptionalSink {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket { name: "Height", dtype: NodePortType::Height, required: true }]
     }
-    fn process(&self, _pool: &Arc<TilePool>, inputs: &[TileHandle]) -> Result<Vec<TileHandle>, NodeError> {
+    fn process(
+        &self,
+        _pool: &Arc<TilePool>,
+        inputs: &[TileHandle],
+        _ctx: &TileContext
+    ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![inputs[0].clone()])
     }
 }

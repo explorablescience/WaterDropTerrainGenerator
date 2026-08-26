@@ -8,6 +8,7 @@ fn every_expected_node_type_is_registered() {
         "Flat Generator",
         "Perlin Generator",
         "Load Heightmap",
+        "Mountain",
         "Save Heightmap"
     ] {
         assert!(

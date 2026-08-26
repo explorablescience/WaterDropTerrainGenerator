@@ -7,7 +7,8 @@ use crate::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
 use crate::core::node_error::NodeError;
 use crate::core::node_parameters::{NParamDesc, NParamValue};
 use crate::core::node_registry::NodeDescriptor;
-use crate::core::tile_allocator::{TileHandle, TilePool};
+use crate::core::tile_allocator::{TileHandle, TilePool, crop_center};
+use crate::core::tile_context::TileContext;
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-save",
@@ -51,22 +52,6 @@ impl NodeSaveHeightmap {
         })
     }
 
-    /// Extracts the centered `target_size x target_size` interior out of the raw tile data,
-    /// matching the render preview's own cropping (see `render::crop_center`), so the saved file
-    /// covers exactly the requested output area and not the internal kernel padding.
-    fn crop_center(data: &[f32], full_size: usize, target_size: usize) -> Vec<f32> {
-        if full_size == target_size {
-            return data.to_vec();
-        }
-        let padding = (full_size - target_size) / 2;
-        let mut cropped = Vec::with_capacity(target_size * target_size);
-        for z in 0..target_size {
-            let row_start = (z + padding) * full_size + padding;
-            cropped.extend_from_slice(&data[row_start..row_start + target_size]);
-        }
-        cropped
-    }
-
     fn save_to_disk(&self, output: &[TileHandle], output_size: usize) -> Result<(), NodeError> {
         let Some(heightmap) = output.first() else {
             return Err("No heightmap available to save".into());
@@ -76,7 +61,7 @@ impl NodeSaveHeightmap {
         }
 
         let internal_size = heightmap.size();
-        let data = Self::crop_center(heightmap, internal_size, output_size);
+        let data = crop_center(heightmap, internal_size, output_size);
 
         let mut path = PathBuf::from(&self.file_path);
         path.set_extension("png");
@@ -136,6 +121,7 @@ impl Node for NodeSaveHeightmap {
         &self,
         _pool: &std::sync::Arc<TilePool>,
         inputs: &[TileHandle],
+        _ctx: &TileContext,
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(inputs.to_vec())
     }

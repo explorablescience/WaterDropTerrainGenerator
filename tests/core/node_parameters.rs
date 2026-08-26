@@ -31,6 +31,36 @@ fn float_range_rejects_values_outside_the_bounds() {
 }
 
 #[test]
+fn vector2_range_accepts_values_inside_the_bounds() {
+    let constraint = NParamConstraints::Vector2Range { min: (0.0, 0.0), max: (1.0, 1.0) };
+    assert!(constraint.validate(&NParamValue::Vector2(0.0, 0.0)).is_ok());
+    assert!(constraint.validate(&NParamValue::Vector2(1.0, 1.0)).is_ok());
+    assert!(constraint.validate(&NParamValue::Vector2(0.5, 0.25)).is_ok());
+}
+
+#[test]
+fn vector2_range_rejects_values_outside_the_bounds_on_either_axis() {
+    let constraint = NParamConstraints::Vector2Range { min: (0.0, 0.0), max: (1.0, 1.0) };
+    assert!(constraint.validate(&NParamValue::Vector2(-0.01, 0.5)).is_err());
+    assert!(constraint.validate(&NParamValue::Vector2(0.5, 1.01)).is_err());
+}
+
+#[test]
+fn vector2_int_range_accepts_values_inside_the_bounds() {
+    let constraint = NParamConstraints::Vector2IntRange { min: (0, 0), max: (10, 10) };
+    assert!(constraint.validate(&NParamValue::Vector2Int(0, 0)).is_ok());
+    assert!(constraint.validate(&NParamValue::Vector2Int(10, 10)).is_ok());
+    assert!(constraint.validate(&NParamValue::Vector2Int(5, 3)).is_ok());
+}
+
+#[test]
+fn vector2_int_range_rejects_values_outside_the_bounds_on_either_axis() {
+    let constraint = NParamConstraints::Vector2IntRange { min: (0, 0), max: (10, 10) };
+    assert!(constraint.validate(&NParamValue::Vector2Int(-1, 5)).is_err());
+    assert!(constraint.validate(&NParamValue::Vector2Int(5, 11)).is_err());
+}
+
+#[test]
 fn string_max_length_accepts_short_strings() {
     let constraint = NParamConstraints::StringMaxLength { max_length: 5 };
     assert!(constraint.validate(&NParamValue::String("abc".to_string())).is_ok());

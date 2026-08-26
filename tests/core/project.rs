@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use waterdrop_terrain_generator::core::chunk_grid::ChunkGrid;
 use waterdrop_terrain_generator::core::graph::NodeGraph;
 use waterdrop_terrain_generator::core::node_parameters::NParamValue;
 use waterdrop_terrain_generator::core::node_registry;
@@ -134,6 +135,38 @@ fn malformed_json_fails_to_load() {
 fn missing_file_fails_to_load() {
     let path = temp_project_path("does-not-exist");
     assert!(load_project(&path, 32).is_err());
+}
+
+#[test]
+fn legacy_v1_project_without_a_chunk_grid_loads_as_a_single_chunk() {
+    let path = temp_project_path("legacy-v1");
+    std::fs::write(
+        &path,
+        r#"{"version":1,"nodes":[],"edges":[]}"#
+    )
+    .expect("writing the test fixture should succeed");
+
+    let built = load_project(&path, 64).expect("a v1 project without a chunk_grid field should still load");
+    std::fs::remove_file(&path).ok();
+
+    let grid = built.graph.chunk_grid();
+    assert_eq!((grid.chunks_x(), grid.chunks_y()), (1, 1));
+    assert_eq!(grid.tile_size(), 64, "the caller-supplied tile size should back the fallback grid");
+}
+
+#[test]
+fn chunk_grid_round_trips_through_save_and_load() {
+    let path = temp_project_path("chunk-grid-round-trip");
+
+    let graph = NodeGraph::new(ChunkGrid::new(3, 2, 16, 0.5));
+    save_project(&path, &graph, &HashMap::new()).expect("saving should succeed");
+    let built = load_project(&path, 16).expect("loading should succeed");
+    std::fs::remove_file(&path).ok();
+
+    let grid = built.graph.chunk_grid();
+    assert_eq!((grid.chunks_x(), grid.chunks_y()), (3, 2));
+    assert_eq!(grid.tile_size(), 16);
+    assert_eq!(grid.world_scale(), 0.5);
 }
 
 /// Regression test for a bug where `NodeGeneratorFlat::label()` returned a different string than

@@ -1,5 +1,13 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use waterdrop_terrain_generator::core::chunk_grid::{ChunkCoord, ChunkGrid};
 use waterdrop_terrain_generator::core::graph::{NodeGraph, NodeGraphProcessResult};
+use waterdrop_terrain_generator::core::node::{Node, NodeCategory, NodeIcon, NodeLocality, NodePortType, NodeSocket};
+use waterdrop_terrain_generator::core::node_error::NodeError;
 use waterdrop_terrain_generator::core::node_parameters::NParamValue;
+use waterdrop_terrain_generator::core::tile_allocator::{TileHandle, TilePool};
+use waterdrop_terrain_generator::core::tile_context::TileContext;
 use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
 
 #[test]
@@ -226,4 +234,200 @@ fn is_processing_is_true_immediately_after_a_node_is_computed() {
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
     graph.process(id).expect("processing should succeed");
     assert!(graph.is_processing());
+}
+
+const TEST_ICON: NodeIcon = NodeIcon { id: "test-icon", png_bytes: &[] };
+
+/// A node whose `process` counts how many times it actually runs (as opposed to being served
+/// from cache), so a test can prove a `Global` node isn't recomputed once per chunk. Its output is
+/// a constant field, so a test can also check that cropping/resampling it into a chunk-sized tile
+/// doesn't corrupt the data.
+#[derive(Debug)]
+struct FakeGlobalSource {
+    calls: Arc<AtomicUsize>,
+    native_resolution: usize
+}
+impl Node for FakeGlobalSource {
+    fn label(&self) -> &str {
+        "Fake Global Source"
+    }
+    fn category(&self) -> NodeCategory {
+        NodeCategory::Generator
+    }
+    fn icon(&self) -> NodeIcon {
+        TEST_ICON
+    }
+    fn locality(&self) -> NodeLocality {
+        NodeLocality::Global { native_resolution: self.native_resolution }
+    }
+    fn outputs(&self) -> &[NodeSocket] {
+        &[NodeSocket { name: "Height", dtype: NodePortType::Height, required: true }]
+    }
+    fn process(
+        &self,
+        pool: &Arc<TilePool>,
+        _inputs: &[TileHandle],
+        _ctx: &TileContext
+    ) -> Result<Vec<TileHandle>, NodeError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let mut output = pool.allocate();
+        output.iter_mut().for_each(|v| *v = 1.0);
+        Ok(vec![Arc::new(output)])
+    }
+}
+
+/// A node whose `process` counts how many times it actually runs, used to distinguish "served
+/// from cache" from "recomputed" - the generation counter `NodeGraph::process*` reports is a
+/// coarse graph-wide "something changed" signal, not a per-node/per-chunk recompute stamp, so it
+/// can't be used to tell the two apart on its own.
+#[derive(Debug)]
+struct FakeCountingSource {
+    calls: Arc<AtomicUsize>
+}
+impl Node for FakeCountingSource {
+    fn label(&self) -> &str {
+        "Fake Counting Source"
+    }
+    fn category(&self) -> NodeCategory {
+        NodeCategory::Generator
+    }
+    fn icon(&self) -> NodeIcon {
+        TEST_ICON
+    }
+    fn outputs(&self) -> &[NodeSocket] {
+        &[NodeSocket { name: "Height", dtype: NodePortType::Height, required: true }]
+    }
+    fn process(
+        &self,
+        pool: &Arc<TilePool>,
+        _inputs: &[TileHandle],
+        _ctx: &TileContext
+    ) -> Result<Vec<TileHandle>, NodeError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(vec![Arc::new(pool.allocate())])
+    }
+}
+
+#[test]
+fn requesting_the_same_chunk_twice_hits_the_per_chunk_cache() {
+    let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let id = graph.add_node(Box::new(FakeCountingSource { calls: calls.clone() }));
+
+    graph.process_chunk(id, ChunkCoord(0, 0)).unwrap();
+    graph.process_chunk(id, ChunkCoord(0, 0)).unwrap();
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "the second request for the same chunk should be served from cache");
+}
+
+#[test]
+fn different_chunks_of_the_same_node_are_computed_and_cached_independently() {
+    let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let id = graph.add_node(Box::new(FakeCountingSource { calls: calls.clone() }));
+
+    graph.process_chunk(id, ChunkCoord(0, 0)).unwrap();
+    graph.process_chunk(id, ChunkCoord(1, 0)).unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 2, "each distinct chunk should be computed once");
+
+    // Re-requesting chunk 0 should still be cached, independent of chunk 1 having since run.
+    graph.process_chunk(id, ChunkCoord(0, 0)).unwrap();
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        2,
+        "chunk 0's own cache should be unaffected by chunk 1 being computed"
+    );
+}
+
+#[test]
+fn perlin_generator_samples_a_shared_world_coordinate_frame_across_chunks() {
+    // world_scale = 1.0, so chunk 1 begins exactly where chunk 0's 4 world units end.
+    let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
+    let perlin = graph.add_node(Box::new(NodeGeneratorPerlin::default()));
+
+    let chunk1 = match graph.process_chunk(perlin, ChunkCoord(1, 0)).unwrap() {
+        NodeGraphProcessResult::Processed(_, tiles) => tiles[0].clone(),
+        _ => panic!("expected the graph to finish processing")
+    };
+
+    // Default params: frequency = amplitude = 1.0, 4 octaves - reimplements the node's own
+    // value-noise formula (see `node_generator_perlin.rs`) against an explicit world position,
+    // rather than a tile-local `[0, 1]` one.
+    const NOISE_PERIOD: i32 = 1024;
+    fn hash(ix: i32, iy: i32) -> f32 {
+        let px = ix.rem_euclid(NOISE_PERIOD) as u32;
+        let py = iy.rem_euclid(NOISE_PERIOD) as u32;
+        let mut h = px.wrapping_mul(374761393) ^ py.wrapping_mul(668265263);
+        h = (h ^ (h >> 13)).wrapping_mul(1274126177);
+        h ^= h >> 16;
+        (h as f32 / u32::MAX as f32) * 2.0 - 1.0
+    }
+    fn value_noise(x: f32, y: f32) -> f32 {
+        let x0 = x.floor();
+        let y0 = y.floor();
+        let (ix0, iy0) = (x0 as i32, y0 as i32);
+        let (fx, fy) = (x - x0, y - y0);
+        let (sx, sy) = (fx * fx * (3.0 - 2.0 * fx), fy * fy * (3.0 - 2.0 * fy));
+        let n00 = hash(ix0, iy0);
+        let n10 = hash(ix0 + 1, iy0);
+        let n01 = hash(ix0, iy0 + 1);
+        let n11 = hash(ix0 + 1, iy0 + 1);
+        let nx0 = n00 + sx * (n10 - n00);
+        let nx1 = n01 + sx * (n11 - n01);
+        nx0 + sy * (nx1 - nx0)
+    }
+    let expected_at = |wx: f32, wy: f32| -> f32 {
+        let (mut frequency, mut amplitude, mut value) = (1.0f32, 1.0f32, 0.0f32);
+        for _ in 0..4 {
+            value += value_noise(wx * frequency, wy * frequency) * amplitude;
+            frequency *= 2.0;
+            amplitude *= 0.5;
+        }
+        value
+    };
+
+    // Chunk 1's texel (0, 0) sits at world position (4, 0) - one step past chunk 0's world span.
+    let s = chunk1.size();
+    assert_eq!(s, 4, "no downstream kernel node means no margin padding");
+    assert!(
+        (chunk1[0] - expected_at(4.0, 0.0)).abs() < 1e-5,
+        "chunk 1's first texel should sample world position (4, 0), continuing the same noise \
+         field chunk 0 started, not restart at a tile-local (0, 0)"
+    );
+}
+
+#[test]
+fn a_global_node_is_evaluated_once_regardless_of_how_many_chunks_request_it() {
+    let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let source = graph.add_node(Box::new(FakeGlobalSource { calls: calls.clone(), native_resolution: 6 }));
+    let erosion = graph.add_node(Box::new(NodeErosion::default()));
+    graph.connect(source, 0, erosion, 0).unwrap();
+
+    graph.process_chunk(erosion, ChunkCoord(0, 0)).unwrap();
+    graph.process_chunk(erosion, ChunkCoord(1, 0)).unwrap();
+    // Re-requesting a chunk already computed should also not touch the global node again.
+    graph.process_chunk(erosion, ChunkCoord(0, 0)).unwrap();
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "the global node's whole-terrain pass should be memoized across every chunk");
+}
+
+#[test]
+fn a_global_nodes_output_is_resampled_to_fit_the_requesting_chunks_tile() {
+    let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
+    let calls = Arc::new(AtomicUsize::new(0));
+    // A native resolution that doesn't line up with the chunk tile size, to exercise resampling
+    // rather than a lucky same-size copy.
+    let source = graph.add_node(Box::new(FakeGlobalSource { calls, native_resolution: 6 }));
+    let erosion = graph.add_node(Box::new(NodeErosion::default()));
+    graph.connect(source, 0, erosion, 0).unwrap();
+
+    let tiles = match graph.process_chunk(erosion, ChunkCoord(0, 0)).unwrap() {
+        NodeGraphProcessResult::Processed(_, tiles) => tiles,
+        _ => panic!("expected the graph to finish processing")
+    };
+
+    // The source is a constant field, so however it was cropped/resampled into erosion's input,
+    // averaging neighbours (erosion's own effect) should leave it unchanged.
+    assert!(tiles[0].iter().all(|&v| (v - 1.0).abs() < 1e-5));
 }

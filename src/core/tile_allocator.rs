@@ -98,3 +98,19 @@ impl TilePool {
             * std::mem::size_of::<f32>()
     }
 }
+
+/// Extracts the centered `target_size x target_size` interior out of a `full_size x full_size`
+/// tile - i.e. crops off the kernel-padding margin around a node's requested output, whether
+/// that's a single tile's own padding or one chunk's margin ring in a chunk grid.
+pub fn crop_center(data: &[f32], full_size: usize, target_size: usize) -> Vec<f32> {
+    if full_size == target_size {
+        return data.to_vec();
+    }
+    let padding = (full_size - target_size) / 2;
+    let mut cropped = Vec::with_capacity(target_size * target_size);
+    for z in 0..target_size {
+        let row_start = (z + padding) * full_size + padding;
+        cropped.extend_from_slice(&data[row_start..row_start + target_size]);
+    }
+    cropped
+}

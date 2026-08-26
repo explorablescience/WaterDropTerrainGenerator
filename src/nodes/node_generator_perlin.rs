@@ -5,13 +5,51 @@ use crate::core::node_error::NodeError;
 use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
 use crate::core::node_registry::NodeDescriptor;
 use crate::core::tile_allocator::{TileHandle, TilePool};
+use crate::core::tile_context::TileContext;
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-perlin",
     png_bytes: include_bytes!("../../assets/icons/node_perlin.png")
 };
 
-/// A node that generates a perlin noise terrain tile.
+/// Period (in lattice units) the hashed noise lattice wraps around after. Keeps the noise a
+/// well-defined periodic function of world position - the lattice (and so the noise) repeats on a
+/// fixed, predictable period - rather than one that just happens not to visibly repeat within
+/// whatever extent is currently being viewed.
+const NOISE_PERIOD: i32 = 1024;
+
+/// Cheap integer hash of a lattice point, wrapped to [`NOISE_PERIOD`], mapped to `[-1, 1]`.
+fn hash(ix: i32, iy: i32) -> f32 {
+    let px = ix.rem_euclid(NOISE_PERIOD) as u32;
+    let py = iy.rem_euclid(NOISE_PERIOD) as u32;
+    let mut h = px.wrapping_mul(374761393) ^ py.wrapping_mul(668265263);
+    h = (h ^ (h >> 13)).wrapping_mul(1274126177);
+    h ^= h >> 16;
+    (h as f32 / u32::MAX as f32) * 2.0 - 1.0
+}
+
+/// A very basic value-noise primitive: hashes the four lattice points around `(x, y)` to a
+/// pseudo-random value each, then smoothly (smoothstep) interpolates between them. This is value
+/// noise, not true gradient-based Perlin noise, but it's periodic (see [`NOISE_PERIOD`]) and cheap
+/// - plenty for a first terrain primitive.
+fn value_noise(x: f32, y: f32) -> f32 {
+    let x0 = x.floor();
+    let y0 = y.floor();
+    let (ix0, iy0) = (x0 as i32, y0 as i32);
+    let (fx, fy) = (x - x0, y - y0);
+    let (sx, sy) = (fx * fx * (3.0 - 2.0 * fx), fy * fy * (3.0 - 2.0 * fy));
+
+    let n00 = hash(ix0, iy0);
+    let n10 = hash(ix0 + 1, iy0);
+    let n01 = hash(ix0, iy0 + 1);
+    let n11 = hash(ix0 + 1, iy0 + 1);
+
+    let nx0 = n00 + sx * (n10 - n00);
+    let nx1 = n01 + sx * (n11 - n01);
+    nx0 + sy * (nx1 - nx0)
+}
+
+/// A node that generates a noise terrain tile.
 #[derive(Debug)]
 pub struct NodeGeneratorPerlin {
     pub frequency: f32,
@@ -63,18 +101,19 @@ impl NodeGeneratorPerlin {
         })
     }
 
-    fn process_tile(&self, pool: &Arc<TilePool>) -> TileHandle {
+    /// Samples noise at each texel's world-space position (rather than a `[0, 1]` range local to
+    /// the tile), so adjacent chunks of this node line up seamlessly at their shared border.
+    fn process_tile(&self, pool: &Arc<TilePool>, ctx: &TileContext) -> TileHandle {
         let mut output = pool.allocate();
         let s = output.size();
         for y in 0..s {
             for x in 0..s {
+                let (nx, ny) = ctx.world_pos(x, y);
                 let mut noise_value = 0.0;
                 let mut frequency = self.frequency;
                 let mut amplitude = self.amplitude;
                 for _ in 0..self.octaves {
-                    let nx = x as f32 / s as f32;
-                    let ny = y as f32 / s as f32;
-                    noise_value += self.perlin_noise(nx * frequency, ny * frequency) * amplitude;
+                    noise_value += value_noise(nx * frequency, ny * frequency) * amplitude;
                     frequency *= 2.0;
                     amplitude *= 0.5;
                 }
@@ -82,13 +121,6 @@ impl NodeGeneratorPerlin {
             }
         }
         Arc::new(output)
-    }
-
-    fn perlin_noise(&self, x: f32, y: f32) -> f32 {
-        // For now, simple sin
-        (x * 2.0 * std::f32::consts::PI).sin()
-            * (y * 2.0 * std::f32::consts::PI).sin()
-            * self.amplitude
     }
 }
 impl Node for NodeGeneratorPerlin {
@@ -135,9 +167,10 @@ impl Node for NodeGeneratorPerlin {
     fn process(
         &self,
         pool: &Arc<TilePool>,
-        _inputs: &[TileHandle]
+        _inputs: &[TileHandle],
+        ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
-        Ok(vec![self.process_tile(pool)])
+        Ok(vec![self.process_tile(pool, ctx)])
     }
 }
 

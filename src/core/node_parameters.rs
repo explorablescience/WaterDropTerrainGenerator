@@ -8,6 +8,10 @@ pub enum NParamValue {
     Bool(bool),
     String(String),
     Enum(String),
+    /// A 2D float vector (e.g. a normalized position), edited as a pair of X/Y sliders.
+    Vector2(f32, f32),
+    /// A 2D integer vector (e.g. a texel offset), edited as a pair of X/Y sliders.
+    Vector2Int(i32, i32),
     /// A stateless trigger, rendered as a button in the properties panel.
     Action {
         // Whether to show a success message in the UI after the action is performed.
@@ -23,6 +27,14 @@ impl Hash for NParamValue {
             NParamValue::Bool(v) => v.hash(state),
             NParamValue::String(v) => v.hash(state),
             NParamValue::Enum(v) => v.hash(state),
+            NParamValue::Vector2(x, y) => {
+                x.to_bits().hash(state);
+                y.to_bits().hash(state);
+            }
+            NParamValue::Vector2Int(x, y) => {
+                x.hash(state);
+                y.hash(state);
+            }
             NParamValue::Action { show_success_message } => show_success_message.hash(state)
         }
     }
@@ -56,6 +68,12 @@ pub enum NParamConstraints {
     StringMaxLength { max_length: usize },
     /// The value must be one of the specified options.
     EnumOneOf { options: Vec<&'static str> },
+    /// The value must be a 2D float vector with each component within the specified range
+    /// (inclusive), independently per axis.
+    Vector2Range { min: (f32, f32), max: (f32, f32) },
+    /// The value must be a 2D integer vector with each component within the specified range
+    /// (inclusive), independently per axis.
+    Vector2IntRange { min: (i32, i32), max: (i32, i32) },
     /// Custom validation function. The function should return `Ok(())` if the value is valid, or an `Err(String)` with an error message if invalid.
     Custom(NParamValidator)
 }
@@ -94,6 +112,26 @@ impl NParamConstraints {
                     Err(format!(
                         "Value '{}' is not one of the allowed options: {:?}",
                         s, options
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            (NParamConstraints::Vector2Range { min, max }, NParamValue::Vector2(x, y)) => {
+                if *x < min.0 || *x > max.0 || *y < min.1 || *y > max.1 {
+                    Err(format!(
+                        "Value ({}, {}) is out of range [{:?}, {:?}]",
+                        x, y, min, max
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            (NParamConstraints::Vector2IntRange { min, max }, NParamValue::Vector2Int(x, y)) => {
+                if *x < min.0 || *x > max.0 || *y < min.1 || *y > max.1 {
+                    Err(format!(
+                        "Value ({}, {}) is out of range [{:?}, {:?}]",
+                        x, y, min, max
                     ))
                 } else {
                     Ok(())

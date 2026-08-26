@@ -6,7 +6,8 @@ use std::sync::Arc;
 use crate::core::node_error::NodeError;
 use crate::core::{
     node_parameters::{NParamDesc, NParamValue},
-    tile_allocator::{TileHandle, TilePool}
+    tile_allocator::{TileHandle, TilePool},
+    tile_context::TileContext
 };
 
 /// Represents a node in the node graph, which can have input and output sockets for connecting to other nodes.
@@ -24,6 +25,12 @@ pub trait Node: Debug + Send + Sync {
     /// Size of the kernel (in texels) that this node operates on. Used to determine padding.
     fn size(&self) -> usize {
         0
+    }
+
+    /// Where this node's computation is scoped. Defaults to `Local`, which covers most nodes
+    /// (generators, filters, combinators): they can be computed independently for each chunk.
+    fn locality(&self) -> NodeLocality {
+        NodeLocality::Local
     }
     fn inputs(&self) -> &[NodeSocket] {
         &[]
@@ -57,10 +64,13 @@ pub trait Node: Debug + Send + Sync {
     }
 
     /// Processes the node's inputs and produces its outputs, allocating any new tiles from `pool`.
+    /// `ctx` describes where in the terrain this call is computing - only position-aware nodes
+    /// need to use it.
     fn process(
         &self,
         _pool: &Arc<TilePool>,
-        _inputs: &[TileHandle]
+        _inputs: &[TileHandle],
+        _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![])
     }
@@ -92,6 +102,20 @@ pub enum NodePortType {
     Color,  // RGBA texture
     Vector, // Vector field (f32x3 per texel)
     Scalar  // Scalar value (f32) - Used for parameters, not textures
+}
+
+/// Where a node's computation is scoped, mirroring Gaea 2's distinction between tiled ("local")
+/// and whole-build ("global") nodes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeLocality {
+    /// Computed independently for each chunk, given just that chunk's (padded) tile and a
+    /// world-space coordinate frame to sample consistently across chunk borders.
+    Local,
+    /// Needs to see the whole terrain at once and can't be split into independent chunks (e.g. a
+    /// mountain range spanning many chunks). Evaluated exactly once, at its own working
+    /// resolution `native_resolution` - independent of the chunk grid. Downstream `Local` nodes
+    /// that consume its output get a cropped, resampled region of it per chunk.
+    Global { native_resolution: usize }
 }
 
 /// High-level grouping of nodes, used to color-code and organize nodes in the graph editor.

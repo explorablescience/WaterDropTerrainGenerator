@@ -207,6 +207,8 @@ fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph
                                 NParamValue::Float(_)
                                     | NParamValue::Int(_)
                                     | NParamValue::String(_)
+                                    | NParamValue::Vector2(_, _)
+                                    | NParamValue::Vector2Int(_, _)
                                     | NParamValue::Action { .. }
                             )
                         };
@@ -280,6 +282,32 @@ fn show_param_row(
             let mut v_float = v as f32;
             let changed = widgets::slider(ui, desc, color, &mut v_float).changed();
             changed.then_some(NParamValue::Int(v_float.round() as i32))
+        }
+        NParamValue::Vector2(x, y) => {
+            let terrain_graph_read = terrain_graph.read();
+            let node = terrain_graph_read.graph().node(graph_id).unwrap();
+            let desc = node
+                .desc_params()
+                .iter()
+                .find(|d| d.key == spec.key)
+                .unwrap();
+            let color = theme::category_color(node.category());
+            let mut v = (x, y);
+            let changed = widgets::vector2(ui, desc, color, &mut v).changed();
+            changed.then_some(NParamValue::Vector2(v.0, v.1))
+        }
+        NParamValue::Vector2Int(x, y) => {
+            let terrain_graph_read = terrain_graph.read();
+            let node = terrain_graph_read.graph().node(graph_id).unwrap();
+            let desc = node
+                .desc_params()
+                .iter()
+                .find(|d| d.key == spec.key)
+                .unwrap();
+            let color = theme::category_color(node.category());
+            let mut v = (x as f32, y as f32);
+            let changed = widgets::vector2(ui, desc, color, &mut v).changed();
+            changed.then_some(NParamValue::Vector2Int(v.0.round() as i32, v.1.round() as i32))
         }
         NParamValue::Bool(mut v) => {
             let color = {

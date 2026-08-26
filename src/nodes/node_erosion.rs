@@ -5,6 +5,7 @@ use crate::core::node_error::NodeError;
 use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
 use crate::core::node_registry::NodeDescriptor;
 use crate::core::tile_allocator::{TileHandle, TilePool};
+use crate::core::tile_context::TileContext;
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-erosion",
@@ -109,7 +110,8 @@ impl Node for NodeErosion {
     fn process(
         &self,
         pool: &Arc<TilePool>,
-        inputs: &[TileHandle]
+        inputs: &[TileHandle],
+        _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![self.process_tile(pool, &inputs[0])])
     }

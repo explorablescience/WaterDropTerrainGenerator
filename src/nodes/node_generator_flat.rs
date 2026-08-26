@@ -4,6 +4,7 @@ use crate::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
 use crate::core::node_error::NodeError;
 use crate::core::node_registry::NodeDescriptor;
 use crate::core::tile_allocator::{TileHandle, TilePool};
+use crate::core::tile_context::TileContext;
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-flat",
@@ -36,7 +37,8 @@ impl Node for NodeGeneratorFlat {
     fn process(
         &self,
         pool: &Arc<TilePool>,
-        _inputs: &[TileHandle]
+        _inputs: &[TileHandle],
+        _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![Arc::new(pool.allocate())])
     }
