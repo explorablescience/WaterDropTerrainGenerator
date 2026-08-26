@@ -5,6 +5,11 @@ use crate::core::node_error::NodeError;
 use crate::core::node_registry::NodeDescriptor;
 use crate::core::tile_allocator::{TileHandle, TilePool};
 
+const ICON: NodeIcon = NodeIcon {
+    id: "node-flat",
+    png_bytes: include_bytes!("../../assets/icons/node_flat.png")
+};
+
 /// A node that generates a flat terrain tile.
 #[derive(Debug, Default)]
 pub struct NodeGeneratorFlat;
@@ -17,7 +22,7 @@ impl Node for NodeGeneratorFlat {
         NodeCategory::Generator
     }
     fn icon(&self) -> NodeIcon {
-        NodeIcon::Plane
+        ICON
     }
 
     fn outputs(&self) -> &[NodeSocket] {
@@ -40,7 +45,7 @@ inventory::submit! {
     NodeDescriptor {
         label: "Flat Generator",
         category: NodeCategory::Generator,
-        icon: NodeIcon::Plane,
+        icon: ICON,
         factory: || Box::new(NodeGeneratorFlat)
     }
 }

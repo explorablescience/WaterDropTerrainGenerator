@@ -18,9 +18,11 @@ impl Plugin for UIPlugin {
     }
 }
 
-/// Applies the editor's fonts and style to the shared egui context.
+/// Applies the editor's fonts and style to the shared egui context, and installs the image
+/// loaders needed to decode node icons from PNG bytes.
 fn install_theme(ctx: Res<UIContext>, mut ui_menu: ResMut<UIMenu>) {
     theme::install(&ctx.0);
+    egui_extras::install_image_loaders(&ctx.0);
     ui_menu.set_style(Some(theme::menu_style()));
     ui_menu.set_title_color(Some(theme::palette::ACCENT));
 }

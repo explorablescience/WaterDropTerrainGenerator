@@ -6,6 +6,11 @@ use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
 use crate::core::node_registry::NodeDescriptor;
 use crate::core::tile_allocator::{TileHandle, TilePool};
 
+const ICON: NodeIcon = NodeIcon {
+    id: "node-erosion",
+    png_bytes: include_bytes!("../../assets/icons/node_erosion.png")
+};
+
 /// A minimal thermal-erosion node
 #[derive(Debug)]
 pub struct NodeErosion {
@@ -63,7 +68,7 @@ impl Node for NodeErosion {
         NodeCategory::Simulation
     }
     fn icon(&self) -> NodeIcon {
-        NodeIcon::Droplet
+        ICON
     }
 
     fn size(&self) -> usize {
@@ -112,7 +117,7 @@ inventory::submit! {
     NodeDescriptor {
         label: "Erosion",
         category: NodeCategory::Simulation,
-        icon: NodeIcon::Droplet,
+        icon: ICON,
         factory: || Box::new(NodeErosion::default())
     }
 }

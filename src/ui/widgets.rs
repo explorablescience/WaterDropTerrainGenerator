@@ -392,72 +392,12 @@ fn enum_dropdown(
     .inner
 }
 
-/// Paints a small flat-design icon representing `icon` inside `rect`, tinted with `color` so it
-/// always matches its node's category color.
-pub fn paint_node_icon(
-    painter: &egui::Painter,
-    rect: egui::Rect,
-    icon: NodeIcon,
-    color: egui::Color32
-) {
-    let stroke = egui::Stroke::new(1.4, color);
-    match icon {
-        NodeIcon::Plane => {
-            // A flat plateau sitting on a baseline - flat terrain.
-            let top = rect.top() + rect.height() * 0.34;
-            let base = rect.bottom() - rect.height() * 0.22;
-            let left_in = rect.left() + rect.width() * 0.24;
-            let right_in = rect.right() - rect.width() * 0.24;
-            let points = vec![
-                egui::pos2(rect.left(), base),
-                egui::pos2(left_in, top),
-                egui::pos2(right_in, top),
-                egui::pos2(rect.right(), base),
-            ];
-            painter.add(egui::Shape::convex_polygon(
-                points,
-                color.gamma_multiply(0.35),
-                stroke
-            ));
-        }
-        NodeIcon::Wave => {
-            // A single sine-like wave - noise.
-            let points: Vec<egui::Pos2> = (0..=16)
-                .map(|i| {
-                    let t = i as f32 / 16.0;
-                    let x = egui::lerp(rect.left()..=rect.right(), t);
-                    let y =
-                        rect.center().y - (t * std::f32::consts::TAU).sin() * rect.height() * 0.3;
-                    egui::pos2(x, y)
-                })
-                .collect();
-            painter.add(egui::Shape::line(points, stroke));
-        }
-        NodeIcon::Droplet => {
-            // A rounded body under a pointed tip - water / erosion. The tip sits directly above
-            // the circle's center, so the arc must leave its gap at the top (angle -FRAC_PI_2)
-            // rather than to the side, otherwise the two straight edges cross the arc instead of
-            // meeting it cleanly.
-            let tip = egui::pos2(rect.center().x, rect.top());
-            let radius = rect.width() * 0.32;
-            let center = egui::pos2(rect.center().x, rect.bottom() - radius);
-            let gap_half_angle = 0.5;
-            let start = -std::f32::consts::FRAC_PI_2 + gap_half_angle;
-            let sweep = std::f32::consts::TAU - 2.0 * gap_half_angle;
-            let segments = 20;
-            let mut points = vec![tip];
-            for i in 0..=segments {
-                let t = i as f32 / segments as f32;
-                let angle = start + t * sweep;
-                points.push(center + radius * egui::vec2(angle.cos(), angle.sin()));
-            }
-            painter.add(egui::Shape::convex_polygon(
-                points,
-                color.gamma_multiply(0.35),
-                stroke
-            ));
-        }
-    }
+/// Paints a node's PNG logo inside `rect`, tinted with `color` so it always matches its node's
+/// category color. The source image is expected to be a white glyph on a transparent background.
+pub fn paint_node_icon(ui: &egui::Ui, rect: egui::Rect, icon: NodeIcon, color: egui::Color32) {
+    egui::Image::from_bytes(format!("bytes://{}.png", icon.id), icon.png_bytes)
+        .tint(color)
+        .paint_at(ui, rect);
 }
 
 /// Paints a chevron for a collapsible menu.

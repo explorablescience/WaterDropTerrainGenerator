@@ -45,7 +45,7 @@ pub fn draw_properties(
                                 egui::Vec2::splat(theme::fonts::FONT_SIZE_NODE_TITLE),
                                 egui::Sense::hover(),
                             );
-                            widgets::paint_node_icon(ui.painter(), rect, icon, color);
+                            widgets::paint_node_icon(ui, rect, icon, color);
                             ui.label(
                                 egui::RichText::new(label)
                                     .font(theme::heading_font(theme::fonts::FONT_SIZE_TITLE))

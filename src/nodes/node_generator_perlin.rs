@@ -6,6 +6,11 @@ use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
 use crate::core::node_registry::NodeDescriptor;
 use crate::core::tile_allocator::{TileHandle, TilePool};
 
+const ICON: NodeIcon = NodeIcon {
+    id: "node-perlin",
+    png_bytes: include_bytes!("../../assets/icons/node_perlin.png")
+};
+
 /// A node that generates a perlin noise terrain tile.
 #[derive(Debug)]
 pub struct NodeGeneratorPerlin {
@@ -95,7 +100,7 @@ impl Node for NodeGeneratorPerlin {
         NodeCategory::Generator
     }
     fn icon(&self) -> NodeIcon {
-        NodeIcon::Wave
+        ICON
     }
 
     fn outputs(&self) -> &[NodeSocket] {
@@ -139,7 +144,7 @@ inventory::submit! {
     NodeDescriptor {
         label: "Perlin Generator",
         category: NodeCategory::Generator,
-        icon: NodeIcon::Wave,
+        icon: ICON,
         factory: || Box::new(NodeGeneratorPerlin::default())
     }
 }

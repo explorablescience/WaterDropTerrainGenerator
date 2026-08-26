@@ -17,7 +17,8 @@ pub trait Node: Debug + Send + Sync {
     /// The category this node belongs to. Drives the color the graph editor uses for the node's
     /// outline, title, pins and icon.
     fn category(&self) -> NodeCategory;
-    /// The icon shown next to this node's title, hinting at what the node does.
+    /// The logo shown next to this node's title, hinting at what the node does: a stable id
+    /// (used as the egui image cache key) paired with the node's PNG icon bytes.
     fn icon(&self) -> NodeIcon;
 
     /// Size of the kernel (in texels) that this node operates on. Used to determine padding.
@@ -97,14 +98,12 @@ impl NodeCategory {
     }
 }
 
-/// Identifies the small glyph drawn next to a node's title in the graph editor. Kept independent
-/// from any rendering backend - the UI layer decides how each shape is actually drawn.
+/// Identifies the PNG logo drawn next to a node's title in the graph editor: a stable id used as
+/// the egui image cache key, paired with the embedded PNG bytes. The image is expected to be a
+/// white glyph on a transparent background, so the UI layer can tint it with the node's category
+/// color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NodeIcon {
-    /// A flat plateau - flat terrain generator.
-    Plane,
-    /// A sine-like wave - noise-based generator.
-    Wave,
-    /// A water droplet - erosion / hydraulic simulation.
-    Droplet
+pub struct NodeIcon {
+    pub id: &'static str,
+    pub png_bytes: &'static [u8]
 }

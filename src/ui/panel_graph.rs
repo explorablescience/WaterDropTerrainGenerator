@@ -117,7 +117,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
                     egui::Vec2::splat(theme::fonts::FONT_SIZE_NODE_TITLE),
                     egui::Sense::hover(),
                 );
-                widgets::paint_node_icon(ui.painter(), rect, icon, color);
+                widgets::paint_node_icon(ui, rect, icon, color);
             }
             ui.label(
                 egui::RichText::new(label)
@@ -207,7 +207,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
                                 egui::Vec2::splat(theme::fonts::FONT_SIZE_BODY),
                                 egui::Sense::hover(),
                             );
-                            widgets::paint_node_icon(ui.painter(), rect, descriptor.icon, color);
+                            widgets::paint_node_icon(ui, rect, descriptor.icon, color);
 
                             if ui.button(descriptor.label).clicked() {
                                 self.new_node(pos, snarl, (descriptor.factory)());

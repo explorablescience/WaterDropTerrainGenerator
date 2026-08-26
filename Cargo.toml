@@ -20,6 +20,16 @@ version = "0.9"
 version = "0.14"
 default-features = false
 
+[dependencies.egui_extras]
+version = "0.33"
+default-features = false
+features = ["image"]
+
+[dependencies.image]
+version = "0.25"
+default-features = false
+features = ["png"]
+
 [dependencies.inventory]
 version = "0.3"
 
