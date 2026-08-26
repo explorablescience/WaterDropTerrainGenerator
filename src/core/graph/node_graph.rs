@@ -83,6 +83,11 @@ impl NodeGraph {
         self.topology.node(id)
     }
 
+    /// Requested output tile size
+    pub fn tile_size(&self) -> usize {
+        self.tile_size
+    }
+
     /// Guard marks the node (and its downstream) dirty when mutation is done.
     pub fn node_mut(&mut self, id: GraphNodeId) -> Result<NodeMutGuard<'_>, NodeError> {
         self.topology.node(id)?; // validate existence up front

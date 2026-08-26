@@ -40,6 +40,20 @@ pub fn create_material(
     }));
 }
 
+/// Extracts the centered `target_size × target_size` interior out of the raw heightmap data
+fn crop_center(data: &[f32], full_size: usize, target_size: usize) -> Vec<f32> {
+    if full_size == target_size {
+        return data.to_vec();
+    }
+    let padding = (full_size - target_size) / 2;
+    let mut cropped = Vec::with_capacity(target_size * target_size);
+    for z in 0..target_size {
+        let row_start = (z + padding) * full_size + padding;
+        cropped.extend_from_slice(&data[row_start..row_start + target_size]);
+    }
+    cropped
+}
+
 pub fn update_terrain_preview(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -76,8 +90,9 @@ pub fn update_terrain_preview(
 
     // Get the output tiles from the terrain graph state
     let heightmap = &tiles[0]; // For now, just use the first tile for preview (should be heightmap)
-    let size = heightmap.size();
-    let data: Vec<f32> = heightmap.iter().copied().collect();
+    let internal_size = heightmap.size();
+    let size = terrain_graph.read().graph().tile_size();
+    let data = crop_center(heightmap, internal_size, size);
     let mesh = heightmap_to_mesh(&format!("terrain-preview-{}", generation), &data, size);
 
     // Reuse the existing mesh asset and entity if present, otherwise create a new one
