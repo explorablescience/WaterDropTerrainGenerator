@@ -93,7 +93,7 @@ impl NodeGeneratorPerlin {
 }
 impl Node for NodeGeneratorPerlin {
     fn label(&self) -> &str {
-        "Generator Perlin Noise"
+        "Perlin Generator"
     }
 
     fn category(&self) -> NodeCategory {

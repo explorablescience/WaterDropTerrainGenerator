@@ -133,6 +133,15 @@ impl Topology {
         Ok(())
     }
 
+    /// Every node id still present in the graph, in ascending order. Removed slots (kept around
+    /// so surviving ids stay stable) are skipped.
+    pub fn node_ids(&self) -> impl Iterator<Item = GraphNodeId> + '_ {
+        self.nodes
+            .iter()
+            .enumerate()
+            .filter_map(|(i, entry)| entry.as_ref().map(|_| GraphNodeId(i)))
+    }
+
     pub fn node(&self, id: GraphNodeId) -> Result<&(dyn Node + 'static), NodeError> {
         Ok(self.entry(id)?.instance.as_ref())
     }

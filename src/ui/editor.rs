@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use bevy::{
     input::mouse::{MouseButtonInput, MouseMotion, MouseWheel},
@@ -6,12 +7,20 @@ use bevy::{
     window::WindowResized
 };
 use egui_tiles::{Linear, LinearDir, TileId, Tiles, Tree};
+use rfd::FileDialog;
 use wde::prelude::{ui::egui, *};
 
 use crate::{
     TerrainGraphHolder,
-    ui::{editor_behavior, editor_behavior::EditorBehavior, panel_graph::GraphInstance}
+    ui::{
+        editor_behavior, editor_behavior::EditorBehavior, footer::EditorFooterSet,
+        panel_graph::GraphInstance, project_io
+    }
 };
+
+/// Extension (without the leading dot) used for saved terrain graph project files.
+const PROJECT_FILE_EXTENSION: &str = "wdtg";
+const PROJECT_FILE_FILTER_NAME: &str = "WaterDrop Terrain Graph";
 
 pub struct EditorPanelsPlugin;
 impl Plugin for EditorPanelsPlugin {
@@ -21,7 +30,10 @@ impl Plugin for EditorPanelsPlugin {
                 PreUpdate,
                 block_camera_input_outside_engine.after(ui::EguiInputSet)
             )
-            .add_systems(Update, draw_editor.after(EditorMenuBarSet));
+            .add_systems(
+                Update,
+                draw_editor.after(EditorMenuBarSet).after(EditorFooterSet)
+            );
     }
 }
 
@@ -108,12 +120,21 @@ fn draw_editor(
     mut generation_id: Local<u64>,
     mut engine_rect: ResMut<EngineViewportRect>,
     mut graph_instance: Local<Option<GraphInstance>>,
-    terrain_graph: Res<TerrainGraphHolder>
+    terrain_graph: Res<TerrainGraphHolder>,
+    mut ui_menu: ResMut<UIMenu>,
+    mut last_project_path: Local<Option<PathBuf>>
 ) {
     // Avoid weird resizing issues, so reset the graph generation on window resize
     if window_resized.read().count() > 0 {
         *generation_id += 1;
     }
+
+    handle_file_menu(
+        &mut ui_menu,
+        graph_instance.get_or_insert_default(),
+        &terrain_graph,
+        &mut last_project_path
+    );
 
     // Create the central panel with the editor layout
     let frame = egui::Frame::central_panel(&ctx.0.style())
@@ -141,4 +162,57 @@ fn draw_editor(
         .tiles
         .rect(layout.panel_to_id[&EditorPanels::Engine])
         .map(|rect| editor_behavior::panel_border_rect(rect, outer_rect));
+}
+
+/// Handles clicks on the "File/Save Project" and "File/Load Project" menu entries, prompting for
+/// a file via a native dialog and running the matching save/load logic in `project_io`.
+fn handle_file_menu(
+    ui_menu: &mut UIMenu,
+    graph_instance: &mut GraphInstance,
+    terrain_graph: &TerrainGraphHolder,
+    last_project_path: &mut Option<PathBuf>
+) {
+    if *ui_menu.clicked_mut("File/Save Project") {
+        *ui_menu.clicked_mut("File/Save Project") = false;
+
+        let mut dialog = FileDialog::new().add_filter(PROJECT_FILE_FILTER_NAME, &[PROJECT_FILE_EXTENSION]);
+        if let Some(path) = last_project_path.as_deref() {
+            if let Some(dir) = path.parent() {
+                dialog = dialog.set_directory(dir);
+            }
+            if let Some(name) = path.file_name() {
+                dialog = dialog.set_file_name(name.to_string_lossy());
+            }
+        }
+
+        if let Some(mut path) = dialog.save_file() {
+            path.set_extension(PROJECT_FILE_EXTENSION);
+            match project_io::save_project(&path, graph_instance, terrain_graph) {
+                Ok(()) => {
+                    info!("Saved terrain graph to '{}'", path.display());
+                    *last_project_path = Some(path);
+                }
+                Err(e) => error!("Failed to save terrain graph to '{}': {}", path.display(), e)
+            }
+        }
+    }
+
+    if *ui_menu.clicked_mut("File/Load Project") {
+        *ui_menu.clicked_mut("File/Load Project") = false;
+
+        let mut dialog = FileDialog::new().add_filter(PROJECT_FILE_FILTER_NAME, &[PROJECT_FILE_EXTENSION]);
+        if let Some(dir) = last_project_path.as_deref().and_then(|p| p.parent()) {
+            dialog = dialog.set_directory(dir);
+        }
+
+        if let Some(path) = dialog.pick_file() {
+            match project_io::load_project(&path, graph_instance, terrain_graph) {
+                Ok(()) => {
+                    info!("Loaded terrain graph from '{}'", path.display());
+                    *last_project_path = Some(path);
+                }
+                Err(e) => error!("Failed to load terrain graph from '{}': {}", path.display(), e)
+            }
+        }
+    }
 }

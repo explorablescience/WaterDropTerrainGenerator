@@ -3,6 +3,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::core::node_error::NodeError;
 use crate::core::{
@@ -26,18 +27,39 @@ pub struct NodeGraph {
     tile_size: usize,
     topology: Topology,
     cache: EvalCache,
-    generation: u32
+    generation: u32,
+    /// When a node was last actually recomputed (as opposed to served from cache), used to
+    /// drive a brief "Processing" indicator in the UI. `None` until the first computation.
+    last_activity: Option<Instant>
 }
 
 impl NodeGraph {
+    /// How long the "Processing" indicator stays lit after the most recent recomputation.
+    /// Evaluation itself is synchronous and finishes within the frame it starts, so this is
+    /// purely a UI hold time - long enough to read, short enough to feel live.
+    const PROCESSING_INDICATOR_HOLD: Duration = Duration::from_millis(400);
+
     pub fn new(tile_size: usize) -> Self {
         Self {
             pool: TilePool::new(tile_size),
             tile_size,
             topology: Topology::default(),
             cache: EvalCache::default(),
-            generation: 0
+            generation: 0,
+            last_activity: None
         }
+    }
+
+    /// The tile pool currently backing this graph's node outputs.
+    pub fn pool(&self) -> &Arc<TilePool> {
+        &self.pool
+    }
+
+    /// Whether a node was recomputed recently enough that the UI should show "Processing"
+    /// rather than "Idle".
+    pub fn is_processing(&self) -> bool {
+        self.last_activity
+            .is_some_and(|t| t.elapsed() < Self::PROCESSING_INDICATOR_HOLD)
     }
 
     pub fn add_node(&mut self, node: Box<dyn Node>) -> GraphNodeId {
@@ -81,6 +103,17 @@ impl NodeGraph {
 
     pub fn node(&self, id: GraphNodeId) -> Result<&dyn Node, NodeError> {
         self.topology.node(id)
+    }
+
+    /// Every node id still present in the graph, in ascending order.
+    pub fn node_ids(&self) -> impl Iterator<Item = GraphNodeId> + '_ {
+        self.topology.node_ids()
+    }
+
+    /// `node_id`'s inputs, indexed by input socket: `Some((from_node, from_socket))` for a wired
+    /// socket, `None` for an unconnected one.
+    pub fn inputs(&self, node_id: GraphNodeId) -> Result<&[Option<(GraphNodeId, usize)>], NodeError> {
+        self.topology.inputs(node_id)
     }
 
     /// Requested output tile size
@@ -249,6 +282,7 @@ impl NodeGraph {
         let node = self.topology.node(node_id)?;
         let key = compute_cache_key(node, node_id, &input_keys);
         let output = node.process(&self.pool, &input_tiles)?;
+        self.last_activity = Some(Instant::now());
 
         self.cache
             .set(node_id, NodeState::Cached((key, output.clone())));

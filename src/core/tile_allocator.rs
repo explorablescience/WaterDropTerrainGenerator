@@ -1,5 +1,6 @@
 //! A pool of tiles that can be allocated and deallocated.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// A tile of data produced by a node's output socket and consumed by downstream nodes.
@@ -51,7 +52,11 @@ impl Drop for TileBuffer {
 #[derive(Debug)]
 pub struct TilePool {
     free: Mutex<Vec<Vec<f32>>>,
-    tile_length: usize
+    tile_length: usize,
+    /// Number of distinct tile buffers ever created by this pool (free or in use). The pool
+    /// never shrinks a buffer's capacity back to the allocator, so this is also the pool's
+    /// current heap footprint in tiles.
+    allocated_tiles: AtomicUsize
 }
 impl TilePool {
     /// Creates a new tile pool with the given tile length.
@@ -63,19 +68,18 @@ impl TilePool {
     pub fn new(tile_length: usize) -> Arc<Self> {
         Arc::new(Self {
             free: Mutex::new(Vec::new()),
-            tile_length
+            tile_length,
+            allocated_tiles: AtomicUsize::new(0)
         })
     }
 
     /// Allocates a tile from the pool and returns a [`TileBuffer`] that holds the data of the tile.
     /// If the pool is empty, a new zero-filled tile is created.
     pub fn allocate(self: &Arc<Self>) -> TileBuffer {
-        let tile = self
-            .free
-            .lock()
-            .unwrap()
-            .pop()
-            .unwrap_or_else(|| vec![0.0; self.tile_length * self.tile_length]);
+        let tile = self.free.lock().unwrap().pop().unwrap_or_else(|| {
+            self.allocated_tiles.fetch_add(1, Ordering::Relaxed);
+            vec![0.0; self.tile_length * self.tile_length]
+        });
         TileBuffer {
             data: tile,
             pool: Arc::clone(self)
@@ -84,5 +88,13 @@ impl TilePool {
 
     pub fn tile_length(&self) -> usize {
         self.tile_length
+    }
+
+    /// Total bytes currently reserved on the heap for this pool's tiles (free or in use).
+    pub fn allocated_bytes(&self) -> usize {
+        self.allocated_tiles.load(Ordering::Relaxed)
+            * self.tile_length
+            * self.tile_length
+            * std::mem::size_of::<f32>()
     }
 }

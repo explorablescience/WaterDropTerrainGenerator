@@ -38,6 +38,13 @@ version = "0.15"
 default-features = false
 features = ["xdg-portal", "async-std"]
 
+[dependencies.serde]
+version = "1"
+features = ["derive"]
+
+[dependencies.serde_json]
+version = "1"
+
 [build-dependencies]
 anyhow = "1.0.104"
 fs_extra = "1.3.0"

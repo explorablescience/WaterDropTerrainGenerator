@@ -15,7 +15,7 @@ const ICON: NodeIcon = NodeIcon {
 pub struct NodeGeneratorFlat;
 impl Node for NodeGeneratorFlat {
     fn label(&self) -> &str {
-        "Generator Flat Terrain"
+        "Flat Generator"
     }
 
     fn category(&self) -> NodeCategory {
