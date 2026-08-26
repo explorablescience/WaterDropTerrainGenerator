@@ -2,9 +2,38 @@ use wde::prelude::ui::egui;
 use crate::{
     core::{
         node::NodeIcon,
+        node_message::NodeMessage,
         node_parameters::{NParamConstraints, NParamDesc, NParamValue}
     }, ui::theme::{self, palette::{self, BG_CARD}}
 };
+
+/// Draws a node's error/warning/info feedback as a small stack of banners, meant to sit between
+/// a node's title and its parameters: a desaturated tint of the message's severity color for the
+/// background, and the full color for the border and text. Each message gets its own rounded
+/// rectangle, with a small gap separating it from the one before it.
+pub fn node_messages(ui: &mut egui::Ui, messages: &[NodeMessage]) {
+    for message in messages {
+        ui.add_space(6.0);
+
+        let color = theme::severity_color(message.severity);
+        egui::Frame::new()
+            .fill(color.gamma_multiply(0.18))
+            .stroke(egui::Stroke::new(1.0, color))
+            .corner_radius(egui::CornerRadius::same(theme::layout::CHIP_ROUNDING))
+            .inner_margin(egui::Margin::symmetric(10, 6))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(&message.text)
+                            .font(theme::body_font(theme::fonts::FONT_SIZE_BODY))
+                            .color(color)
+                    )
+                    .wrap()
+                );
+            });
+    }
+}
 
 /// A draggable numeric value pill for a node parameter
 pub fn slider(

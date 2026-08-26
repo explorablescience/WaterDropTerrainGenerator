@@ -86,7 +86,7 @@ pub fn update_terrain_preview(
         Ok(None) => return, // No new output tiles available
         Err(e) => {
             match e {
-                InputNotConnected { node, socket } => {
+                InputNotConnected { node, socket, .. } => {
                     trace!(
                         "Cannot generate terrain preview: Input not connected for node '{}' at socket {}",
                         node, socket

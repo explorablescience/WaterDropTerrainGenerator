@@ -41,7 +41,7 @@ pub trait Node: Debug + Send + Sync {
         None
     }
     /// Sets the value of a parameter by its key. Returns an error if the parameter does not exist or if the value is invalid.
-    fn set_param(&mut self, _key: &str, _value: NParamValue) -> Result<(), String> {
+    fn set_param(&mut self, _key: &str, _value: NParamValue) -> Result<(), NodeError> {
         Err("Parameter not found".into())
     }
 
@@ -52,7 +52,7 @@ pub trait Node: Debug + Send + Sync {
         _key: &str,
         _output: &[TileHandle],
         _output_size: usize
-    ) -> Result<(), String> {
+    ) -> Result<(), NodeError> {
         Err("Action not supported".into())
     }
 

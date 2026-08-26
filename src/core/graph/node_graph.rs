@@ -214,11 +214,14 @@ impl NodeGraph {
         for (socket, input) in inputs.iter().enumerate() {
             let Some((from_node, from_socket)) = input else {
                 let node = self.topology.node(node_id)?;
-                let required = node.inputs().get(socket).is_none_or(|s| s.required);
-                if required {
+                let socket_desc = node.inputs().get(socket);
+                if socket_desc.is_none_or(|s| s.required) {
                     return Err(NodeError::InputNotConnected {
+                        node_id,
                         node: node.label().to_string(),
-                        socket
+                        socket: socket_desc
+                            .map(|s| s.name.to_string())
+                            .unwrap_or_else(|| socket.to_string())
                     });
                 }
                 // Optional and unconnected: feed the node a neutral, zero-filled tile.

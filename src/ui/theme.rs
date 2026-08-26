@@ -3,7 +3,7 @@
 use wde::prelude::ui::egui;
 
 use crate::{
-    core::node::NodeCategory,
+    core::{node::NodeCategory, node_message::NodeMessageSeverity},
     ui::theme::palette::BG_PANEL
 };
 use egui::{CornerRadius, FontFamily, FontId, Stroke, TextStyle};
@@ -44,9 +44,12 @@ pub mod palette {
     pub const ACCENT_ACTIVE: Color32 = Color32::from_rgb(92, 152, 232);
     pub const ACCENT_MUTED: Color32 = Color32::from_rgb(70, 95, 135);
 
-    // Semantic
-    pub const HIGHLIGHT_ERROR: Color32 = Color32::from_rgb(255, 100, 100);
-    pub const HIGHLIGHT_WARNING: Color32 = Color32::from_rgb(255, 200, 0);
+    // Semantic - kept in the same muted, mid-brightness register as the accent and category
+    // colors above rather than pure saturated red/yellow, so a node's error/warning/info banners
+    // read as part of the same palette instead of clashing with it.
+    pub const HIGHLIGHT_ERROR: Color32 = Color32::from_rgb(214, 112, 112);
+    pub const HIGHLIGHT_WARNING: Color32 = Color32::from_rgb(219, 179, 92);
+    pub const HIGHLIGHT_INFO: Color32 = Color32::from_rgb(104, 189, 178);
 
     // Fallback highlight for a selected node whose category can't be resolved. Reuses the accent
     // so focus/selection still reads as intentional.
@@ -113,6 +116,16 @@ pub fn category_color(category: NodeCategory) -> egui::Color32 {
         NodeCategory::Generator => palette::CATEGORY_GENERATOR,
         NodeCategory::Simulation => palette::CATEGORY_SIMULATION,
         NodeCategory::Io => palette::CATEGORY_IO
+    }
+}
+
+/// The color a node message banner (error/warning/info) is drawn with: its border, its text, and
+/// - at reduced opacity - its background tint.
+pub fn severity_color(severity: NodeMessageSeverity) -> egui::Color32 {
+    match severity {
+        NodeMessageSeverity::Error => palette::HIGHLIGHT_ERROR,
+        NodeMessageSeverity::Warning => palette::HIGHLIGHT_WARNING,
+        NodeMessageSeverity::Info => palette::HIGHLIGHT_INFO
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::core::graph::GraphNodeId;
+use crate::core::node_message::NodeMessageSeverity;
 
 /// An error produced while working with a [`Node`] or the [`NodeGraph`](crate::core::graph::NodeGraph) it belongs to.
 #[derive(Debug)]
@@ -14,19 +15,21 @@ pub enum NodeError {
     /// The output and input sockets being connected carry different data types.
     SocketTypeMismatch {
         from_node: String,
-        from_socket: usize,
+        from_socket: String,
         to_node: String,
-        to_socket: usize
+        to_socket: String
     },
     /// No connection exists between the given output and input sockets.
     NotConnected {
         from_node: GraphNodeId,
-        from_socket: usize,
+        from_socket: String,
         to_node: GraphNodeId,
-        to_socket: usize
+        to_socket: String
     },
-    /// An input socket of the node has no incoming connection.
-    InputNotConnected { node: String, socket: usize },
+    /// An input socket of the node has no incoming connection. `node_id` identifies the node
+    /// unambiguously (two nodes of the same type share the same `node` label), which callers
+    /// need to tell whether this error is about the node they're looking at or an ancestor of it.
+    InputNotConnected { node_id: GraphNodeId, node: String, socket: String },
     /// The dependency graph contains a cycle, so it cannot be topologically sorted.
     CyclicGraph,
     /// A connected input socket's source node has not produced its output yet (internal
@@ -69,8 +72,8 @@ impl std::fmt::Display for NodeError {
                 "No connection from {:?}:{} to {:?}:{}",
                 from_node, from_socket, to_node, to_socket
             ),
-            Self::InputNotConnected { node, socket } => {
-                write!(f, "{} input {} is not connected", node, socket)
+            Self::InputNotConnected { node, socket, .. } => {
+                write!(f, "\"{}\" input \"{}\" is not connected", node, socket)
             }
             Self::CyclicGraph => write!(f, "Graph contains a cycle"),
             Self::OutputNotAvailable { node } => {
@@ -83,6 +86,16 @@ impl std::fmt::Display for NodeError {
 }
 
 impl std::error::Error for NodeError {}
+
+impl NodeError {
+    /// Severity to display this error with in the editor's UI.
+    pub fn severity(&self) -> NodeMessageSeverity {
+        match self {
+            Self::InputNotConnected { .. } => NodeMessageSeverity::Warning,
+            _ => NodeMessageSeverity::Error
+        }
+    }
+}
 
 impl From<&str> for NodeError {
     fn from(msg: &str) -> Self {

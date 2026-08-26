@@ -57,7 +57,7 @@ impl Topology {
         to_node: GraphNodeId,
         to_socket: usize
     ) -> Result<(), NodeError> {
-        let from_dtype = self
+        let from_socket_desc = self
             .entry(from_node)?
             .instance
             .outputs()
@@ -65,8 +65,9 @@ impl Topology {
             .ok_or(NodeError::OutputSocketNotFound {
                 node: format!("{:?}", from_node),
                 socket: from_socket
-            })?
-            .dtype;
+            })?;
+        let from_dtype = from_socket_desc.dtype;
+        let from_label = from_socket_desc.name;
 
         let to_entry = self.entry(to_node)?;
         let to_socket_desc = to_entry.instance.inputs().get(to_socket).ok_or(
@@ -78,9 +79,9 @@ impl Topology {
         if to_socket_desc.dtype != from_dtype {
             return Err(NodeError::SocketTypeMismatch {
                 from_node: format!("{:?}", from_node),
-                from_socket,
+                from_socket: from_label.to_string(),
                 to_node: format!("{:?}", to_node),
-                to_socket
+                to_socket: to_socket_desc.name.to_string()
             });
         }
         // An input pin can only ever hold one connection: replace whatever was already
@@ -119,9 +120,9 @@ impl Topology {
             })
             .ok_or(NodeError::NotConnected {
                 from_node,
-                from_socket,
+                from_socket: self.output_socket_label(from_node, from_socket),
                 to_node,
-                to_socket
+                to_socket: self.input_socket_label(to_node, to_socket)
             })?;
         self.edges.remove(idx);
         self.entry_mut(to_node)?.inputs[to_socket] = None;
@@ -146,6 +147,26 @@ impl Topology {
 
     pub fn outputs(&self, id: GraphNodeId) -> Result<&[GraphNodeId], NodeError> {
         Ok(&self.entry(id)?.outputs)
+    }
+
+    /// Human-readable name of the output socket at `socket` on `node_id`, falling back to its
+    /// numeric index if the node or socket no longer exists.
+    fn output_socket_label(&self, node_id: GraphNodeId, socket: usize) -> String {
+        self.entry(node_id)
+            .ok()
+            .and_then(|entry| entry.instance.outputs().get(socket))
+            .map(|s| s.name.to_string())
+            .unwrap_or_else(|| socket.to_string())
+    }
+
+    /// Human-readable name of the input socket at `socket` on `node_id`, falling back to its
+    /// numeric index if the node or socket no longer exists.
+    fn input_socket_label(&self, node_id: GraphNodeId, socket: usize) -> String {
+        self.entry(node_id)
+            .ok()
+            .and_then(|entry| entry.instance.inputs().get(socket))
+            .map(|s| s.name.to_string())
+            .unwrap_or_else(|| socket.to_string())
     }
 
     fn entry(&self, id: GraphNodeId) -> Result<&NodeEntry, NodeError> {

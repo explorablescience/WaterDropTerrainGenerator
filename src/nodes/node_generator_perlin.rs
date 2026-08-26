@@ -122,12 +122,12 @@ impl Node for NodeGeneratorPerlin {
             _ => None
         }
     }
-    fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), String> {
+    fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), NodeError> {
         match (key, value) {
             ("frequency", NParamValue::Float(v)) => self.frequency = v,
             ("amplitude", NParamValue::Float(v)) => self.amplitude = v,
             ("octaves", NParamValue::Int(v)) => self.octaves = v as u32,
-            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v))
+            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into())
         }
         Ok(())
     }

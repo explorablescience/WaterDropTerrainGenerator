@@ -98,10 +98,10 @@ impl Node for NodeErosion {
             _ => None
         }
     }
-    fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), String> {
+    fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), NodeError> {
         match (key, value) {
             ("strength", NParamValue::Float(v)) => self.strength = v,
-            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v))
+            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into())
         }
         Ok(())
     }

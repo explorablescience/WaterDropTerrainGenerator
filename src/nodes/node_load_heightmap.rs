@@ -46,23 +46,23 @@ impl NodeLoadHeightmap {
                     key: "browse",
                     label: "Browse File...",
                     category: "Import",
-                    default: NParamValue::Action,
+                    default: NParamValue::Action { show_success_message: false },
                     constraints: None,
                 },
                 NParamDesc {
                     key: "load",
                     label: "Load Heightmap",
                     category: "Import",
-                    default: NParamValue::Action,
+                    default: NParamValue::Action { show_success_message: true },
                     constraints: None,
                 },
             ]
         })
     }
 
-    fn load_from_disk(&mut self) -> Result<(), String> {
+    fn load_from_disk(&mut self) -> Result<(), NodeError> {
         if self.file_path.trim().is_empty() {
-            return Err("File path is empty".to_string());
+            return Err("File path is empty".into());
         }
 
         let image = image::open(&self.file_path)
@@ -123,14 +123,15 @@ impl Node for NodeLoadHeightmap {
     fn get_param(&self, key: &str) -> Option<NParamValue> {
         match key {
             "file_path" => Some(NParamValue::String(self.file_path.clone())),
-            "browse" | "load" => Some(NParamValue::Action),
+            "browse" => Some(NParamValue::Action { show_success_message: false }),
+            "load" => Some(NParamValue::Action { show_success_message: true }),
             _ => None,
         }
     }
-    fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), String> {
+    fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), NodeError> {
         match (key, value) {
             ("file_path", NParamValue::String(v)) => self.file_path = v,
-            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v)),
+            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into()),
         }
         Ok(())
     }
@@ -140,7 +141,7 @@ impl Node for NodeLoadHeightmap {
         key: &str,
         _output: &[TileHandle],
         _output_size: usize,
-    ) -> Result<(), String> {
+    ) -> Result<(), NodeError> {
         match key {
             "browse" => {
                 let mut dialog = FileDialog::new().add_filter("PNG heightmap", &["png"]);
@@ -155,7 +156,7 @@ impl Node for NodeLoadHeightmap {
                 Ok(())
             }
             "load" => self.load_from_disk(),
-            _ => Err(format!("Unknown action '{}'", key)),
+            _ => Err(format!("Unknown action '{}'", key).into()),
         }
     }
 

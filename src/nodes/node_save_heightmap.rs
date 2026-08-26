@@ -37,14 +37,14 @@ impl NodeSaveHeightmap {
                     key: "browse",
                     label: "Browse File...",
                     category: "Export",
-                    default: NParamValue::Action,
+                    default: NParamValue::Action { show_success_message: false },
                     constraints: None,
                 },
                 NParamDesc {
                     key: "save",
                     label: "Save Heightmap",
                     category: "Export",
-                    default: NParamValue::Action,
+                    default: NParamValue::Action { show_success_message: true },
                     constraints: None,
                 },
             ]
@@ -67,12 +67,12 @@ impl NodeSaveHeightmap {
         cropped
     }
 
-    fn save_to_disk(&self, output: &[TileHandle], output_size: usize) -> Result<(), String> {
+    fn save_to_disk(&self, output: &[TileHandle], output_size: usize) -> Result<(), NodeError> {
         let Some(heightmap) = output.first() else {
-            return Err("No heightmap available to save".to_string());
+            return Err("No heightmap available to save".into());
         };
         if self.file_path.trim().is_empty() {
-            return Err("File path is empty".to_string());
+            return Err("File path is empty".into());
         }
 
         let internal_size = heightmap.size();
@@ -90,7 +90,7 @@ impl NodeSaveHeightmap {
             pixel.0 = [(value.clamp(0.0, 1.0) * 255.0).round() as u8];
         }
         img.save(&path)
-            .map_err(|e| format!("Failed to save '{}': {}", path.display(), e))
+            .map_err(|e| format!("Failed to save '{}': {}", path.display(), e).into())
     }
 }
 impl Node for NodeSaveHeightmap {
@@ -119,14 +119,15 @@ impl Node for NodeSaveHeightmap {
     fn get_param(&self, key: &str) -> Option<NParamValue> {
         match key {
             "file_path" => Some(NParamValue::String(self.file_path.clone())),
-            "browse" | "save" => Some(NParamValue::Action),
+            "browse" => Some(NParamValue::Action { show_success_message: false }),
+            "save" => Some(NParamValue::Action { show_success_message: true }),
             _ => None,
         }
     }
-    fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), String> {
+    fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), NodeError> {
         match (key, value) {
             ("file_path", NParamValue::String(v)) => self.file_path = v,
-            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v)),
+            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into()),
         }
         Ok(())
     }
@@ -144,7 +145,7 @@ impl Node for NodeSaveHeightmap {
         key: &str,
         output: &[TileHandle],
         output_size: usize,
-    ) -> Result<(), String> {
+    ) -> Result<(), NodeError> {
         match key {
             "browse" => {
                 let mut dialog = FileDialog::new().add_filter("PNG heightmap", &["png"]);
@@ -159,7 +160,7 @@ impl Node for NodeSaveHeightmap {
                 Ok(())
             }
             "save" => self.save_to_disk(output, output_size),
-            _ => Err(format!("Unknown action '{}'", key)),
+            _ => Err(format!("Unknown action '{}'", key).into()),
         }
     }
 }
