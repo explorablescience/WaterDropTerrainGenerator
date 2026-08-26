@@ -3,7 +3,7 @@
 use wde::prelude::ui::egui;
 
 use crate::{
-    core::node::{NodeCategory, NodeIcon},
+    core::node::NodeCategory,
     ui::theme::palette::BG_PANEL
 };
 use egui::{CornerRadius, FontFamily, FontId, Stroke, TextStyle};
@@ -16,9 +16,9 @@ pub mod palette {
 
     // Backgrounds, darkest to lightest
     pub const BG_EXTREME: Color32 = Color32::from_rgb(16, 16, 16);
-    pub const BG_PANEL: Color32 = Color32::from_rgb(25, 25, 25);
+    pub const BG_PANEL: Color32 = Color32::from_rgb(23, 23, 23);
     pub const BG_WINDOW: Color32 = BG_CARD;
-    pub const BG_CARD: Color32 = Color32::from_rgb(34, 34, 34);
+    pub const BG_CARD: Color32 = Color32::from_rgb(30, 30, 30);
     pub const BG_WIDGET: Color32 = BG_PANEL;
     pub const BG_WIDGET_HOVERED: Color32 = Color32::from_rgb(50, 50, 50);
     pub const BG_WIDGET_ACTIVE: Color32 = Color32::from_rgb(80, 80, 80);
@@ -40,10 +40,6 @@ pub mod palette {
     pub const ACCENT_HOVERED: Color32 = Color32::from_rgb(168, 210, 255);
     pub const ACCENT_ACTIVE: Color32 = Color32::from_rgb(92, 152, 232);
     pub const ACCENT_MUTED: Color32 = Color32::from_rgb(70, 95, 135);
-
-    // Secondary accent - For parameters that have been edited away from their default value, or toggles in their "on"
-    pub const MODIFIED: Color32 = Color32::from_rgb(224, 168, 82);
-    pub const MODIFIED_HOVERED: Color32 = Color32::from_rgb(240, 190, 110);
 
     // Semantic
     pub const HIGHLIGHT_ERROR: Color32 = Color32::from_rgb(255, 100, 100);
@@ -73,8 +69,15 @@ pub mod layout {
 
     /// Padding between a panel's inside border and its content card (Graph/Properties only).
     pub const CARD_PADDING: f32 = 4.0;
-    /// Corner radius of the content card.
-    pub const CARD_ROUNDING: u8 = 3;
+    /// Corner radius shared by every prominent frame drawn on top of a panel's content card:
+    /// the card itself, the properties title bar, and the parameter category sections.
+    pub const CARD_ROUNDING: u8 = 6;
+    /// Corner radius of small elements nested inside a card, such as the category badge.
+    pub const CHIP_ROUNDING: u8 = 4;
+
+    /// Corner radius shared by windows, menus, and interactive widgets (buttons, sliders, text
+    /// fields).
+    pub const WIDGET_ROUNDING: u8 = 3;
 
     /// Gap between a graph node's pin dot and its label, kept small and identical on both the
     /// input (left) and output (right) sides so the two columns read as symmetric.
@@ -88,14 +91,15 @@ pub mod fonts {
     pub const FONT_REGULAR: &str = "Inter";
     pub const FONT_SEMIBOLD: &str = "Inter-SemiBold";
 
-    pub const FONT_SIZE_SMALL: f32 = 13.0;
-    pub const FONT_SIZE_BODY: f32 = 13.0;
-    pub const FONT_SIZE_BUTTON: f32 = 13.0;
-    pub const FONT_SIZE_HEADING: f32 = 15.0;
-    pub const FONT_SIZE_MONOSPACE: f32 = 13.0;
+    pub const FONT_SIZE_SMALL: f32 = 12.0;
+    pub const FONT_SIZE_BODY: f32 = 12.0;
+    pub const FONT_SIZE_BUTTON: f32 = 12.0;
+    pub const FONT_SIZE_HEADING: f32 = 13.0;
+    pub const FONT_SIZE_MONOSPACE: f32 = 12.0;
+    pub const FONT_SIZE_TITLE: f32 = 15.0;
     
-    pub const FONT_SIZE_NODE_TITLE: f32 = 18.0;
-    pub const FONT_SIZE_NODE_PIN: f32 = 14.0;
+    pub const FONT_SIZE_NODE_TITLE: f32 = FONT_SIZE_TITLE;
+    pub const FONT_SIZE_NODE_PIN: f32 = 12.0;
 }
 
 /// The color associated with a node category, used for its outline, title, pins and icon in the
@@ -104,132 +108,6 @@ pub fn category_color(category: NodeCategory) -> egui::Color32 {
     match category {
         NodeCategory::Generator => palette::CATEGORY_GENERATOR,
         NodeCategory::Simulation => palette::CATEGORY_SIMULATION
-    }
-}
-
-/// Paints a small flat-design icon representing `icon` inside `rect`, tinted with `color` so it
-/// always matches its node's category color.
-pub fn paint_node_icon(
-    painter: &egui::Painter,
-    rect: egui::Rect,
-    icon: NodeIcon,
-    color: egui::Color32
-) {
-    let stroke = egui::Stroke::new(1.4, color);
-    match icon {
-        NodeIcon::Plane => {
-            // A flat plateau sitting on a baseline - flat terrain.
-            let top = rect.top() + rect.height() * 0.34;
-            let base = rect.bottom() - rect.height() * 0.22;
-            let left_in = rect.left() + rect.width() * 0.24;
-            let right_in = rect.right() - rect.width() * 0.24;
-            let points = vec![
-                egui::pos2(rect.left(), base),
-                egui::pos2(left_in, top),
-                egui::pos2(right_in, top),
-                egui::pos2(rect.right(), base),
-            ];
-            painter.add(egui::Shape::convex_polygon(
-                points,
-                color.gamma_multiply(0.35),
-                stroke
-            ));
-        }
-        NodeIcon::Wave => {
-            // A single sine-like wave - noise.
-            let points: Vec<egui::Pos2> = (0..=16)
-                .map(|i| {
-                    let t = i as f32 / 16.0;
-                    let x = egui::lerp(rect.left()..=rect.right(), t);
-                    let y =
-                        rect.center().y - (t * std::f32::consts::TAU).sin() * rect.height() * 0.3;
-                    egui::pos2(x, y)
-                })
-                .collect();
-            painter.add(egui::Shape::line(points, stroke));
-        }
-        NodeIcon::Droplet => {
-            // A rounded body under a pointed tip - water / erosion. The tip sits directly above
-            // the circle's center, so the arc must leave its gap at the top (angle -FRAC_PI_2)
-            // rather than to the side, otherwise the two straight edges cross the arc instead of
-            // meeting it cleanly.
-            let tip = egui::pos2(rect.center().x, rect.top());
-            let radius = rect.width() * 0.32;
-            let center = egui::pos2(rect.center().x, rect.bottom() - radius);
-            let gap_half_angle = 0.5;
-            let start = -std::f32::consts::FRAC_PI_2 + gap_half_angle;
-            let sweep = std::f32::consts::TAU - 2.0 * gap_half_angle;
-            let segments = 20;
-            let mut points = vec![tip];
-            for i in 0..=segments {
-                let t = i as f32 / segments as f32;
-                let angle = start + t * sweep;
-                points.push(center + radius * egui::vec2(angle.cos(), angle.sin()));
-            }
-            painter.add(egui::Shape::convex_polygon(
-                points,
-                color.gamma_multiply(0.35),
-                stroke
-            ));
-        }
-    }
-}
-
-/// Themed widgets that don't come from a stock egui type.
-pub mod widgets {
-    use wde::prelude::ui::egui;
-
-    use super::palette;
-
-    /// A pill-shaped on/off switch, amber when on.
-    pub fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
-        let desired_size = ui.spacing().interact_size.y * egui::vec2(1.7, 0.85);
-        let (rect, mut response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
-        if response.clicked() {
-            *on = !*on;
-            response.mark_changed();
-        }
-        response.widget_info(|| {
-            egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), *on, "")
-        });
-
-        if ui.is_rect_visible(rect) {
-            let how_on = ui.ctx().animate_bool(response.id, *on);
-            let radius = 0.5 * rect.height();
-            let track_fill = if *on {
-                if response.hovered() {
-                    palette::MODIFIED_HOVERED
-                } else {
-                    palette::MODIFIED
-                }
-            } else if response.hovered() {
-                palette::BG_WIDGET_HOVERED
-            } else {
-                palette::BG_WIDGET
-            };
-            let track_stroke =
-                egui::Stroke::new(1.0, if *on { track_fill } else { palette::BORDER });
-            ui.painter().rect(
-                rect,
-                radius,
-                track_fill,
-                track_stroke,
-                egui::StrokeKind::Inside
-            );
-
-            let knob_radius = radius - 2.5;
-            let knob_x = egui::lerp((rect.left() + radius)..=(rect.right() - radius), how_on);
-            let knob_center = egui::pos2(knob_x, rect.center().y);
-            let knob_color = if *on {
-                palette::BG_EXTREME
-            } else {
-                palette::TEXT_MUTED
-            };
-            ui.painter()
-                .circle(knob_center, knob_radius, knob_color, egui::Stroke::NONE);
-        }
-
-        response
     }
 }
 
@@ -345,8 +223,8 @@ fn style() -> egui::Style {
     visuals.warn_fg_color = HIGHLIGHT_WARNING;
     visuals.error_fg_color = HIGHLIGHT_ERROR;
     visuals.panel_fill = BG_PANEL;
-    visuals.window_corner_radius = CornerRadius::same(3);
-    visuals.menu_corner_radius = CornerRadius::same(3);
+    visuals.window_corner_radius = CornerRadius::same(layout::WIDGET_ROUNDING);
+    visuals.menu_corner_radius = CornerRadius::same(layout::WIDGET_ROUNDING);
     visuals.resize_corner_size = 10.0;
     visuals.indent_has_left_vline = true;
     visuals.collapsing_header_frame = false;
@@ -359,7 +237,7 @@ fn style() -> egui::Style {
         weak_bg_fill: BG_WIDGET,
         bg_stroke: Stroke::new(1.0, BORDER),
         fg_stroke: Stroke::new(1.0, TEXT),
-        corner_radius: CornerRadius::same(3),
+        corner_radius: CornerRadius::same(layout::WIDGET_ROUNDING),
         expansion: 0.0
     };
     widgets.noninteractive = egui::style::WidgetVisuals {
@@ -417,7 +295,7 @@ pub fn menu_style() -> egui::Style {
         weak_bg_fill: BG_WIDGET,
         bg_stroke: Stroke::new(1.0, BORDER),
         fg_stroke: Stroke::new(1.0, TEXT),
-        corner_radius: CornerRadius::same(3),
+        corner_radius: CornerRadius::same(layout::WIDGET_ROUNDING),
         expansion: 0.0
     };
     widgets.noninteractive = egui::style::WidgetVisuals {

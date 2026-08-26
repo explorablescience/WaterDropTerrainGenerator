@@ -12,7 +12,7 @@ use crate::{
         graph::GraphNodeId,
         node::{Node, NodeCategory, NodeIcon},
         node_registry,
-    }, ui::theme::{self, palette::{BG_GRAPH}},
+    }, ui::{theme::{self, palette::BG_GRAPH}, widgets},
 };
 
 pub type GraphInstance = Snarl<GraphNode>;
@@ -117,7 +117,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
                     egui::Vec2::splat(theme::fonts::FONT_SIZE_NODE_TITLE),
                     egui::Sense::hover(),
                 );
-                theme::paint_node_icon(ui.painter(), rect, icon, color);
+                widgets::paint_node_icon(ui.painter(), rect, icon, color);
             }
             ui.label(
                 egui::RichText::new(label)
@@ -140,7 +140,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
             .expect("selected node should exist in the graph");
         let socket = &node.inputs()[pin.id.input];
         let connected = !pin.remotes.is_empty();
-        show_pin_label(ui, socket.name, connected, false);
+        show_pin_label(ui, socket.name, connected);
         let factor = if connected { 1.2 } else { 0.6 };
         PinInfo::circle()
             .with_stroke(egui::Stroke::NONE)
@@ -160,7 +160,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
             .expect("selected node should exist in the graph");
         let socket = &node.outputs()[pin.id.output];
         let connected = !pin.remotes.is_empty();
-        show_pin_label(ui, socket.name, connected, true);
+        show_pin_label(ui, socket.name, connected);
         let factor = if connected { 1.2 } else { 0.6 };
         PinInfo::circle()
             .with_stroke(egui::Stroke::NONE)
@@ -207,7 +207,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
                                 egui::Vec2::splat(theme::fonts::FONT_SIZE_BODY),
                                 egui::Sense::hover(),
                             );
-                            theme::paint_node_icon(ui.painter(), rect, descriptor.icon, color);
+                            widgets::paint_node_icon(ui.painter(), rect, descriptor.icon, color);
 
                             if ui.button(descriptor.label).clicked() {
                                 self.new_node(pos, snarl, (descriptor.factory)());
@@ -355,18 +355,13 @@ impl GraphViewer {
 }
 
 /// Draws a pin's socket label, colored to reflect whether the socket is currently wired up.
-fn show_pin_label(ui: &mut egui::Ui, name: &str, connected: bool, is_right_side: bool) {
+fn show_pin_label(ui: &mut egui::Ui, name: &str, connected: bool) {
     let color = if connected {
         theme::palette::TEXT_MUTED
     } else {
         theme::palette::TEXT_DISABLED
     };
-    let dx = if is_right_side {
-        14.0
-    } else {
-        0.0
-    };
-    ui.add_space(theme::layout::NODE_PIN_LABEL_SPACING - ui.spacing().item_spacing.x + dx);
+
     ui.label(
         egui::RichText::new(name)
             .color(color)
@@ -396,8 +391,7 @@ pub fn show_graph(
         header_frame: None,
 
         collapsible: Some(false),
-        // Collapsing is disabled, so the space `egui_snarl` reserves for the collapse arrow
-        // would otherwise just push the header content away from the node's left edge.
+        // Collapsing is disabled
         header_drag_space: Some(egui::Vec2::ZERO),
         pin_size: Some(14.0),
         pin_fill: Some(theme::palette::PIN_DEFAULT),

@@ -46,9 +46,7 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
                 .rect_filled(tile_rect, 0, theme::palette::BG_EXTREME);
         }
 
-        // Graph/Properties get an extra content "card" on top of the panel background, inset
-        // from the border by a further padding. Their content is drawn inside it. The engine
-        // has no card — content is drawn straight into its (transparent) inside panel.
+        // Graph/Properties get an extra content "card" on top of the panel background
         let content_rect = if matches!(pane, EditorPanels::Engine) {
             border_rect
         } else {

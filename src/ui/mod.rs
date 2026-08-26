@@ -8,6 +8,7 @@ mod editor_behavior;
 mod panel_graph;
 mod panel_properties;
 pub mod theme;
+pub mod widgets;
 
 pub struct UIPlugin;
 impl Plugin for UIPlugin {
