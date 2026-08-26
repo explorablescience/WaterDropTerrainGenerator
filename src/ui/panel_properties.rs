@@ -89,7 +89,10 @@ fn collect_node_messages(
     terrain_graph.prune_expired_messages();
 
     let mut messages = Vec::new();
-    if let Err(err) = terrain_graph.process(graph_id) {
+    // Uses the non-committing `NodeGraph::process` rather than `TerrainGraph::process`: the
+    // latter's generation bookkeeping is one-shot and reserved for `update_terrain_preview`,
+    // the sole consumer that's supposed to act on "new output is available".
+    if let Err(err) = terrain_graph.graph_mut().process(graph_id) {
         let text = match &err {
             NodeError::InputNotConnected { node_id, node, socket } => {
                 if *node_id == graph_id {

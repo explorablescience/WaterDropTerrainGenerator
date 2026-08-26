@@ -1,6 +1,9 @@
 //! Library crate for the terrain editor.
 
 use std::sync::{Arc, RwLock};
+
+/// Whether WaterDropEngine's own built-in UI menu items (e.g. "Engine/*", "Camera/*", "PBR/*") are shown.
+pub const DEBUG_MODE: bool = false;
 use std::time::Duration;
 
 use bevy::{platform::collections::HashMap, prelude::*};
@@ -38,6 +41,9 @@ pub struct TerrainGraph {
     graph: NodeGraph,
     /// Mapping from a node's unique id to its latest resulting generation.
     generations: HashMap<GraphNodeId, u32>,
+    /// The node whose output the preview last displayed, if any. Used to force a refresh when
+    /// the selection changes even if the newly selected node's generation hasn't advanced.
+    displayed_node: Option<GraphNodeId>,
     /// The currently selected node in the graph editor, if any.
     pub selected_node: Option<GraphNodeId>,
     /// Feedback from the most recent `on_action`/`set_param` call on each node: an error persists
@@ -49,6 +55,7 @@ impl Default for TerrainGraph {
         Self {
             graph: NodeGraph::new(128),
             generations: HashMap::new(),
+            displayed_node: None,
             selected_node: None,
             action_messages: HashMap::new()
         }
@@ -112,16 +119,22 @@ impl TerrainGraph {
         &mut self,
         node_id: GraphNodeId
     ) -> Result<Option<(u32, Vec<TileHandle>)>, NodeError> {
+        // A node whose output isn't the one currently shown must be (re)displayed even if its
+        // own generation hasn't advanced - otherwise reselecting an already-cached node that
+        // hasn't changed since it was last shown would leave the previous selection's mesh on
+        // screen.
+        let just_selected = self.displayed_node != Some(node_id);
         let generation = self.generations.get(&node_id).copied().unwrap_or(0);
         match self.graph.process(node_id) {
             Ok(NodeGraphProcessResult::Processed(new_generation, output_tiles)) => {
-                if new_generation <= generation {
+                if !just_selected && new_generation <= generation {
                     // No new generation is available
                     return Ok(None);
                 }
 
-                // New generation is available
+                // New generation is available, or the selection just changed to this node
                 self.generations.insert(node_id, new_generation);
+                self.displayed_node = Some(node_id);
                 Ok(Some((new_generation, output_tiles)))
             }
             Ok(NodeGraphProcessResult::Processing) => {
