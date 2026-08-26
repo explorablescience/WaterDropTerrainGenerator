@@ -3,13 +3,14 @@ use fs_extra::copy_items;
 use fs_extra::dir::CopyOptions;
 
 fn main() -> Result<()> {
-    // This tells cargo to rerun this script if something in /res/ changes.
+    // This tells cargo to rerun this script if something in /res/ or /assets/ changes.
     println!("cargo:rerun-if-changed=./res/*");
+    println!("cargo:rerun-if-changed=./assets/*");
 
     // Copy the /res/ folder to the output directory.
     let mut copy_options = CopyOptions::new();
     copy_options.overwrite = true;
-    let paths_to_copy = vec!["./res/"];
+    let paths_to_copy = vec!["./res/", "./assets/"];
 
     // Make sure the directories exist.
     std::fs::create_dir_all("./target/debug/")?;
