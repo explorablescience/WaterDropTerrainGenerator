@@ -28,7 +28,8 @@ impl Node for NodeGeneratorFlat {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height
+            dtype: NodePortType::Height,
+            required: true
         }]
     }
 

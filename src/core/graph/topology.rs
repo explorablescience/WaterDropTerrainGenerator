@@ -57,17 +57,40 @@ impl Topology {
         to_node: GraphNodeId,
         to_socket: usize
     ) -> Result<(), NodeError> {
-        self.entry(from_node)?;
-        let slot = self.entry_mut(to_node)?.inputs.get_mut(to_socket).ok_or(
+        let from_dtype = self
+            .entry(from_node)?
+            .instance
+            .outputs()
+            .get(from_socket)
+            .ok_or(NodeError::OutputSocketNotFound {
+                node: format!("{:?}", from_node),
+                socket: from_socket
+            })?
+            .dtype;
+
+        let to_entry = self.entry(to_node)?;
+        let to_socket_desc = to_entry.instance.inputs().get(to_socket).ok_or(
             NodeError::InputSocketNotFound {
                 node: format!("{:?}", to_node),
                 socket: to_socket
             }
         )?;
-        if slot.is_some() {
-            return Err(NodeError::SocketOccupied);
+        if to_socket_desc.dtype != from_dtype {
+            return Err(NodeError::SocketTypeMismatch {
+                from_node: format!("{:?}", from_node),
+                from_socket,
+                to_node: format!("{:?}", to_node),
+                to_socket
+            });
         }
-        *slot = Some((from_node, from_socket));
+        // An input pin can only ever hold one connection: replace whatever was already
+        // plugged into it rather than rejecting the new connection.
+        let existing = to_entry.inputs[to_socket];
+        if let Some((old_from_node, old_from_socket)) = existing {
+            self.disconnect(old_from_node, old_from_socket, to_node, to_socket)?;
+        }
+
+        self.entry_mut(to_node)?.inputs[to_socket] = Some((from_node, from_socket));
         self.entry_mut(from_node)?.outputs.push(to_node);
         self.edges.push(EdgeEntry {
             from_node,

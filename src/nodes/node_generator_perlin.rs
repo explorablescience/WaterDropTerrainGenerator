@@ -106,7 +106,8 @@ impl Node for NodeGeneratorPerlin {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height
+            dtype: NodePortType::Height,
+            required: true
         }]
     }
 

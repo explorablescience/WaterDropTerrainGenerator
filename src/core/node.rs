@@ -68,7 +68,8 @@ pub trait Node: Debug + Send + Sync {
 /// NodeSocket represents an input or output socket of a node, which can be connected to other nodes.
 pub struct NodeSocket {
     pub name: &'static str,
-    pub dtype: NodePortType
+    pub dtype: NodePortType,
+    pub required: bool
 }
 /// PortType represents the type of data that can be passed through a node's input or output socket.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

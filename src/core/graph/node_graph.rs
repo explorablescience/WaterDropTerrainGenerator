@@ -211,12 +211,20 @@ impl NodeGraph {
         let mut input_tiles = Vec::with_capacity(inputs.len());
         let mut input_keys = Vec::with_capacity(inputs.len());
 
-        for input in &inputs {
+        for (socket, input) in inputs.iter().enumerate() {
             let Some((from_node, from_socket)) = input else {
-                return Err(NodeError::InputNotConnected {
-                    node: self.topology.node(node_id)?.label().to_string(),
-                    socket: input_tiles.len()
-                });
+                let node = self.topology.node(node_id)?;
+                let required = node.inputs().get(socket).is_none_or(|s| s.required);
+                if required {
+                    return Err(NodeError::InputNotConnected {
+                        node: node.label().to_string(),
+                        socket
+                    });
+                }
+                // Optional and unconnected: feed the node a neutral, zero-filled tile.
+                input_tiles.push(Arc::new(self.pool.allocate()));
+                input_keys.push(None);
+                continue;
             };
             match self.process_node(*from_node)? {
                 NodeGraphProcessResult::Processed(_, tiles) => {

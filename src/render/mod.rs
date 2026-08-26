@@ -26,7 +26,9 @@ impl Plugin for RenderPlugin {
 pub struct TerrainPreview {
     current_go: Option<Entity>,
     mesh_handle: Option<Handle<Mesh>>,
-    material_handle: Option<Handle<PbrMaterial>>
+    material_handle: Option<Handle<PbrMaterial>>,
+    /// Show flat fallback terrain instead of the last rendered terrain when the selected node cannot be evaluated. 
+    showing_flat_fallback: bool
 }
 
 pub fn create_material(
@@ -66,12 +68,18 @@ pub fn update_terrain_preview(
         None => return // No node selected
     };
 
+    let size = terrain_graph.read().graph().tile_size();
+
     // Check if the terrain graph has new output tiles
-    let (generation, tiles) = match terrain_graph.write().process(selected_node) {
-        Ok(state) => match state {
-            Some((generation, tiles)) => (generation, tiles),
-            None => return // No new output tiles available
-        },
+    let mesh = match terrain_graph.write().process(selected_node) {
+        Ok(Some((generation, tiles))) => {
+            terrain_preview.showing_flat_fallback = false;
+            let heightmap = &tiles[0]; // For now, just use the first tile for preview (should be heightmap)
+            let internal_size = heightmap.size();
+            let data = crop_center(heightmap, internal_size, size);
+            heightmap_to_mesh(&format!("terrain-preview-{}", generation), &data, size)
+        }
+        Ok(None) => return, // No new output tiles available
         Err(e) => {
             match e {
                 InputNotConnected { node, socket } => {
@@ -84,16 +92,15 @@ pub fn update_terrain_preview(
                     error!("Error while processing terrain graph: {:?}", e);
                 }
             }
-            return;
+            // The selected node can't be evaluated: show a flat terrain instead of leaving
+            // whatever was last rendered on screen.
+            if terrain_preview.showing_flat_fallback {
+                return;
+            }
+            terrain_preview.showing_flat_fallback = true;
+            heightmap_to_mesh("terrain-preview-flat", &vec![0.0; size * size], size)
         }
     };
-
-    // Get the output tiles from the terrain graph state
-    let heightmap = &tiles[0]; // For now, just use the first tile for preview (should be heightmap)
-    let internal_size = heightmap.size();
-    let size = terrain_graph.read().graph().tile_size();
-    let data = crop_center(heightmap, internal_size, size);
-    let mesh = heightmap_to_mesh(&format!("terrain-preview-{}", generation), &data, size);
 
     // Reuse the existing mesh asset and entity if present, otherwise create a new one
     match &terrain_preview.mesh_handle {

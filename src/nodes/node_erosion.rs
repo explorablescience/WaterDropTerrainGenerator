@@ -77,13 +77,15 @@ impl Node for NodeErosion {
     fn inputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height
+            dtype: NodePortType::Height,
+            required: true
         }]
     }
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height
+            dtype: NodePortType::Height,
+            required: true
         }]
     }
 

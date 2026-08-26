@@ -8,11 +8,17 @@ use egui_snarl::{
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainGraphHolder, core::{
+    TerrainGraphHolder,
+    core::{
         graph::GraphNodeId,
         node::{Node, NodeCategory, NodeIcon},
+        node_error::NodeError,
         node_registry,
-    }, ui::{theme::{self, palette::BG_GRAPH}, widgets},
+    },
+    ui::{
+        theme::{self, palette::BG_GRAPH},
+        widgets,
+    },
 };
 
 pub type GraphInstance = Snarl<GraphNode>;
@@ -63,21 +69,30 @@ impl SnarlViewer<GraphNode> for GraphViewer {
     }
 
     fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<GraphNode>) {
-        // Connects pins in terrain graph
+        // Connects pins in terrain graph. An input socket can only hold one connection, so
+        // this replaces whatever was previously plugged into `to`, and rejects the connection
+        // outright if the pin types don't match.
         let GraphNode::Main(from_graph_id) = &snarl[from.id.node];
         let GraphNode::Main(to_graph_id) = &snarl[to.id.node];
-        if self
-            .terrain_graph
-            .write()
-            .graph_mut()
-            .connect(*from_graph_id, from.id.output, *to_graph_id, to.id.input)
-            .is_err()
-        {
-            error!("Failed to connect nodes.");
+        if let Err(e) = self.terrain_graph.write().graph_mut().connect(
+            *from_graph_id,
+            from.id.output,
+            *to_graph_id,
+            to.id.input,
+        ) {
+            match e {
+                NodeError::SocketTypeMismatch { .. } => {
+                    warn!("Cannot connect pins: socket types don't match.");
+                }
+                _ => error!("Failed to connect nodes: {}", e),
+            }
             return;
         }
 
-        // Connects pins in ui
+        // Mirrors the replacement above on the ui side, then connects pins in ui.
+        for &remote in &to.remotes {
+            snarl.disconnect(remote, to.id);
+        }
         snarl.connect(from.id, to.id);
     }
     fn disconnect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<GraphNode>) {
@@ -232,24 +247,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         snarl: &mut Snarl<GraphNode>,
     ) {
         if ui.button("Remove Node").clicked() {
-            let GraphNode::Main(graph_id) = &snarl[node];
-            if self
-                .terrain_graph
-                .write()
-                .graph_mut()
-                .remove_node(*graph_id)
-                .is_ok()
-            {
-                snarl.remove_node(node);
-                if self
-                    .selected
-                    .is_some_and(|selected| selected.snarl_id == node)
-                {
-                    self.selected = None;
-                }
-            } else {
-                error!("Failed to remove node.");
-            }
+            self.remove_node(node, snarl);
         }
     }
 
@@ -352,6 +350,29 @@ impl GraphViewer {
         let snarl_id = snarl.insert_node(pos, GraphNode::Main(graph_id));
         self.selected = Some(SelectedNode { snarl_id, graph_id });
     }
+
+    /// Removes a node from both the terrain graph and the ui, clearing the selection if it
+    /// pointed at the removed node.
+    fn remove_node(&mut self, node: NodeId, snarl: &mut Snarl<GraphNode>) {
+        let GraphNode::Main(graph_id) = &snarl[node];
+        if self
+            .terrain_graph
+            .write()
+            .graph_mut()
+            .remove_node(*graph_id)
+            .is_ok()
+        {
+            snarl.remove_node(node);
+            if self
+                .selected
+                .is_some_and(|selected| selected.snarl_id == node)
+            {
+                self.selected = None;
+            }
+        } else {
+            error!("Failed to remove node.");
+        }
+    }
 }
 
 /// Draws a pin's socket label, colored to reflect whether the socket is currently wired up.
@@ -433,6 +454,17 @@ pub fn show_graph(
         .id(id)
         .style(style)
         .show(graph_instance, &mut viewer, ui);
+
+    // Delete the selected node when Delete/Backspace is pressed, unless the user is typing into
+    // some other widget (e.g. a parameter field) that should receive the key instead.
+    let delete_pressed =
+        ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace));
+    if delete_pressed
+        && !ui.ctx().wants_keyboard_input()
+        && let Some(selected) = viewer.selected
+    {
+        viewer.remove_node(selected.snarl_id, graph_instance);
+    }
 
     // Update the selected node in the egui context so it can be retrieved later
     match viewer.selected {
