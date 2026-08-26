@@ -31,10 +31,10 @@ impl Default for TerrainSettingsState {
     fn default() -> Self {
         Self {
             was_open: false,
-            chunks_x: 1.0,
-            chunks_y: 1.0,
+            chunks_x: 5.0,
+            chunks_y: 5.0,
             tile_size: 128.0,
-            world_scale: 1.0 / 128.0,
+            world_scale: 1.0 / 128.0 * 2.0 * 5.0,
             export_path: String::new()
         }
     }
@@ -94,7 +94,7 @@ pub fn draw_terrain_settings(
                     label: "World Scale (units/texel)",
                     category: "Chunk Grid",
                     default: NParamValue::Float(state.world_scale),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.001, max: 10.0 })
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.001, max: 100.0 })
                 },
                 theme::palette::ACCENT,
                 &mut state.world_scale

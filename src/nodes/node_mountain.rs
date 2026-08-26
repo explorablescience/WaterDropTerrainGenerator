@@ -127,10 +127,11 @@ impl Node for NodeMountain {
     ) -> Result<Vec<TileHandle>, NodeError> {
         let mut output = pool.allocate();
         let s = output.size();
-        let center = (ctx.world_extent.0 * self.center.0, ctx.world_extent.1 * self.center.1);
+        let center = (self.center.0 * ctx.world_size().0, self.center.1 * ctx.world_size().1);
         for y in 0..s {
             for x in 0..s {
-                output[y * s + x] = self.dome(ctx.world_pos(x, y), center);
+                let world_pos = ctx.world_pos(x, y);
+                output[y * s + x] = self.dome(world_pos, center);
             }
         }
         Ok(vec![Arc::new(output)])

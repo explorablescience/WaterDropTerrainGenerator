@@ -38,4 +38,9 @@ impl TileContext {
     pub fn normalize(&self, world: (f32, f32)) -> (f32, f32) {
         (world.0 / self.world_extent.0, world.1 / self.world_extent.1)
     }
+
+    /// Returns the world-space size of the whole terrain
+    pub fn world_size(&self) -> (f32, f32) {
+        self.world_extent
+    }
 }

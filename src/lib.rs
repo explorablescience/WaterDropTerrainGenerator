@@ -9,7 +9,7 @@ use std::time::Duration;
 use bevy::{platform::collections::HashMap, prelude::*};
 
 use crate::core::{
-    chunk_grid::ChunkCoord,
+    chunk_grid::{ChunkCoord, ChunkGrid},
     graph::{GraphNodeId, NodeGraph, NodeGraphProcessResult},
     node_error::NodeError,
     node_message::{MessageLifetime, NodeMessage, TimedNodeMessage},
@@ -57,7 +57,7 @@ pub struct TerrainGraph {
 impl Default for TerrainGraph {
     fn default() -> Self {
         Self {
-            graph: NodeGraph::new(128),
+            graph: NodeGraph::new(ChunkGrid::new(4, 4, 128, 1.0 / 128.0)),
             generations: HashMap::new(),
             chunk_generations: HashMap::new(),
             displayed_node: None,
