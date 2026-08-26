@@ -10,10 +10,6 @@ use crate::{
     ui::panel_graph::{GraphInstance, GraphNode}
 };
 
-/// Thin adapter between the graph editor's `egui-snarl` UI state and the UI-independent
-/// serialization logic in `core::project`: translates the snarl's node positions and wires to and
-/// from the plain data `core::project` works with.
-
 /// Serializes the current graph editor layout and terrain graph to `path` as JSON.
 pub(super) fn save_project(
     path: &Path,

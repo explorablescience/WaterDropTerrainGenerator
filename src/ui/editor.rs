@@ -113,6 +113,7 @@ fn block_camera_input_outside_engine(
     mouse_motion_messages.clear();
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_editor(
     ctx: Res<UIContext>,
     mut layout: Local<Option<EditorLayout>>,

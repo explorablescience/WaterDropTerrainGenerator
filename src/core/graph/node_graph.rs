@@ -127,14 +127,16 @@ impl NodeGraph {
         Ok(NodeMutGuard { graph: self, id })
     }
 
-    /// Marks a node dirty and propagates downstream, stopping at baked nodes and already-dirty ones.
+    /// Marks a node dirty and propagates downstream, stopping at baked nodes.
     fn mark_dirty(&mut self, id: GraphNodeId) {
         let mut stack = vec![id];
+        let mut visited = HashSet::new();
         while let Some(n) = stack.pop() {
-            match self.cache.state(n) {
-                NodeState::Baked(..) => continue, // opaque to invalidation
-                NodeState::Dirty => continue,     // already dirty, so is everything downstream
-                _ => {}
+            if !visited.insert(n) {
+                continue;
+            }
+            if matches!(self.cache.state(n), NodeState::Baked(..)) {
+                continue; // opaque to invalidation
             }
             self.cache.set(n, NodeState::Dirty);
             if let Ok(outputs) = self.topology.outputs(n) {
