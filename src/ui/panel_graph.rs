@@ -191,6 +191,9 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         ui: &mut egui::Ui,
         snarl: &mut Snarl<GraphNode>,
     ) {
+        // Match the styling of the top menu bar so this popup menu doesn't look inconsistent.
+        ui.set_style(theme::menu_style());
+
         ui.label(
             egui::RichText::new("Add Node")
                 .color(theme::palette::TEXT_MUTED)
@@ -217,37 +220,16 @@ impl SnarlViewer<GraphNode> for GraphViewer {
                     .strong(),
                 |ui| {
                     for descriptor in &nodes {
-                        ui.horizontal(|ui| {
-                            let (rect, _) = ui.allocate_exact_size(
-                                egui::Vec2::splat(theme::fonts::FONT_SIZE_BODY),
-                                egui::Sense::hover(),
-                            );
-                            widgets::paint_node_icon(ui, rect, descriptor.icon, color);
-
-                            if ui.button(descriptor.label).clicked() {
-                                self.new_node(pos, snarl, (descriptor.factory)());
-                                ui.close();
-                            }
-                        });
+                        let icon = widgets::node_icon_image(descriptor.icon, color);
+                        let button = egui::Button::image_and_text(icon, descriptor.label)
+                            .wrap_mode(egui::TextWrapMode::Extend);
+                        if ui.add(button).clicked() {
+                            self.new_node(pos, snarl, (descriptor.factory)());
+                            ui.close();
+                        }
                     }
                 },
             );
-        }
-    }
-
-    fn has_node_menu(&mut self, _node: &GraphNode) -> bool {
-        true
-    }
-    fn show_node_menu(
-        &mut self,
-        node: NodeId,
-        _inputs: &[InPin],
-        _outputs: &[OutPin],
-        ui: &mut egui::Ui,
-        snarl: &mut Snarl<GraphNode>,
-    ) {
-        if ui.button("Remove Node").clicked() {
-            self.remove_node(node, snarl);
         }
     }
 

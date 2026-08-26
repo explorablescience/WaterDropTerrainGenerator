@@ -436,12 +436,17 @@ fn enum_dropdown(
     .inner
 }
 
+/// Builds a node's PNG logo as an egui image, tinted with `color` so it always matches its
+/// node's category color. The source image is expected to be a white glyph on a transparent
+/// background.
+pub fn node_icon_image(icon: NodeIcon, color: egui::Color32) -> egui::Image<'static> {
+    egui::Image::from_bytes(format!("bytes://{}.png", icon.id), icon.png_bytes).tint(color)
+}
+
 /// Paints a node's PNG logo inside `rect`, tinted with `color` so it always matches its node's
-/// category color. The source image is expected to be a white glyph on a transparent background.
+/// category color.
 pub fn paint_node_icon(ui: &egui::Ui, rect: egui::Rect, icon: NodeIcon, color: egui::Color32) {
-    egui::Image::from_bytes(format!("bytes://{}.png", icon.id), icon.png_bytes)
-        .tint(color)
-        .paint_at(ui, rect);
+    node_icon_image(icon, color).paint_at(ui, rect);
 }
 
 /// Paints a chevron for a collapsible menu.
