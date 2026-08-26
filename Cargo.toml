@@ -35,6 +35,11 @@ watch = ["wde/watch"]
 tracing = ["wde/tracing"]
 gpu-debug = ["wde/gpu-debug"]
 
+[patch.crates-io]
+# Fixes an upstream layout bug where output-pin labels drift right on every row of a
+# multi-output node instead of lining up in a column. See vendor/README.md.
+egui-snarl = { path = "vendor/egui-snarl-0.9.0" }
+
 [profile.dev]
 opt-level = 0
 
