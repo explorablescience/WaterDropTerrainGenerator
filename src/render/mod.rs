@@ -163,23 +163,24 @@ fn set_chunk_data(terrain_preview: &mut TerrainPreview, chunk: ChunkCoord, data:
     }
 }
 
-/// World-space position of `chunk`'s preview mesh, keeping the whole grid roughly centered on the
-/// origin regardless of how many chunks it has - the degenerate single-chunk grid sits exactly at
-/// the origin, matching the pre-chunking behavior.
+/// World-space position of `chunk`'s local `(0, 0)` texel - its mesh's own local origin, per
+/// [`heightmap_to_mesh`] - keeping the whole grid roughly centered on the world origin regardless
+/// of how many chunks it has.
 fn chunk_translation(chunk: ChunkCoord, grid: &ChunkGrid) -> Vec3 {
     let step = grid.tile_size() as f32 * CELL_SIZE;
-    let half_x = (grid.chunks_x() as f32 - 1.0) * step * 0.5;
-    let half_y = (grid.chunks_y() as f32 - 1.0) * step * 0.5;
-    Vec3::new(chunk.0 as f32 * step - half_x, 0.0, chunk.1 as f32 * step - half_y)
+    let extent_x = grid.chunks_x() as f32 * step;
+    let extent_y = grid.chunks_y() as f32 * step;
+    Vec3::new(chunk.0 as f32 * step - extent_x * 0.5, 0.0, chunk.1 as f32 * step - extent_y * 0.5)
 }
 
-/// Builds `chunk`'s `(tile_size + 2) x (tile_size + 2)` heightmap for [`heightmap_to_mesh`]: its
-/// own `tile_size x tile_size` core data, surrounded by a 1-texel halo sampled from the
-/// corresponding edge of each neighboring chunk. Where a neighbor doesn't exist (the edge of the
-/// whole grid) or hasn't been seen yet, the halo instead clamps to `chunk`'s own edge - the same
-/// behavior a lone, unchunked tile always had.
+/// Builds `chunk`'s `(tile_size + 3) x (tile_size + 3)` heightmap for [`heightmap_to_mesh`]: its
+/// own `tile_size x tile_size` core data, plus every texel `heightmap_to_mesh` needs beyond it -
+/// local coordinates `-1` through `tile_size + 1` per axis - sampled from the corresponding texel
+/// of whichever chunk actually owns it. Where no such chunk exists (the edge of the whole grid) or
+/// it hasn't produced data yet, the value instead clamps to `chunk`'s own edge - the same behavior
+/// a lone, unchunked tile always had.
 fn padded_heightmap(chunk: ChunkCoord, tile_size: usize, chunks: &HashMap<ChunkCoord, ChunkPreview>) -> Vec<f32> {
-    let padded = tile_size + 2;
+    let padded = tile_size + 3;
     let mut out = vec![0.0; padded * padded];
     for pz in 0..padded {
         for px in 0..padded {
@@ -191,9 +192,9 @@ fn padded_heightmap(chunk: ChunkCoord, tile_size: usize, chunks: &HashMap<ChunkC
     out
 }
 
-/// Samples core-tile texel `(lx, lz)` relative to `chunk`'s own origin - `lx`/`lz` may run one
-/// texel past `chunk`'s own `[0, tile_size)` range, in which case the corresponding neighboring
-/// chunk is sampled instead (see [`padded_heightmap`]).
+/// Samples core-tile texel `(lx, lz)` relative to `chunk`'s own origin - `lx`/`lz` may run past
+/// `chunk`'s own `[0, tile_size)` range on either side, in which case the corresponding neighboring
+/// chunk (however many tiles away that takes) is sampled instead (see [`padded_heightmap`]).
 fn sample_across_chunks(
     chunk: ChunkCoord,
     tile_size: usize,
@@ -211,21 +212,17 @@ fn sample_across_chunks(
     // No such chunk (grid edge) or it hasn't produced data yet: fall back to clamping within
     // this chunk's own tile, same as an unchunked tile always did at its own edge.
     let Some(own) = chunks.get(&chunk) else { return 0.0 };
-    let csx = sx.clamp(0, size - 1) as usize;
-    let csz = sz.clamp(0, size - 1) as usize;
+    let csx = lx.clamp(0, size - 1) as usize;
+    let csz = lz.clamp(0, size - 1) as usize;
     own.core_data[csz * tile_size + csx]
 }
 
-/// Splits a core-tile-relative coordinate into which neighboring chunk it falls in (`-1`, `0`, or
-/// `1` chunks away) and the corresponding local coordinate within that chunk's own tile.
+/// Splits a core-tile-relative coordinate into which neighboring chunk it falls in (as a chunk
+/// offset - not just `-1`/`0`/`1`, since a normal at the chunk's extra closing vertex needs to
+/// reach two texels into the positive neighbor) and the corresponding local coordinate within that
+/// chunk's own tile.
 fn locate(l: isize, size: isize) -> (i32, isize) {
-    if l < 0 {
-        (-1, size - 1)
-    } else if l >= size {
-        (1, 0)
-    } else {
-        (0, l)
-    }
+    (l.div_euclid(size) as i32, l.rem_euclid(size))
 }
 
 /// Reuses the existing mesh asset and entity for `chunk` if present, otherwise creates a new one.
