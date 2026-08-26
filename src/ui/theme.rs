@@ -56,6 +56,7 @@ pub mod palette {
     // outline, title, pins and icon.
     pub const CATEGORY_GENERATOR: Color32 = Color32::from_rgb(122, 168, 116);
     pub const CATEGORY_SIMULATION: Color32 = Color32::from_rgb(96, 150, 186);
+    pub const CATEGORY_IO: Color32 = Color32::from_rgb(200, 160, 96);
 
     // Neutral default fill for graph pins before a category color is applied.
     pub const PIN_DEFAULT: Color32 = Color32::from_rgb(120, 120, 120);
@@ -110,7 +111,8 @@ pub mod fonts {
 pub fn category_color(category: NodeCategory) -> egui::Color32 {
     match category {
         NodeCategory::Generator => palette::CATEGORY_GENERATOR,
-        NodeCategory::Simulation => palette::CATEGORY_SIMULATION
+        NodeCategory::Simulation => palette::CATEGORY_SIMULATION,
+        NodeCategory::Io => palette::CATEGORY_IO
     }
 }
 

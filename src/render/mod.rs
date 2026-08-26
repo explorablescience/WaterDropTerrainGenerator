@@ -73,6 +73,10 @@ pub fn update_terrain_preview(
     // Check if the terrain graph has new output tiles
     let mesh = match terrain_graph.write().process(selected_node) {
         Ok(Some((generation, tiles))) => {
+            if tiles.is_empty() {
+                return; // No output tiles available
+            }
+
             terrain_preview.showing_flat_fallback = false;
             let heightmap = &tiles[0]; // For now, just use the first tile for preview (should be heightmap)
             let internal_size = heightmap.size();

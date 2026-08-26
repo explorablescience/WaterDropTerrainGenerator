@@ -33,6 +33,11 @@ features = ["png"]
 [dependencies.inventory]
 version = "0.3"
 
+[dependencies.rfd]
+version = "0.15"
+default-features = false
+features = ["xdg-portal", "async-std"]
+
 [build-dependencies]
 anyhow = "1.0.104"
 fs_extra = "1.3.0"

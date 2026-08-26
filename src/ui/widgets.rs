@@ -199,6 +199,50 @@ pub fn text_field(
     response
 }
 
+/// A full-width, filled button for a stateless `NParamValue::Action` parameter, styled to match
+/// [`slider`]/[`text_field`]: a flat pill with a centered label. `on_click` is invoked once,
+/// synchronously, the moment the button is clicked - the caller supplies whatever data the click
+/// needs to act on (e.g. the node's resolved inputs and other parameters) already baked into the
+/// closure.
+pub fn button(
+    ui: &mut egui::Ui,
+    label: &str,
+    color: egui::Color32,
+    on_click: impl FnOnce()
+) -> egui::Response {
+    let rounding = egui::CornerRadius::same(2);
+    let desired_size = egui::Vec2::new(ui.available_width(), 20.0);
+    let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+
+    if ui.is_rect_visible(rect) {
+        let painter = ui.painter();
+        painter.rect_filled(rect, rounding, BG_CARD);
+
+        let fill = if response.hovered() {
+            color.gamma_multiply(0.5)
+        } else {
+            color.gamma_multiply(0.3)
+        };
+        painter.rect_filled(rect, rounding, fill);
+
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            label,
+            theme::body_font(theme::fonts::FONT_SIZE_BODY),
+            color.gamma_multiply(1.3),
+        );
+    }
+
+    if response.clicked() {
+        on_click();
+    }
+
+    ui.add_space(2.0);
+
+    response
+}
+
 const ENUM_ROW_HEIGHT: f32 = 22.0;
 /// Displays a label and a toggle switch
 pub fn toggle_switch(

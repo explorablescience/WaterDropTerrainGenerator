@@ -2,7 +2,7 @@ use wde::prelude::{ui::egui, *};
 
 use crate::{
     TerrainGraphHolder, core::{
-        graph::GraphNodeId,
+        graph::{GraphNodeId, NodeGraphProcessResult},
         node_parameters::{NParamConstraints, NParamValue},
     }, ui::{theme, widgets},
 };
@@ -162,7 +162,10 @@ fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph
                         let is_full_width = |idx: usize| {
                             matches!(
                                 param_specs[idx].default,
-                                NParamValue::Float(_) | NParamValue::Int(_) | NParamValue::String(_)
+                                NParamValue::Float(_)
+                                    | NParamValue::Int(_)
+                                    | NParamValue::String(_)
+                                    | NParamValue::Action
                             )
                         };
                         if prev_row_drawn {
@@ -279,6 +282,19 @@ fn show_param_row(
             .changed();
             changed.then_some(NParamValue::Enum(v))
         }
+        NParamValue::Action => {
+            let color = {
+                let terrain_graph_read = terrain_graph.read();
+                let node = terrain_graph_read.graph().node(graph_id).unwrap();
+                theme::category_color(node.category())
+            };
+            let terrain_graph = terrain_graph.clone();
+            let key = spec.key;
+            widgets::button(ui, spec.label, color, move || {
+                run_node_action(&terrain_graph, graph_id, key);
+            });
+            None
+        }
     };
 
     ui.end_row();
@@ -294,5 +310,30 @@ fn show_param_row(
                 err
             );
         });
+    }
+}
+
+/// Resolves `graph_id`'s output tiles (running the graph up to it if it's dirty) and hands them
+/// off to `Node::on_action`, so an `NParamValue::Action` button can act on the same data the node
+/// would otherwise pass downstream.
+fn run_node_action(terrain_graph: &TerrainGraphHolder, graph_id: GraphNodeId, key: &str) {
+    let output_size = terrain_graph.read().graph().tile_size();
+
+    let mut terrain_graph = terrain_graph.write();
+    // Best-effort: the action still runs (with an empty `output`) if the node's inputs aren't
+    // fully wired up yet, e.g. so a "browse for a folder" action works before the graph does.
+    let output = match terrain_graph.graph_mut().process(graph_id) {
+        Ok(NodeGraphProcessResult::Processed(_, tiles)) => tiles,
+        Ok(NodeGraphProcessResult::Processing) => Vec::new(),
+        Err(err) => {
+            trace!("Action '{}': node output unavailable ({})", key, err);
+            Vec::new()
+        }
+    };
+
+    let mut node = terrain_graph.graph_mut().node_mut(graph_id).unwrap();
+    let label = node.label().to_string();
+    if let Err(err) = node.on_action(key, &output, output_size) {
+        error!("Action '{}' failed on node {}: {}", key, label, err);
     }
 }

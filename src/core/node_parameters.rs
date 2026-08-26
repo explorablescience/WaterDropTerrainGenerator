@@ -7,7 +7,10 @@ pub enum NParamValue {
     Float(f32),
     Bool(bool),
     String(String),
-    Enum(String)
+    Enum(String),
+    /// A stateless trigger, rendered as a button in the properties panel. It carries no value of
+    /// its own - a click is handled by the UI layer rather than persisted via `Node::set_param`.
+    Action
 }
 impl Hash for NParamValue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -17,7 +20,8 @@ impl Hash for NParamValue {
             NParamValue::Float(v) => v.to_bits().hash(state),
             NParamValue::Bool(v) => v.hash(state),
             NParamValue::String(v) => v.hash(state),
-            NParamValue::Enum(v) => v.hash(state)
+            NParamValue::Enum(v) => v.hash(state),
+            NParamValue::Action => {}
         }
     }
 }

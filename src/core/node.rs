@@ -45,12 +45,25 @@ pub trait Node: Debug + Send + Sync {
         Err("Parameter not found".into())
     }
 
+    /// Called when a button is pressed in the node's UI (that is an `NParamValue::Action`). The `key` identifies which button was pressed.
+    /// The `output` slice contains the node's output tiles, and `output_size` is the size of the output tiles. Returns an error if the action fails.
+    fn on_action(
+        &mut self,
+        _key: &str,
+        _output: &[TileHandle],
+        _output_size: usize
+    ) -> Result<(), String> {
+        Err("Action not supported".into())
+    }
+
     /// Processes the node's inputs and produces its outputs, allocating any new tiles from `pool`.
     fn process(
         &self,
-        pool: &Arc<TilePool>,
-        inputs: &[TileHandle]
-    ) -> Result<Vec<TileHandle>, NodeError>;
+        _pool: &Arc<TilePool>,
+        _inputs: &[TileHandle]
+    ) -> Result<Vec<TileHandle>, NodeError> {
+        Ok(vec![])
+    }
 
     /// Returns a hash representing the current state of the node's parameters, used for caching.
     fn params_hash(&self) -> u64 {
@@ -85,16 +98,19 @@ pub enum NodePortType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeCategory {
     Generator,
-    Simulation
+    Simulation,
+    Io
 }
 impl NodeCategory {
     /// Every category, in the order they should be listed in the "Add Node" menu.
-    pub const ALL: [NodeCategory; 2] = [NodeCategory::Generator, NodeCategory::Simulation];
+    pub const ALL: [NodeCategory; 3] =
+        [NodeCategory::Generator, NodeCategory::Simulation, NodeCategory::Io];
 
     pub fn display_name(&self) -> &'static str {
         match self {
             NodeCategory::Generator => "Generator",
-            NodeCategory::Simulation => "Simulation"
+            NodeCategory::Simulation => "Simulation",
+            NodeCategory::Io => "I/O"
         }
     }
 }

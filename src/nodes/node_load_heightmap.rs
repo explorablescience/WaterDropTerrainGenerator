@@ -1,0 +1,193 @@
+use std::sync::{Arc, OnceLock};
+
+use rfd::FileDialog;
+
+use crate::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
+use crate::core::node_error::NodeError;
+use crate::core::node_parameters::{NParamDesc, NParamValue};
+use crate::core::node_registry::NodeDescriptor;
+use crate::core::tile_allocator::{TileHandle, TilePool};
+
+const ICON: NodeIcon = NodeIcon {
+    id: "node-load",
+    png_bytes: include_bytes!("../../assets/icons/node_load.png"),
+};
+
+/// A heightmap decoded from disk, kept in memory so `process` can resample it at whatever
+/// resolution the graph requests without touching the filesystem again.
+#[derive(Debug, Clone)]
+struct LoadedImage {
+    data: Vec<f32>,
+    width: u32,
+    height: u32,
+}
+
+/// A source node that reads a heightmap PNG from disk and outputs it, resampled to whatever tile
+/// resolution the graph requests - the same way a procedural generator evaluates at any
+/// resolution, rather than being tied to the file's own pixel dimensions.
+#[derive(Debug, Default)]
+pub struct NodeLoadHeightmap {
+    file_path: String,
+    loaded: Option<LoadedImage>,
+}
+impl NodeLoadHeightmap {
+    fn params() -> &'static [NParamDesc] {
+        static SPECS: OnceLock<Vec<NParamDesc>> = OnceLock::new();
+        SPECS.get_or_init(|| {
+            vec![
+                NParamDesc {
+                    key: "file_path",
+                    label: "File Path",
+                    category: "Import",
+                    default: NParamValue::String(String::new()),
+                    constraints: None,
+                },
+                NParamDesc {
+                    key: "browse",
+                    label: "Browse File...",
+                    category: "Import",
+                    default: NParamValue::Action,
+                    constraints: None,
+                },
+                NParamDesc {
+                    key: "load",
+                    label: "Load Heightmap",
+                    category: "Import",
+                    default: NParamValue::Action,
+                    constraints: None,
+                },
+            ]
+        })
+    }
+
+    fn load_from_disk(&mut self) -> Result<(), String> {
+        if self.file_path.trim().is_empty() {
+            return Err("File path is empty".to_string());
+        }
+
+        let image = image::open(&self.file_path)
+            .map_err(|e| format!("Failed to load '{}': {}", self.file_path, e))?
+            .into_luma8();
+        let (width, height) = image.dimensions();
+        let data = image.into_raw().iter().map(|&v| v as f32 / 255.0).collect();
+
+        self.loaded = Some(LoadedImage {
+            data,
+            width,
+            height,
+        });
+        Ok(())
+    }
+
+    /// Bilinearly samples the loaded image at normalized coordinates `u, v` in `[0, 1]`.
+    fn sample(image: &LoadedImage, u: f32, v: f32) -> f32 {
+        let px = |x: u32, y: u32| image.data[(y * image.width + x) as usize];
+
+        let fx = (u * image.width as f32 - 0.5).clamp(0.0, (image.width - 1) as f32);
+        let fy = (v * image.height as f32 - 0.5).clamp(0.0, (image.height - 1) as f32);
+        let x0 = fx as u32;
+        let y0 = fy as u32;
+        let x1 = (x0 + 1).min(image.width - 1);
+        let y1 = (y0 + 1).min(image.height - 1);
+        let tx = fx - x0 as f32;
+        let ty = fy - y0 as f32;
+
+        let top = px(x0, y0) * (1.0 - tx) + px(x1, y0) * tx;
+        let bottom = px(x0, y1) * (1.0 - tx) + px(x1, y1) * tx;
+        top * (1.0 - ty) + bottom * ty
+    }
+}
+impl Node for NodeLoadHeightmap {
+    fn label(&self) -> &str {
+        "Load Heightmap"
+    }
+
+    fn category(&self) -> NodeCategory {
+        NodeCategory::Io
+    }
+    fn icon(&self) -> NodeIcon {
+        ICON
+    }
+
+    fn outputs(&self) -> &[NodeSocket] {
+        &[NodeSocket {
+            name: "Height",
+            dtype: NodePortType::Height,
+            required: true,
+        }]
+    }
+
+    fn desc_params(&self) -> &'static [NParamDesc] {
+        Self::params()
+    }
+    fn get_param(&self, key: &str) -> Option<NParamValue> {
+        match key {
+            "file_path" => Some(NParamValue::String(self.file_path.clone())),
+            "browse" | "load" => Some(NParamValue::Action),
+            _ => None,
+        }
+    }
+    fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), String> {
+        match (key, value) {
+            ("file_path", NParamValue::String(v)) => self.file_path = v,
+            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v)),
+        }
+        Ok(())
+    }
+
+    fn on_action(
+        &mut self,
+        key: &str,
+        _output: &[TileHandle],
+        _output_size: usize,
+    ) -> Result<(), String> {
+        match key {
+            "browse" => {
+                let mut dialog = FileDialog::new().add_filter("PNG heightmap", &["png"]);
+                if let Some(dir) = std::path::Path::new(&self.file_path).parent()
+                    && !dir.as_os_str().is_empty()
+                {
+                    dialog = dialog.set_directory(dir);
+                }
+                if let Some(file) = dialog.pick_file() {
+                    self.file_path = file.display().to_string();
+                }
+                Ok(())
+            }
+            "load" => self.load_from_disk(),
+            _ => Err(format!("Unknown action '{}'", key)),
+        }
+    }
+
+    fn process(
+        &self,
+        pool: &Arc<TilePool>,
+        _inputs: &[TileHandle],
+    ) -> Result<Vec<TileHandle>, NodeError> {
+        let Some(image) = &self.loaded else {
+            return Err(NodeError::ProcessingFailed(
+                "No heightmap loaded - browse to a PNG file and click 'Load Heightmap'".to_string(),
+            ));
+        };
+
+        let mut output = pool.allocate();
+        let s = output.size();
+        for y in 0..s {
+            for x in 0..s {
+                let u = (x as f32 + 0.5) / s as f32;
+                let v = (y as f32 + 0.5) / s as f32;
+                output[y * s + x] = Self::sample(image, u, v);
+            }
+        }
+        Ok(vec![Arc::new(output)])
+    }
+}
+
+inventory::submit! {
+    NodeDescriptor {
+        label: "Load Heightmap",
+        category: NodeCategory::Io,
+        icon: ICON,
+        factory: || Box::new(NodeLoadHeightmap::default())
+    }
+}

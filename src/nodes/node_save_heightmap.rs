@@ -1,0 +1,174 @@
+use std::path::PathBuf;
+use std::sync::OnceLock;
+
+use rfd::FileDialog;
+
+use crate::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
+use crate::core::node_error::NodeError;
+use crate::core::node_parameters::{NParamDesc, NParamValue};
+use crate::core::node_registry::NodeDescriptor;
+use crate::core::tile_allocator::{TileHandle, TilePool};
+
+const ICON: NodeIcon = NodeIcon {
+    id: "node-save",
+    png_bytes: include_bytes!("../../assets/icons/node_save.png"),
+};
+
+/// A sink node that writes its input heightmap to disk as a PNG file. Passes its input through
+/// unchanged as its own output, so it can still sit anywhere in a chain and be inspected in the
+/// preview like any other node.
+#[derive(Debug, Default)]
+pub struct NodeSaveHeightmap {
+    file_path: String,
+}
+impl NodeSaveHeightmap {
+    fn params() -> &'static [NParamDesc] {
+        static SPECS: OnceLock<Vec<NParamDesc>> = OnceLock::new();
+        SPECS.get_or_init(|| {
+            vec![
+                NParamDesc {
+                    key: "file_path",
+                    label: "File Path",
+                    category: "Export",
+                    default: NParamValue::String(String::new()),
+                    constraints: None,
+                },
+                NParamDesc {
+                    key: "browse",
+                    label: "Browse File...",
+                    category: "Export",
+                    default: NParamValue::Action,
+                    constraints: None,
+                },
+                NParamDesc {
+                    key: "save",
+                    label: "Save Heightmap",
+                    category: "Export",
+                    default: NParamValue::Action,
+                    constraints: None,
+                },
+            ]
+        })
+    }
+
+    /// Extracts the centered `target_size x target_size` interior out of the raw tile data,
+    /// matching the render preview's own cropping (see `render::crop_center`), so the saved file
+    /// covers exactly the requested output area and not the internal kernel padding.
+    fn crop_center(data: &[f32], full_size: usize, target_size: usize) -> Vec<f32> {
+        if full_size == target_size {
+            return data.to_vec();
+        }
+        let padding = (full_size - target_size) / 2;
+        let mut cropped = Vec::with_capacity(target_size * target_size);
+        for z in 0..target_size {
+            let row_start = (z + padding) * full_size + padding;
+            cropped.extend_from_slice(&data[row_start..row_start + target_size]);
+        }
+        cropped
+    }
+
+    fn save_to_disk(&self, output: &[TileHandle], output_size: usize) -> Result<(), String> {
+        let Some(heightmap) = output.first() else {
+            return Err("No heightmap available to save".to_string());
+        };
+        if self.file_path.trim().is_empty() {
+            return Err("File path is empty".to_string());
+        }
+
+        let internal_size = heightmap.size();
+        let data = Self::crop_center(heightmap, internal_size, output_size);
+
+        let mut path = PathBuf::from(&self.file_path);
+        path.set_extension("png");
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir)
+                .map_err(|e| format!("Failed to create directory '{}': {}", dir.display(), e))?;
+        }
+
+        let mut img = image::GrayImage::new(output_size as u32, output_size as u32);
+        for (pixel, &value) in img.pixels_mut().zip(data.iter()) {
+            pixel.0 = [(value.clamp(0.0, 1.0) * 255.0).round() as u8];
+        }
+        img.save(&path)
+            .map_err(|e| format!("Failed to save '{}': {}", path.display(), e))
+    }
+}
+impl Node for NodeSaveHeightmap {
+    fn label(&self) -> &str {
+        "Save Heightmap"
+    }
+
+    fn category(&self) -> NodeCategory {
+        NodeCategory::Io
+    }
+    fn icon(&self) -> NodeIcon {
+        ICON
+    }
+
+    fn inputs(&self) -> &[NodeSocket] {
+        &[NodeSocket {
+            name: "Height",
+            dtype: NodePortType::Height,
+            required: true,
+        }]
+    }
+
+    fn desc_params(&self) -> &'static [NParamDesc] {
+        Self::params()
+    }
+    fn get_param(&self, key: &str) -> Option<NParamValue> {
+        match key {
+            "file_path" => Some(NParamValue::String(self.file_path.clone())),
+            "browse" | "save" => Some(NParamValue::Action),
+            _ => None,
+        }
+    }
+    fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), String> {
+        match (key, value) {
+            ("file_path", NParamValue::String(v)) => self.file_path = v,
+            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v)),
+        }
+        Ok(())
+    }
+
+    fn process(
+        &self,
+        _pool: &std::sync::Arc<TilePool>,
+        inputs: &[TileHandle],
+    ) -> Result<Vec<TileHandle>, NodeError> {
+        Ok(inputs.to_vec())
+    }
+
+    fn on_action(
+        &mut self,
+        key: &str,
+        output: &[TileHandle],
+        output_size: usize,
+    ) -> Result<(), String> {
+        match key {
+            "browse" => {
+                let mut dialog = FileDialog::new().add_filter("PNG heightmap", &["png"]);
+                if let Some(dir) = std::path::Path::new(&self.file_path).parent()
+                    && !dir.as_os_str().is_empty()
+                {
+                    dialog = dialog.set_directory(dir);
+                }
+                if let Some(file) = dialog.save_file() {
+                    self.file_path = file.display().to_string();
+                }
+                Ok(())
+            }
+            "save" => self.save_to_disk(output, output_size),
+            _ => Err(format!("Unknown action '{}'", key)),
+        }
+    }
+}
+
+inventory::submit! {
+    NodeDescriptor {
+        label: "Save Heightmap",
+        category: NodeCategory::Io,
+        icon: ICON,
+        factory: || Box::new(NodeSaveHeightmap::default())
+    }
+}
