@@ -76,7 +76,7 @@ pub fn draw_properties(
 
 /// Represents the range of values that a parameter can take, used for rendering appropriate UI controls.
 /// Float/Int parameters read their range straight from `NParamDesc::constraints` inside
-/// [`widgets::param_number_field`] instead, since that widget takes the descriptor directly.
+/// [`widgets::slider`] instead, since that widget takes the descriptor directly.
 enum ParamRange {
     StringMaxLength(usize),
     EnumOneOf(Vec<String>),
@@ -137,7 +137,7 @@ fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph
 
         egui::Frame::new()
             .fill(theme::palette::BG_WIDGET)
-            .inner_margin(egui::Margin::symmetric(12, 10))
+            .inner_margin(egui::Margin { left: 0, right: 20, top: 6, bottom: 6 })
             .corner_radius(egui::CornerRadius::same(theme::layout::CARD_ROUNDING))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
@@ -151,15 +151,44 @@ fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph
                 .default_open(true)
                 .show(ui, |ui| {
                     ui.add_space(2.0);
-                    egui::Grid::new(("param-grid", graph_id, *category))
-                        .num_columns(2)
-                        .spacing([10.0, 8.0])
-                        .striped(false)
-                        .show(ui, |ui| {
-                            for &i in indices {
-                                show_param_row(ui, terrain_graph, graph_id, &param_specs[i]);
+
+                    let mut grid_run = 0usize;
+                    let mut prev_row_drawn = false;
+                    let mut i = 0;
+                    while i < indices.len() {
+                        // Float/Int sliders and String fields paint their own full-width pill
+                        // (see `widgets::slider` / `widgets::text_field`), so they get their own
+                        // row instead of sharing the label|control grid with Bool/Enum.
+                        let is_full_width = |idx: usize| {
+                            matches!(
+                                param_specs[idx].default,
+                                NParamValue::Float(_) | NParamValue::Int(_) | NParamValue::String(_)
+                            )
+                        };
+                        if prev_row_drawn {
+                            ui.add_space(8.0);
+                        }
+                        if is_full_width(indices[i]) {
+                            show_param_row(ui, terrain_graph, graph_id, &param_specs[indices[i]]);
+                            i += 1;
+                        } else {
+                            let start = i;
+                            while i < indices.len() && !is_full_width(indices[i]) {
+                                i += 1;
                             }
-                        });
+                            egui::Grid::new(("param-grid", graph_id, *category, grid_run))
+                                .num_columns(2)
+                                .spacing([10.0, 8.0])
+                                .striped(false)
+                                .show(ui, |ui| {
+                                    for &j in &indices[start..i] {
+                                        show_param_row(ui, terrain_graph, graph_id, &param_specs[j]);
+                                    }
+                                });
+                            grid_run += 1;
+                        }
+                        prev_row_drawn = true;
+                    }
                 });
             });
     }
@@ -181,8 +210,6 @@ fn show_param_row(
         .get_param(spec.key)
         .unwrap_or_else(|| spec.default.clone());
 
-    ui.label(egui::RichText::new(spec.label).color(theme::palette::TEXT_MUTED));
-
     let new_value = match current {
         NParamValue::Float(mut v) => {
             let terrain_graph_read = terrain_graph.read();
@@ -193,7 +220,7 @@ fn show_param_row(
                 .find(|d| d.key == spec.key)
                 .unwrap();
             let color = theme::category_color(node.category());
-            let changed = widgets::param_number_field(ui, desc, color, &mut v).changed();
+            let changed = widgets::slider(ui, desc, color, &mut v).changed();
             changed.then_some(NParamValue::Float(v))
         }
         NParamValue::Int(v) => {
@@ -206,51 +233,50 @@ fn show_param_row(
                 .unwrap();
             let color = theme::category_color(node.category());
             let mut v_float = v as f32;
-            let changed = widgets::param_number_field(ui, desc, color, &mut v_float).changed();
+            let changed = widgets::slider(ui, desc, color, &mut v_float).changed();
             changed.then_some(NParamValue::Int(v_float.round() as i32))
         }
         NParamValue::Bool(mut v) => {
-            let changed = widgets::toggle_switch(ui, &mut v).changed();
+            let color = {
+                let terrain_graph_read = terrain_graph.read();
+                let node = terrain_graph_read.graph().node(graph_id).unwrap();
+                theme::category_color(node.category())
+            };
+            let changed = widgets::toggle_switch(ui, spec.label, color, &mut v).changed();
             changed.then_some(NParamValue::Bool(v))
         }
         NParamValue::String(mut v) => {
-            let mut edit = TextEdit::singleline(&mut v);
-            if let ParamRange::StringMaxLength(max_length) = spec.range {
-                edit = edit.char_limit(max_length);
-            }
-            let changed = ui.add(edit).changed();
+            let color = {
+                let terrain_graph_read = terrain_graph.read();
+                let node = terrain_graph_read.graph().node(graph_id).unwrap();
+                theme::category_color(node.category())
+            };
+            let char_limit = match spec.range {
+                ParamRange::StringMaxLength(max_length) => Some(max_length),
+                _ => None,
+            };
+            let changed = widgets::text_field(ui, spec.label, color, &mut v, char_limit).changed();
             changed.then_some(NParamValue::String(v))
         }
         NParamValue::Enum(mut v) => {
+            let color = {
+                let terrain_graph_read = terrain_graph.read();
+                let node = terrain_graph_read.graph().node(graph_id).unwrap();
+                theme::category_color(node.category())
+            };
             let options = match &spec.range {
                 ParamRange::EnumOneOf(options) => options.clone(),
                 _ => Vec::new(),
             };
-            let mut changed = false;
-            if !options.is_empty() && options.len() <= 3 {
-                ui.horizontal(|ui| {
-                    for option in &options {
-                        let selected = *option == v;
-                        if ui.selectable_label(selected, option).clicked() && !selected {
-                            v = option.clone();
-                            changed = true;
-                        }
-                    }
-                });
-            } else {
-                ComboBox::from_id_salt((graph_id, spec.key))
-                    .selected_text(v.clone())
-                    .show_ui(ui, |ui| {
-                        for option in options {
-                            if ui
-                                .selectable_value(&mut v, option.clone(), option)
-                                .clicked()
-                            {
-                                changed = true;
-                            }
-                        }
-                    });
-            }
+            let changed = widgets::enum_selector(
+                ui,
+                (graph_id, spec.key),
+                spec.label,
+                color,
+                &options,
+                &mut v,
+            )
+            .changed();
             changed.then_some(NParamValue::Enum(v))
         }
     };

@@ -24,6 +24,9 @@ pub mod palette {
     pub const BG_WIDGET_ACTIVE: Color32 = Color32::from_rgb(80, 80, 80);
     pub const BG_WIDGET_OPEN: Color32 = BG_EXTREME;
     pub const BG_GRAPH: Color32 = BG_PANEL;
+    /// Shared track color painted behind every segment of a compact enum selector, so the whole
+    /// control reads as one piece rather than a row of separate buttons.
+    pub const BG_MAIN_COLOR: Color32 = BG_CARD;
 
     // Borders / separators
     pub const BORDER: Color32 = BG_WIDGET_HOVERED;
@@ -109,6 +112,11 @@ pub fn category_color(category: NodeCategory) -> egui::Color32 {
         NodeCategory::Generator => palette::CATEGORY_GENERATOR,
         NodeCategory::Simulation => palette::CATEGORY_SIMULATION
     }
+}
+
+/// Font used for the editor's main body text, labels, and buttons.
+pub fn body_font(size: f32) -> egui::FontId {
+    egui::FontId::new(size, egui::FontFamily::Proportional)
 }
 
 /// Font used for pane headers and other emphasized labels.
