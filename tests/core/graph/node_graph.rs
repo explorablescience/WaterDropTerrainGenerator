@@ -1,4 +1,5 @@
 use waterdrop_terrain_editor::core::graph::{NodeGraph, NodeGraphProcessResult};
+use waterdrop_terrain_editor::core::node_parameters::NParamValue;
 use waterdrop_terrain_editor::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
 
 #[test]
@@ -147,4 +148,82 @@ fn test_node_graph_process_grows_internal_tile_size_for_padding() {
         outputs[0].len(),
         expected_internal_tile_size * expected_internal_tile_size
     );
+}
+
+#[test]
+fn node_mut_lets_callers_mutate_a_node_in_place() {
+    let mut graph = NodeGraph::new(4);
+    let id = graph.add_node(Box::new(NodeErosion::default()));
+    graph
+        .node_mut(id)
+        .unwrap()
+        .set_param("strength", NParamValue::Float(0.1))
+        .unwrap();
+
+    assert_eq!(graph.node(id).unwrap().get_param("strength"), Some(NParamValue::Float(0.1)));
+}
+
+#[test]
+fn node_mut_on_an_unknown_id_fails_without_mutating_anything() {
+    let mut graph = NodeGraph::new(4);
+    let id = graph.add_node(Box::new(NodeGeneratorFlat));
+    graph.remove_node(id).unwrap();
+    assert!(graph.node_mut(id).is_err());
+}
+
+#[test]
+fn mutating_a_node_invalidates_its_own_and_downstream_cached_output() {
+    let mut graph = NodeGraph::new(8);
+    let source = graph.add_node(Box::new(NodeGeneratorPerlin::default()));
+    let sink = graph.add_node(Box::new(NodeErosion::default()));
+    graph.connect(source, 0, sink, 0).unwrap();
+
+    let first = match graph.process(sink).unwrap() {
+        NodeGraphProcessResult::Processed(g, _) => g,
+        _ => panic!("expected the graph to finish processing")
+    };
+
+    // Re-processing without any change should serve the cached result: the reported
+    // generation must not have advanced.
+    let cached = match graph.process(sink).unwrap() {
+        NodeGraphProcessResult::Processed(g, _) => g,
+        _ => panic!("expected the graph to finish processing")
+    };
+    assert_eq!(first, cached, "an unchanged graph should be served from cache");
+
+    // Changing the source's parameter should force both it and its downstream consumer to
+    // recompute, advancing the generation counter. This also covers a source that has since
+    // been evicted from cache (its output no longer needed once its consumer was itself
+    // cached): eviction leaves the source `Dirty` too, so invalidation can't just skip a node
+    // for already being `Dirty` - it must still propagate to that node's own downstream.
+    graph
+        .node_mut(source)
+        .unwrap()
+        .set_param("frequency", NParamValue::Float(5.0))
+        .unwrap();
+    let after_change = match graph.process(sink).unwrap() {
+        NodeGraphProcessResult::Processed(g, _) => g,
+        _ => panic!("expected the graph to finish processing")
+    };
+    assert!(after_change > cached, "changing an upstream parameter should force recomputation");
+}
+
+#[test]
+fn tile_size_reports_the_size_the_graph_was_created_with() {
+    let graph = NodeGraph::new(16);
+    assert_eq!(graph.tile_size(), 16);
+}
+
+#[test]
+fn is_processing_is_false_before_anything_has_been_computed() {
+    let graph = NodeGraph::new(4);
+    assert!(!graph.is_processing());
+}
+
+#[test]
+fn is_processing_is_true_immediately_after_a_node_is_computed() {
+    let mut graph = NodeGraph::new(4);
+    let id = graph.add_node(Box::new(NodeGeneratorFlat));
+    graph.process(id).expect("processing should succeed");
+    assert!(graph.is_processing());
 }
