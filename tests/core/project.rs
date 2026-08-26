@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use waterdrop_terrain_editor::core::graph::NodeGraph;
-use waterdrop_terrain_editor::core::node_parameters::NParamValue;
-use waterdrop_terrain_editor::core::node_registry;
-use waterdrop_terrain_editor::core::project::{load_project, save_project};
-use waterdrop_terrain_editor::nodes::{NodeErosion, NodeGeneratorPerlin};
+use waterdrop_terrain_generator::core::graph::NodeGraph;
+use waterdrop_terrain_generator::core::node_parameters::NParamValue;
+use waterdrop_terrain_generator::core::node_registry;
+use waterdrop_terrain_generator::core::project::{load_project, save_project};
+use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorPerlin};
 
 /// A path in the system temp dir unique to this test process/run, so parallel test runs never
 /// collide on the same file. Removed by the caller once the test is done with it.

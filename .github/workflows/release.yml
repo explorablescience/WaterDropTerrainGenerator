@@ -38,13 +38,13 @@ jobs:
       - name: Package binary
         run: |
           mkdir -p dist
-          cp target/x86_64-unknown-linux-gnu/release/waterdropengine dist/
+          cp target/x86_64-unknown-linux-gnu/release/waterdrop-terrain-generator dist/
           cp -a res dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: waterdropengine-linux
+          name: waterdrop-terrain-generator-linux
           path: dist/**
           if-no-files-found: error
 
@@ -70,12 +70,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item target/x86_64-pc-windows-msvc/release/waterdropengine.exe dist/
+          Copy-Item target/x86_64-pc-windows-msvc/release/waterdrop-terrain-generator.exe dist/
           Copy-Item -Recurse -Force res dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: waterdropengine-windows
+          name: waterdrop-terrain-generator-windows
           path: dist/**
           if-no-files-found: error

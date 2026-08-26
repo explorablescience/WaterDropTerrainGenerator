@@ -1,6 +1,6 @@
-use waterdrop_terrain_editor::core::graph::{NodeGraph, NodeGraphProcessResult};
-use waterdrop_terrain_editor::core::node_parameters::NParamValue;
-use waterdrop_terrain_editor::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
+use waterdrop_terrain_generator::core::graph::{NodeGraph, NodeGraphProcessResult};
+use waterdrop_terrain_generator::core::node_parameters::NParamValue;
+use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
 
 #[test]
 fn test_node_graph_connections() {

@@ -1,4 +1,4 @@
-//! Library crate for the terrain editor.
+//! Library crate for the terrain generator.
 
 use std::sync::{Arc, RwLock};
 

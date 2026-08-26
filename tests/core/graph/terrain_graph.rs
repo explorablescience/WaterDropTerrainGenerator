@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use waterdrop_terrain_editor::core::node_error::NodeError;
-use waterdrop_terrain_editor::core::node_message::NodeMessageSeverity;
-use waterdrop_terrain_editor::core::node_parameters::NParamValue;
-use waterdrop_terrain_editor::nodes::{NodeErosion, NodeGeneratorFlat};
-use waterdrop_terrain_editor::{TerrainGraph, TerrainGraphHolder};
+use waterdrop_terrain_generator::core::node_error::NodeError;
+use waterdrop_terrain_generator::core::node_message::NodeMessageSeverity;
+use waterdrop_terrain_generator::core::node_parameters::NParamValue;
+use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorFlat};
+use waterdrop_terrain_generator::{TerrainGraph, TerrainGraphHolder};
 
 #[test]
 fn default_terrain_graph_has_no_selection_and_no_messages() {
@@ -15,7 +15,7 @@ fn default_terrain_graph_has_no_selection_and_no_messages() {
 #[test]
 fn action_result_ok_shows_as_an_info_message_that_can_be_cleared() {
     let mut terrain = TerrainGraph::default();
-    let mut graph = waterdrop_terrain_editor::core::graph::NodeGraph::new(4);
+    let mut graph = waterdrop_terrain_generator::core::graph::NodeGraph::new(4);
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
 
     terrain.set_action_result(id, Ok("Saved!".to_string()));
@@ -30,7 +30,7 @@ fn action_result_ok_shows_as_an_info_message_that_can_be_cleared() {
 #[test]
 fn action_result_err_shows_with_the_errors_own_severity() {
     let mut terrain = TerrainGraph::default();
-    let mut graph = waterdrop_terrain_editor::core::graph::NodeGraph::new(4);
+    let mut graph = waterdrop_terrain_generator::core::graph::NodeGraph::new(4);
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
 
     terrain.set_action_result(id, Err(NodeError::ProcessingFailed("disk full".to_string())));
@@ -42,7 +42,7 @@ fn action_result_err_shows_with_the_errors_own_severity() {
 #[test]
 fn a_persistent_error_message_never_expires_on_its_own() {
     let mut terrain = TerrainGraph::default();
-    let mut graph = waterdrop_terrain_editor::core::graph::NodeGraph::new(4);
+    let mut graph = waterdrop_terrain_generator::core::graph::NodeGraph::new(4);
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
 
     terrain.set_action_result(id, Err(NodeError::ProcessingFailed("boom".to_string())));
@@ -54,7 +54,7 @@ fn a_persistent_error_message_never_expires_on_its_own() {
 #[test]
 fn setting_a_new_action_result_replaces_whatever_was_shown_before() {
     let mut terrain = TerrainGraph::default();
-    let mut graph = waterdrop_terrain_editor::core::graph::NodeGraph::new(4);
+    let mut graph = waterdrop_terrain_generator::core::graph::NodeGraph::new(4);
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
 
     terrain.set_action_result(id, Err(NodeError::ProcessingFailed("first failure".to_string())));
@@ -121,7 +121,7 @@ fn terrain_graph_holder_allows_shared_read_and_exclusive_write_access() {
 #[test]
 fn timed_action_message_expires_and_is_pruned() {
     let mut terrain = TerrainGraph::default();
-    let mut graph = waterdrop_terrain_editor::core::graph::NodeGraph::new(4);
+    let mut graph = waterdrop_terrain_generator::core::graph::NodeGraph::new(4);
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
 
     terrain.set_action_result(id, Ok("Saved!".to_string()));

@@ -8,13 +8,13 @@
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=waterdrop-terrain-editor",
-                    "--package=waterdrop-terrain-editor",
+                    "--bin=waterdrop-terrain-generator",
+                    "--package=waterdrop-terrain-generator",
                     "--target-dir=target",
                     "--features=debug,watch,tracing"
                 ],
                 "filter": {
-                    "name": "waterdrop-terrain-editor",
+                    "name": "waterdrop-terrain-generator",
                     "kind": "bin"
                 }
             },
@@ -31,13 +31,13 @@
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=waterdrop-terrain-editor",
-                    "--package=waterdrop-terrain-editor",
+                    "--bin=waterdrop-terrain-generator",
+                    "--package=waterdrop-terrain-generator",
                     "--target-dir=target",
                     "--features=log-debug,debug,watch"
                 ],
                 "filter": {
-                    "name": "waterdrop-terrain-editor",
+                    "name": "waterdrop-terrain-generator",
                     "kind": "bin"
                 }
             },
@@ -55,13 +55,13 @@
                 "args": [
                     "build",
                     "--release",
-                    "--bin=waterdrop-terrain-editor",
-                    "--package=waterdrop-terrain-editor",
+                    "--bin=waterdrop-terrain-generator",
+                    "--package=waterdrop-terrain-generator",
                     "--target-dir=target",
                     "--features=log-debug"
                 ],
                 "filter": {
-                    "name": "waterdrop-terrain-editor",
+                    "name": "waterdrop-terrain-generator",
                     "kind": "bin"
                 }
             },

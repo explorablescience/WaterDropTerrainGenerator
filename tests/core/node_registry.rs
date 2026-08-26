@@ -1,4 +1,4 @@
-use waterdrop_terrain_editor::core::node_registry;
+use waterdrop_terrain_generator::core::node_registry;
 
 #[test]
 fn every_expected_node_type_is_registered() {

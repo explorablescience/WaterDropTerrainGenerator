@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use waterdrop_terrain_editor::{DEBUG_MODE, TerrainGraphHolder, render, ui};
+use waterdrop_terrain_generator::{DEBUG_MODE, TerrainGraphHolder, render, ui};
 use wde::{CustomBevyPlugins, prelude::*};
 
 /// Custom WaterDropEngine plugins.
@@ -15,13 +15,13 @@ impl Plugin for CustomWdePlugins {
             wde::wde_logger::LogPlugin {
                 level: wde::wde_logger::LogLevel::INFO,
                 log_file: std::env::temp_dir()
-                    .join("waterdrop-terrain-editor")
+                    .join("waterdrop-terrain-generator")
                     .join("log.txt"),
                 ..default()
             }
-            .with_crate_level("waterdrop_terrain_editor", wde::wde_logger::LogLevel::DEBUG),
+            .with_crate_level("waterdrop_terrain_generator", wde::wde_logger::LogLevel::DEBUG),
             wde::wde_renderer::RenderPlugin {
-                window_title: "WaterDrop Terrain Editor".into(),
+                window_title: "WaterDrop Terrain Generator".into(),
                 window_resolution: (1600, 900),
                 // Drop a PNG at assets/icon.png to have it picked up as the taskbar/title bar icon.
                 window_icon: std::fs::read("assets/icon.png")

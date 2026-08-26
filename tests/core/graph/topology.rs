@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use waterdrop_terrain_editor::core::graph::{NodeGraph, NodeGraphProcessResult};
-use waterdrop_terrain_editor::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
-use waterdrop_terrain_editor::core::node_error::NodeError;
-use waterdrop_terrain_editor::core::tile_allocator::{TileHandle, TilePool};
-use waterdrop_terrain_editor::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
+use waterdrop_terrain_generator::core::graph::{NodeGraph, NodeGraphProcessResult};
+use waterdrop_terrain_generator::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
+use waterdrop_terrain_generator::core::node_error::NodeError;
+use waterdrop_terrain_generator::core::tile_allocator::{TileHandle, TilePool};
+use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
 
 const TEST_ICON: NodeIcon = NodeIcon { id: "test-icon", png_bytes: &[] };
 

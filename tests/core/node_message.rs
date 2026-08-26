@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use waterdrop_terrain_editor::core::node_message::{MessageLifetime, NodeMessage, NodeMessageSeverity, TimedNodeMessage};
+use waterdrop_terrain_generator::core::node_message::{MessageLifetime, NodeMessage, NodeMessageSeverity, TimedNodeMessage};
 
 #[test]
 fn constructors_set_the_expected_severity() {
