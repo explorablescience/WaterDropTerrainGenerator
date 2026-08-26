@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use waterdrop_terrain_editor::{TerrainGraphHolder, render, ui};
+use waterdrop_terrain_editor::{DEBUG_MODE, TerrainGraphHolder, render, ui};
 use wde::{CustomBevyPlugins, prelude::*};
 
 /// Custom WaterDropEngine plugins.
@@ -7,6 +7,10 @@ use wde::{CustomBevyPlugins, prelude::*};
 struct CustomWdePlugins;
 impl Plugin for CustomWdePlugins {
     fn build(&self, app: &mut App) {
+        // Must be inserted before `wde::wde_editor::EditorPlugin` and friends, which only fill
+        // in the default (enabled) via `init_resource` if it isn't already set.
+        app.insert_resource(EngineUiConfig { enabled: DEBUG_MODE });
+
         app.add_plugins((
             wde::wde_logger::LogPlugin {
                 level: wde::wde_logger::LogLevel::INFO,
