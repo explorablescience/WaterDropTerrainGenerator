@@ -3,8 +3,8 @@ use wde::prelude::*;
 
 use crate::render::{CELL_SIZE, HEIGHT_SCALE};
 
-/// Builds a grid [`Mesh`] of `size x size`
-pub fn heightmap_to_mesh(label: &str, heightmap: &[f32], size: usize) -> Mesh {
+/// Builds a grid [`Mesh`] of `size x size` quads - `(size + 1) x (size + 1)` vertices
+pub fn heightmap_to_mesh(label: &str, heightmap: &[f32], size: usize, world_offset: Vec3) -> Mesh {
     let padded = size + 3;
     let sample = |x: isize, z: isize| -> f32 {
         let x = (x + 1).clamp(0, padded as isize - 1) as usize;
@@ -19,7 +19,7 @@ pub fn heightmap_to_mesh(label: &str, heightmap: &[f32], size: usize) -> Mesh {
     for z in 0..verts {
         for x in 0..verts {
             let height = sample(x as isize, z as isize) * HEIGHT_SCALE;
-            let position = Vec3::new(x as f32 * CELL_SIZE, height, z as f32 * CELL_SIZE);
+            let position = world_offset + Vec3::new(x as f32 * CELL_SIZE, height, z as f32 * CELL_SIZE);
 
             // Central-difference slope estimate, used as a smooth per-vertex normal.
             let dx = (sample(x as isize + 1, z as isize) - sample(x as isize - 1, z as isize))
@@ -56,6 +56,6 @@ pub fn heightmap_to_mesh(label: &str, heightmap: &[f32], size: usize) -> Mesh {
         vertices,
         indices,
         bbox: MeshBbox { min, max },
-        use_ssbo: true
+        use_ssbo: false
     }
 }

@@ -10,10 +10,15 @@ use crate::{
         node_error::NodeError::InputNotConnected,
         tile_allocator::crop_center
     },
-    render::mesh_generation::heightmap_to_mesh
+    render::{
+        mesh_generation::heightmap_to_mesh, terrain_preview_pipeline::TerrainPreviewRenderPipeline,
+        terrain_preview_subpass::{SubRenderPassTerrainPreview, TerrainPreviewMeshes}
+    }
 };
 
 mod mesh_generation;
+mod terrain_preview_pipeline;
+mod terrain_preview_subpass;
 
 /// World-space distance between adjacent heightmap samples.
 const CELL_SIZE: f32 = 0.1;
@@ -26,25 +31,32 @@ impl Plugin for RenderPlugin {
         app.init_resource::<TerrainPreview>()
             .add_systems(Startup, create_material)
             .add_systems(Update, update_terrain_preview);
+
+        // Terrain-preview chunk meshes subpass
+        app.add_plugins(RenderPipelineRegisterPlugin::<TerrainPreviewRenderPipeline>::default());
+
+        // Extract the terrain-preview meshes from the main world into the render world every frame
+        app.init_resource::<TerrainPreviewMeshes>();
+        app.get_sub_app_mut(RenderApp)
+            .unwrap()
+            .init_resource::<TerrainPreviewMeshes>()
+            .add_systems(Extract, SubRenderPassTerrainPreview::extract);
+
+        app.get_sub_app_mut(RenderApp)
+            .unwrap()
+            .world_mut()
+            .get_resource_mut::<RenderGraph>()
+            .unwrap()
+            .add_sub_pass::<SubRenderPassTerrainPreview, RenderPassDeferredGBuffer>();
     }
 }
 
-/// The mesh entity backing one chunk's preview, once it's been spawned.
-#[derive(Clone)]
-struct ChunkRender {
-    entity: Entity,
-    mesh_handle: Handle<Mesh>
-}
-
-/// Render state for one chunk: its latest core (non-halo) heightmap data, kept around so a
-/// neighboring chunk can borrow it to compute seamless edge normals even on a frame where this
-/// chunk itself didn't change, plus the mesh entity once one exists.
+/// Render state for one chunk
 struct ChunkPreview {
     core_data: Vec<f32>,
-    /// Whether `core_data` is the flat fallback shown when this chunk's node can't be evaluated,
-    /// rather than real terrain data.
+    /// Whether `core_data` is the flat fallback shown when this chunk's node can't be evaluated
     is_flat: bool,
-    render: Option<ChunkRender>
+    mesh_handle: Option<Handle<Mesh>>
 }
 
 #[derive(Resource, Default)]
@@ -53,7 +65,7 @@ pub struct TerrainPreview {
     material_handle: Option<Handle<PbrMaterial>>
 }
 
-pub fn create_material(
+pub(crate) fn create_material(
     asset_server: Res<AssetServer>,
     mut terrain_preview: ResMut<TerrainPreview>
 ) {
@@ -64,10 +76,10 @@ pub fn create_material(
     }));
 }
 
-pub fn update_terrain_preview(
-    mut commands: Commands,
+pub(crate) fn update_terrain_preview(
     mut meshes: ResMut<Assets<Mesh>>,
     mut terrain_preview: ResMut<TerrainPreview>,
+    mut terrain_preview_meshes: ResMut<TerrainPreviewMeshes>,
     terrain_graph: Res<TerrainGraphHolder>
 ) {
     // Get selected node from terrain graph
@@ -78,9 +90,6 @@ pub fn update_terrain_preview(
 
     let chunk_grid = *terrain_graph.read().graph().chunk_grid();
     let tile_size = chunk_grid.tile_size();
-    // A newly selected node forces every one of its chunks to redraw once, even a chunk whose
-    // cached generation hasn't advanced (e.g. reselecting a node computed before the selection
-    // moved away from it).
     let force = terrain_graph.write().note_selection(selected_node);
 
     let material_handle = match &terrain_preview.material_handle {
@@ -88,9 +97,7 @@ pub fn update_terrain_preview(
         None => return // Material not created yet
     };
 
-    // Pass 1: fetch each chunk's core heightmap data. Kept separate from meshing (pass 2) so a
-    // chunk whose data just changed can read its neighbors' *current* data for normal estimation,
-    // regardless of which order chunks are visited in.
+    // Pass 1
     let mut live_chunks = HashSet::new();
     let mut changed_chunks = HashSet::new();
     for chunk in chunk_grid.coords() {
@@ -128,23 +135,24 @@ pub fn update_terrain_preview(
         }
     }
 
-    // Pass 2: (re)build the mesh for every chunk whose data changed this frame.
+    // Pass 2
     for chunk in &changed_chunks {
         let padded = padded_heightmap(*chunk, tile_size, &terrain_preview.chunks);
-        let mesh = heightmap_to_mesh(&format!("terrain-preview-{}-{}", chunk.0, chunk.1), &padded, tile_size);
-        let translation = chunk_translation(*chunk, &chunk_grid);
-        upsert_chunk_mesh(&mut commands, &mut meshes, &mut terrain_preview, &material_handle, *chunk, mesh, translation);
+        let world_offset = chunk_origin(*chunk, &chunk_grid);
+        let mesh = heightmap_to_mesh(&format!("terrain-preview-{}-{}", chunk.0, chunk.1), &padded, tile_size, world_offset);
+        upsert_chunk_mesh(&mut meshes, &mut terrain_preview, *chunk, mesh);
     }
 
-    // Chunks that used to exist (e.g. before the chunk grid shrank) but aren't part of the grid
-    // anymore: their preview entities would otherwise be left floating in the scene forever.
-    terrain_preview.chunks.retain(|chunk, preview| {
-        let keep = live_chunks.contains(chunk);
-        if !keep && let Some(render) = &preview.render {
-            commands.entity(render.entity).despawn();
-        }
-        keep
-    });
+    // Drop any chunks that are no longer in the grid
+    terrain_preview.chunks.retain(|chunk, _| live_chunks.contains(chunk));
+
+    // Publish this frame's chunk meshes to our terrain-preview render subpass.
+    terrain_preview_meshes.meshes = terrain_preview
+        .chunks
+        .values()
+        .filter_map(|c| c.mesh_handle.clone())
+        .collect();
+    terrain_preview_meshes.material = Some(material_handle);
 }
 
 /// Stores `data` as `chunk`'s current core heightmap, creating its preview entry if this is the
@@ -158,27 +166,20 @@ fn set_chunk_data(terrain_preview: &mut TerrainPreview, chunk: ChunkCoord, data:
         None => {
             terrain_preview
                 .chunks
-                .insert(chunk, ChunkPreview { core_data: data, is_flat, render: None });
+                .insert(chunk, ChunkPreview { core_data: data, is_flat, mesh_handle: None });
         }
     }
 }
 
-/// World-space position of `chunk`'s local `(0, 0)` texel - its mesh's own local origin, per
-/// [`heightmap_to_mesh`] - keeping the whole grid roughly centered on the world origin regardless
-/// of how many chunks it has.
-fn chunk_translation(chunk: ChunkCoord, grid: &ChunkGrid) -> Vec3 {
+/// World-space position of `chunk`'s local `(0, 0)` texel
+fn chunk_origin(chunk: ChunkCoord, grid: &ChunkGrid) -> Vec3 {
     let step = grid.tile_size() as f32 * CELL_SIZE;
     let extent_x = grid.chunks_x() as f32 * step;
     let extent_y = grid.chunks_y() as f32 * step;
     Vec3::new(chunk.0 as f32 * step - extent_x * 0.5, 0.0, chunk.1 as f32 * step - extent_y * 0.5)
 }
 
-/// Builds `chunk`'s `(tile_size + 3) x (tile_size + 3)` heightmap for [`heightmap_to_mesh`]: its
-/// own `tile_size x tile_size` core data, plus every texel `heightmap_to_mesh` needs beyond it -
-/// local coordinates `-1` through `tile_size + 1` per axis - sampled from the corresponding texel
-/// of whichever chunk actually owns it. Where no such chunk exists (the edge of the whole grid) or
-/// it hasn't produced data yet, the value instead clamps to `chunk`'s own edge - the same behavior
-/// a lone, unchunked tile always had.
+/// Builds `chunk`'s `(tile_size + 3) x (tile_size + 3)` heightmap for [`heightmap_to_mesh`]
 fn padded_heightmap(chunk: ChunkCoord, tile_size: usize, chunks: &HashMap<ChunkCoord, ChunkPreview>) -> Vec<f32> {
     let padded = tile_size + 3;
     let mut out = vec![0.0; padded * padded];
@@ -192,9 +193,7 @@ fn padded_heightmap(chunk: ChunkCoord, tile_size: usize, chunks: &HashMap<ChunkC
     out
 }
 
-/// Samples core-tile texel `(lx, lz)` relative to `chunk`'s own origin - `lx`/`lz` may run past
-/// `chunk`'s own `[0, tile_size)` range on either side, in which case the corresponding neighboring
-/// chunk (however many tiles away that takes) is sampled instead (see [`padded_heightmap`]).
+/// Samples core-tile texel `(lx, lz)` relative to `chunk`'s own origin
 fn sample_across_chunks(
     chunk: ChunkCoord,
     tile_size: usize,
@@ -217,45 +216,24 @@ fn sample_across_chunks(
     own.core_data[csz * tile_size + csx]
 }
 
-/// Splits a core-tile-relative coordinate into which neighboring chunk it falls in (as a chunk
-/// offset - not just `-1`/`0`/`1`, since a normal at the chunk's extra closing vertex needs to
-/// reach two texels into the positive neighbor) and the corresponding local coordinate within that
-/// chunk's own tile.
+/// Splits a core-tile-relative coordinate into which neighboring chunk to sample from and which texel within that chunk's tile to read.
 fn locate(l: isize, size: isize) -> (i32, isize) {
     (l.div_euclid(size) as i32, l.rem_euclid(size))
 }
 
-/// Reuses the existing mesh asset and entity for `chunk` if present, otherwise creates a new one.
-fn upsert_chunk_mesh(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    terrain_preview: &mut TerrainPreview,
-    material_handle: &Handle<PbrMaterial>,
-    chunk: ChunkCoord,
-    mesh: Mesh,
-    translation: Vec3
-) {
-    let existing = terrain_preview.chunks.get(&chunk).and_then(|c| c.render.clone());
+/// Reuses the existing mesh asset for `chunk` if present, otherwise creates a new one.
+fn upsert_chunk_mesh(meshes: &mut Assets<Mesh>, terrain_preview: &mut TerrainPreview, chunk: ChunkCoord, mesh: Mesh) {
+    let existing = terrain_preview.chunks.get(&chunk).and_then(|c| c.mesh_handle.clone());
     match existing {
-        Some(render) => {
-            if let Err(e) = meshes.insert(render.mesh_handle.id(), mesh) {
+        Some(handle) => {
+            if let Err(e) = meshes.insert(handle.id(), mesh) {
                 error!("Failed to update terrain preview mesh for chunk {:?}: {:?}", chunk, e);
             }
-            commands.entity(render.entity).insert(Transform::from_translation(translation));
         }
         None => {
             let handle = meshes.add(mesh);
-            let entity = commands
-                .spawn((
-                    Name::new(format!("Terrain Preview Chunk ({}, {})", chunk.0, chunk.1)),
-                    Transform::from_translation(translation),
-                    Mesh3d(handle.clone()),
-                    PbrMaterial3d(material_handle.clone()),
-                    CastShadow
-                ))
-                .id();
             if let Some(preview) = terrain_preview.chunks.get_mut(&chunk) {
-                preview.render = Some(ChunkRender { entity, mesh_handle: handle });
+                preview.mesh_handle = Some(handle);
             }
         }
     }
