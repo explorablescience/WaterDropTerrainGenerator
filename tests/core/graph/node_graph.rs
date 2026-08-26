@@ -500,3 +500,53 @@ fn a_directly_requested_global_node_returns_each_chunks_own_slice_not_the_same_c
     // than chunk 0's, matching where it actually sits in the terrain.
     assert!(chunk1[0] > chunk0[chunk0.size() - 1]);
 }
+
+#[test]
+fn cached_bytes_totals_local_chunk_tiles_and_global_tiles_together() {
+    // Regression test: the footer's memory stat used to read `pool().allocated_bytes()`, which
+    // only ever reflected the shared *chunk* pool - so a `Global` node's own (differently-sized)
+    // buffer never counted at all, and the number reported depended on whichever node happened to
+    // be processed last rather than being a real total.
+    let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
+    let local = graph.add_node(Box::new(NodeGeneratorFlat));
+    let global = graph.add_node(Box::new(FakeGlobalSource {
+        calls: Arc::new(AtomicUsize::new(0)),
+        native_resolution: 6
+    }));
+
+    graph.process_chunk(local, ChunkCoord(0, 0)).unwrap();
+    let expected_local = 4 * 4 * std::mem::size_of::<f32>(); // tile_size = 4, no padding
+    assert_eq!(graph.cached_bytes(), expected_local);
+
+    graph.process_chunk(global, ChunkCoord(0, 0)).unwrap();
+    let expected_global = 6 * 6 * std::mem::size_of::<f32>(); // native_resolution = 6
+    assert_eq!(
+        graph.cached_bytes(),
+        expected_local + expected_global,
+        "the global node's own whole-terrain buffer should add to the total alongside the local \
+         chunk's, not replace it or be left out"
+    );
+}
+
+#[test]
+fn cached_bytes_reflects_current_cache_contents_after_a_pool_resizing_selection_change() {
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0));
+    let flat = graph.add_node(Box::new(NodeGeneratorFlat)); // no kernel -> internal tile size 4
+    let erosion = graph.add_node(Box::new(NodeErosion::default())); // padding 2 -> internal tile size 8
+    graph.connect(flat, 0, erosion, 0).unwrap();
+
+    graph.process_chunk(flat, ChunkCoord(0, 0)).unwrap();
+    assert_eq!(graph.cached_bytes(), 4 * 4 * std::mem::size_of::<f32>());
+
+    // Selecting `erosion` needs a bigger padded pool, which discards the previous chunk-scoped
+    // cache (including flat's now-stale entry from the smaller pool) and recomputes both nodes at
+    // the new size. `flat`'s own intermediate result is then evicted once erosion (its only
+    // consumer) is itself fully cached, leaving just erosion's output live.
+    graph.process_chunk(erosion, ChunkCoord(0, 0)).unwrap();
+    assert_eq!(
+        graph.cached_bytes(),
+        8 * 8 * std::mem::size_of::<f32>(),
+        "should reflect exactly what's cached now (erosion's output, at the new padded size) \
+         rather than a stale or partial figure from before the pool was resized"
+    );
+}

@@ -59,6 +59,11 @@ impl NodeGraph {
         &self.pool
     }
 
+    /// Total heap bytes currently held by every distinct cached tile in this graph, across every chunk and every node
+    pub fn cached_bytes(&self) -> usize {
+        self.cache.cached_bytes()
+    }
+
     /// The terrain-level chunk layout this graph evaluates against.
     pub fn chunk_grid(&self) -> &ChunkGrid {
         &self.chunk_grid

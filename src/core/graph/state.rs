@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::core::{chunk_grid::ChunkCoord, graph::topology::GraphNodeId, tile_allocator::TileHandle};
 
@@ -62,6 +63,21 @@ impl EvalCache {
     /// pool is resized to accommodate a different padding requirement.
     pub fn clear_chunk_states(&mut self) {
         self.states.retain(|(_, scope), _| matches!(scope, EvalScope::Global));
+    }
+
+    /// Total heap bytes currently held by every distinct cached tile, across every node and every scope
+    pub fn cached_bytes(&self) -> usize {
+        let mut seen = std::collections::HashSet::new();
+        let mut total = 0usize;
+        for state in self.states.values() {
+            let NodeState::Cached((_, tiles)) = state else { continue };
+            for tile in tiles {
+                if seen.insert(Arc::as_ptr(tile)) {
+                    total += tile.size() * tile.size() * std::mem::size_of::<f32>();
+                }
+            }
+        }
+        total
     }
 }
 

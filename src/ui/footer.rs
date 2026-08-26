@@ -67,7 +67,7 @@ fn draw_footer(
     let (is_processing, tile_bytes) = {
         let terrain_graph = terrain_graph.read();
         let graph = terrain_graph.graph();
-        (graph.is_processing(), graph.pool().allocated_bytes())
+        (graph.is_processing(), graph.cached_bytes())
     };
 
     let frame = egui::Frame::NONE.fill(palette::BG_EXTREME).inner_margin(egui::Margin {
