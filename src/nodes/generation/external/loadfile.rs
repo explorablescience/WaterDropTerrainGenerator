@@ -194,6 +194,7 @@ inventory::submit! {
     NodeDescriptor {
         label: "Load File",
         category: NodeCategory::Generation,
+        subcategory: "External",
         icon: ICON,
         factory: || Box::new(LoadFile::default())
     }

@@ -169,6 +169,7 @@ inventory::submit! {
     NodeDescriptor {
         label: "Perlin",
         category: NodeCategory::Generation,
+        subcategory: "Mathematical",
         icon: ICON,
         factory: || Box::new(Perlin::default())
     }

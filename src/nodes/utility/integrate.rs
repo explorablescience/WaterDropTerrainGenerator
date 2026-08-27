@@ -131,6 +131,7 @@ inventory::submit! {
     NodeDescriptor {
         label: "Integrate",
         category: NodeCategory::Utility,
+        subcategory: "Compositing",
         icon: ICON,
         factory: || Box::new(Integrate::default())
     }

@@ -212,13 +212,34 @@ impl SnarlViewer<GraphNode> for GraphViewer {
                     .color(color)
                     .strong(),
                 |ui| {
-                    for descriptor in &nodes {
-                        let icon = widgets::node_icon_image(descriptor.icon, color);
-                        let button = egui::Button::image_and_text(icon, descriptor.label)
-                            .wrap_mode(egui::TextWrapMode::Extend);
-                        if ui.add(button).clicked() {
-                            self.new_node(pos, snarl, (descriptor.factory)());
-                            ui.close();
+                    let mut first_subcategory = true;
+                    for subcategory in category.subcategories() {
+                        let nodes: Vec<_> = nodes
+                            .iter()
+                            .filter(|descriptor| descriptor.subcategory == *subcategory)
+                            .collect();
+                        if nodes.is_empty() {
+                            continue;
+                        }
+
+                        if !first_subcategory {
+                            ui.add_space(4.0);
+                        }
+                        first_subcategory = false;
+
+                        ui.label(
+                            egui::RichText::new(*subcategory)
+                                .color(theme::palette::TEXT_MUTED)
+                                .font(theme::heading_font(theme::fonts::FONT_SIZE_SMALL))
+                        );
+                        for descriptor in nodes {
+                            let icon = widgets::node_icon_image(descriptor.icon, color);
+                            let button = egui::Button::image_and_text(icon, descriptor.label)
+                                .wrap_mode(egui::TextWrapMode::Extend);
+                            if ui.add(button).clicked() {
+                                self.new_node(pos, snarl, (descriptor.factory)());
+                                ui.close();
+                            }
                         }
                     }
                 }

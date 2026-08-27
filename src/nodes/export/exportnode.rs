@@ -151,6 +151,7 @@ inventory::submit! {
     NodeDescriptor {
         label: "Export",
         category: NodeCategory::Export,
+        subcategory: "Production Export",
         icon: ICON,
         factory: || Box::new(ExportFile::default())
     }

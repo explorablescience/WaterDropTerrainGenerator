@@ -8,6 +8,8 @@ pub struct NodeDescriptor {
     /// Label shown for this node type in the "Add Node" menu.
     pub label: &'static str,
     pub category: NodeCategory,
+    /// Must be one of `category.subcategories()`; groups this node within its category's menu.
+    pub subcategory: &'static str,
     pub icon: NodeIcon,
     pub factory: fn() -> Box<dyn Node>
 }

@@ -46,6 +46,7 @@ inventory::submit! {
     NodeDescriptor {
         label: "Flat",
         category: NodeCategory::Generation,
+        subcategory: "Mathematical",
         icon: ICON,
         factory: || Box::new(Flat)
     }

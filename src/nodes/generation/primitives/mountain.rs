@@ -142,6 +142,7 @@ inventory::submit! {
     NodeDescriptor {
         label: "Mountain",
         category: NodeCategory::Generation,
+        subcategory: "Primitives",
         icon: ICON,
         factory: || Box::new(Mountain::default())
     }

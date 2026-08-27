@@ -120,6 +120,7 @@ inventory::submit! {
     NodeDescriptor {
         label: "Erosion",
         category: NodeCategory::Simulation,
+        subcategory: "Erosion",
         icon: ICON,
         factory: || Box::new(Erosion::default())
     }
