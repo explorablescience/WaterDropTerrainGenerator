@@ -8,16 +8,14 @@ use waterdrop_terrain_generator::core::node::{
 use waterdrop_terrain_generator::core::tiling::{
     ChunkCoord, ChunkGrid, TileContext, TileHandle, TilePool
 };
-use waterdrop_terrain_generator::nodes::{
-    NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin, NodeIntegrate
-};
+use waterdrop_terrain_generator::nodes::*;
 
 #[test]
 fn test_node_graph_connections() {
     let mut graph = NodeGraph::new(ChunkGrid::single(32));
     let (node_a, node_b) = (
-        graph.add_node(Box::new(NodeGeneratorPerlin::default())),
-        graph.add_node(Box::new(NodeErosion::default()))
+        graph.add_node(Box::new(Perlin::default())),
+        graph.add_node(Box::new(Erosion::default()))
     );
 
     // Valid connection
@@ -36,9 +34,9 @@ fn test_node_graph_connections() {
 fn test_node_graph_validation() {
     let mut graph = NodeGraph::new(ChunkGrid::single(32));
     let (node_a, node_b, node_c) = (
-        graph.add_node(Box::new(NodeGeneratorPerlin::default())),
-        graph.add_node(Box::new(NodeErosion::default())),
-        graph.add_node(Box::new(NodeErosion::default()))
+        graph.add_node(Box::new(Perlin::default())),
+        graph.add_node(Box::new(Erosion::default())),
+        graph.add_node(Box::new(Erosion::default()))
     );
     graph
         .connect(node_a, 0, node_b, 0)
@@ -50,8 +48,8 @@ fn test_node_graph_validation() {
 fn test_node_graph_cycle_detection() {
     let mut graph = NodeGraph::new(ChunkGrid::single(32));
     let (node_a, node_b) = (
-        graph.add_node(Box::new(NodeErosion::default())),
-        graph.add_node(Box::new(NodeErosion::default()))
+        graph.add_node(Box::new(Erosion::default())),
+        graph.add_node(Box::new(Erosion::default()))
     );
     graph
         .connect(node_a, 0, node_b, 0)
@@ -67,8 +65,8 @@ fn test_node_graph_cycle_detection() {
 fn test_node_graph_remove_node_disconnects_edges() {
     let mut graph = NodeGraph::new(ChunkGrid::single(32));
     let (source, erosion) = (
-        graph.add_node(Box::new(NodeGeneratorFlat)),
-        graph.add_node(Box::new(NodeErosion::default()))
+        graph.add_node(Box::new(Flat)),
+        graph.add_node(Box::new(Erosion::default()))
     );
     graph
         .connect(source, 0, erosion, 0)
@@ -96,8 +94,8 @@ fn test_node_graph_remove_node_disconnects_edges() {
 fn test_node_graph_remove_node_resets_cached_topo() {
     let mut graph = NodeGraph::new(ChunkGrid::single(32));
     let (source, erosion) = (
-        graph.add_node(Box::new(NodeGeneratorFlat)),
-        graph.add_node(Box::new(NodeErosion::default()))
+        graph.add_node(Box::new(Flat)),
+        graph.add_node(Box::new(Erosion::default()))
     );
     graph
         .connect(source, 0, erosion, 0)
@@ -118,7 +116,7 @@ fn test_node_graph_remove_node_resets_cached_topo() {
 #[test]
 fn test_node_graph_remove_node_unknown_id_errors() {
     let mut graph = NodeGraph::new(ChunkGrid::single(32));
-    let node = graph.add_node(Box::new(NodeGeneratorFlat));
+    let node = graph.add_node(Box::new(Flat));
     graph
         .remove_node(node)
         .expect("First removal should succeed");
@@ -135,8 +133,8 @@ fn test_node_graph_process_grows_internal_tile_size_for_padding() {
     let tile_size = 8;
     let mut graph = NodeGraph::new(ChunkGrid::single(8));
     let (source, erosion) = (
-        graph.add_node(Box::new(NodeGeneratorFlat)),
-        graph.add_node(Box::new(NodeErosion::default())) // size() == 3 -> padding of 2
+        graph.add_node(Box::new(Flat)),
+        graph.add_node(Box::new(Erosion::default())) // size() == 3 -> padding of 2
     );
     graph
         .connect(source, 0, erosion, 0)
@@ -163,7 +161,7 @@ fn test_node_graph_process_grows_internal_tile_size_for_padding() {
 #[test]
 fn node_mut_lets_callers_mutate_a_node_in_place() {
     let mut graph = NodeGraph::new(ChunkGrid::single(4));
-    let id = graph.add_node(Box::new(NodeErosion::default()));
+    let id = graph.add_node(Box::new(Erosion::default()));
     graph
         .node_mut(id)
         .unwrap()
@@ -179,7 +177,7 @@ fn node_mut_lets_callers_mutate_a_node_in_place() {
 #[test]
 fn node_mut_on_an_unknown_id_fails_without_mutating_anything() {
     let mut graph = NodeGraph::new(ChunkGrid::single(4));
-    let id = graph.add_node(Box::new(NodeGeneratorFlat));
+    let id = graph.add_node(Box::new(Flat));
     graph.remove_node(id).unwrap();
     assert!(graph.node_mut(id).is_err());
 }
@@ -187,8 +185,8 @@ fn node_mut_on_an_unknown_id_fails_without_mutating_anything() {
 #[test]
 fn mutating_a_node_invalidates_its_own_and_downstream_cached_output() {
     let mut graph = NodeGraph::new(ChunkGrid::single(8));
-    let source = graph.add_node(Box::new(NodeGeneratorPerlin::default()));
-    let sink = graph.add_node(Box::new(NodeErosion::default()));
+    let source = graph.add_node(Box::new(Perlin::default()));
+    let sink = graph.add_node(Box::new(Erosion::default()));
     graph.connect(source, 0, sink, 0).unwrap();
 
     let first = match graph.process(sink).unwrap() {
@@ -242,7 +240,7 @@ fn is_processing_is_false_before_anything_has_been_computed() {
 #[test]
 fn is_processing_is_true_immediately_after_a_node_is_computed() {
     let mut graph = NodeGraph::new(ChunkGrid::single(4));
-    let id = graph.add_node(Box::new(NodeGeneratorFlat));
+    let id = graph.add_node(Box::new(Flat));
     graph.process(id).expect("processing should succeed");
     assert!(graph.is_processing());
 }
@@ -266,7 +264,7 @@ impl Node for FakeGlobalSource {
         "Fake Global Source"
     }
     fn category(&self) -> NodeCategory {
-        NodeCategory::Generator
+        NodeCategory::Generation
     }
     fn icon(&self) -> NodeIcon {
         TEST_ICON
@@ -309,7 +307,7 @@ impl Node for FakeCountingSource {
         "Fake Counting Source"
     }
     fn category(&self) -> NodeCategory {
-        NodeCategory::Generator
+        NodeCategory::Generation
     }
     fn icon(&self) -> NodeIcon {
         TEST_ICON
@@ -379,7 +377,7 @@ fn different_chunks_of_the_same_node_are_computed_and_cached_independently() {
 fn perlin_generator_samples_a_shared_world_coordinate_frame_across_chunks() {
     // world_scale = 1.0, so chunk 1 begins exactly where chunk 0's 4 world units end.
     let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
-    let perlin = graph.add_node(Box::new(NodeGeneratorPerlin::default()));
+    let perlin = graph.add_node(Box::new(Perlin::default()));
 
     let chunk1 = match graph.process_chunk(perlin, ChunkCoord(1, 0)).unwrap() {
         NodeGraphProcessResult::Processed(_, tiles) => tiles[0].clone(),
@@ -444,8 +442,8 @@ fn a_global_node_is_evaluated_once_regardless_of_how_many_chunks_request_it() {
         calls: calls.clone(),
         native_resolution: 6
     }));
-    let integrate = graph.add_node(Box::new(NodeIntegrate::default()));
-    let erosion = graph.add_node(Box::new(NodeErosion::default()));
+    let integrate = graph.add_node(Box::new(Integrate::default()));
+    let erosion = graph.add_node(Box::new(Erosion::default()));
     graph.connect(source, 0, integrate, 0).unwrap();
     graph.connect(integrate, 0, erosion, 0).unwrap();
 
@@ -470,7 +468,7 @@ fn integrate_maps_world_positions_into_its_globals_local_space_via_scale_and_pos
     }));
     // `scale = 4` gives the source a 4-world-unit physical footprint, `position = 0` centers that
     // footprint on the terrain's own origin.
-    let integrate = graph.add_node(Box::new(NodeIntegrate {
+    let integrate = graph.add_node(Box::new(Integrate {
         scale: 4.0,
         position: (0.0, 0.0)
     }));
@@ -515,11 +513,11 @@ fn integrates_physical_size_is_independent_of_the_globals_native_resolution() {
     let high_res = graph.add_node(Box::new(FakeGlobalWorldXMarker {
         native_resolution: 64
     }));
-    let integrate_low = graph.add_node(Box::new(NodeIntegrate {
+    let integrate_low = graph.add_node(Box::new(Integrate {
         scale: 5.0,
         position: (0.0, 0.0)
     }));
-    let integrate_high = graph.add_node(Box::new(NodeIntegrate {
+    let integrate_high = graph.add_node(Box::new(Integrate {
         scale: 5.0,
         position: (0.0, 0.0)
     }));
@@ -564,7 +562,7 @@ impl Node for FakeGlobalWorldXMarker {
         "Fake Global World X Marker"
     }
     fn category(&self) -> NodeCategory {
-        NodeCategory::Generator
+        NodeCategory::Generation
     }
     fn icon(&self) -> NodeIcon {
         TEST_ICON
@@ -640,7 +638,7 @@ fn cached_bytes_totals_local_chunk_tiles_and_global_tiles_together() {
     // buffer never counted at all, and the number reported depended on whichever node happened to
     // be processed last rather than being a real total.
     let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
-    let local = graph.add_node(Box::new(NodeGeneratorFlat));
+    let local = graph.add_node(Box::new(Flat));
     let global = graph.add_node(Box::new(FakeGlobalSource {
         calls: Arc::new(AtomicUsize::new(0)),
         native_resolution: 6
@@ -663,8 +661,8 @@ fn cached_bytes_totals_local_chunk_tiles_and_global_tiles_together() {
 #[test]
 fn cached_bytes_reflects_current_cache_contents_after_a_pool_resizing_selection_change() {
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0));
-    let flat = graph.add_node(Box::new(NodeGeneratorFlat)); // no kernel -> internal tile size 4
-    let erosion = graph.add_node(Box::new(NodeErosion::default())); // padding 2 -> internal tile size 8
+    let flat = graph.add_node(Box::new(Flat)); // no kernel -> internal tile size 4
+    let erosion = graph.add_node(Box::new(Erosion::default())); // padding 2 -> internal tile size 8
     graph.connect(flat, 0, erosion, 0).unwrap();
 
     graph.process_chunk(flat, ChunkCoord(0, 0)).unwrap();

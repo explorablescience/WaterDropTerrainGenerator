@@ -10,7 +10,7 @@ use crate::core::tiling::{TileContext, TileHandle, TilePool};
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-load",
-    png_bytes: include_bytes!("../../assets/icons/node_load.png")
+    png_bytes: include_bytes!("../../../../assets/icons/node_load.png")
 };
 
 /// Kept in memory so `process` can resample it at whatever resolution the graph requests without touching the filesystem again.
@@ -21,13 +21,13 @@ struct LoadedImage {
     height: u32
 }
 
-/// Outputs the loaded PNG resampled to whatever tile resolution the graph requests, the same way a procedural generator evaluates at any resolution.
+/// Loads a heightmap from disk as a PNG file and outputs it as a single tile
 #[derive(Debug, Default)]
-pub struct NodeLoadHeightmap {
+pub struct LoadFile {
     file_path: String,
     loaded: Option<LoadedImage>
 }
-impl NodeLoadHeightmap {
+impl LoadFile {
     fn params() -> &'static [NParamDesc] {
         static SPECS: OnceLock<Vec<NParamDesc>> = OnceLock::new();
         SPECS.get_or_init(|| {
@@ -98,13 +98,13 @@ impl NodeLoadHeightmap {
         top * (1.0 - ty) + bottom * ty
     }
 }
-impl Node for NodeLoadHeightmap {
+impl Node for LoadFile {
     fn label(&self) -> &str {
-        "Load Heightmap"
+        "Load File"
     }
 
     fn category(&self) -> NodeCategory {
-        NodeCategory::Io
+        NodeCategory::Generation
     }
     fn icon(&self) -> NodeIcon {
         ICON
@@ -192,9 +192,9 @@ impl Node for NodeLoadHeightmap {
 
 inventory::submit! {
     NodeDescriptor {
-        label: "Load Heightmap",
-        category: NodeCategory::Io,
+        label: "Load File",
+        category: NodeCategory::Generation,
         icon: ICON,
-        factory: || Box::new(NodeLoadHeightmap::default())
+        factory: || Box::new(LoadFile::default())
     }
 }

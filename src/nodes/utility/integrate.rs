@@ -8,18 +8,18 @@ use crate::core::tiling::{TileContext, TileHandle, TilePool, bilinear_sample};
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-integrate",
-    png_bytes: include_bytes!("../../assets/icons/node_integrate.png")
+    png_bytes: include_bytes!("../../../assets/icons/node_integrate.png")
 };
 
 /// Maps a `Global` node's bare, self-centered result (see `TileContext::for_global`) onto the actual chunked terrain.
 #[derive(Debug)]
-pub struct NodeIntegrate {
+pub struct Integrate {
     /// World-space location the input's own local origin `(0, 0)` should land on.
     pub position: (f32, f32),
     /// World units the input's full local domain (`[-0.5, 0.5)` on each axis) should span.
     pub scale: f32
 }
-impl Default for NodeIntegrate {
+impl Default for Integrate {
     fn default() -> Self {
         Self {
             position: (0.0, 0.0),
@@ -27,7 +27,7 @@ impl Default for NodeIntegrate {
         }
     }
 }
-impl NodeIntegrate {
+impl Integrate {
     fn params() -> &'static [NParamDesc] {
         static SPECS: OnceLock<Vec<NParamDesc>> = OnceLock::new();
         SPECS.get_or_init(|| {
@@ -56,13 +56,13 @@ impl NodeIntegrate {
         })
     }
 }
-impl Node for NodeIntegrate {
+impl Node for Integrate {
     fn label(&self) -> &str {
         "Integrate"
     }
 
     fn category(&self) -> NodeCategory {
-        NodeCategory::Simulation
+        NodeCategory::Utility
     }
     fn icon(&self) -> NodeIcon {
         ICON
@@ -130,8 +130,8 @@ impl Node for NodeIntegrate {
 inventory::submit! {
     NodeDescriptor {
         label: "Integrate",
-        category: NodeCategory::Simulation,
+        category: NodeCategory::Utility,
         icon: ICON,
-        factory: || Box::new(NodeIntegrate::default())
+        factory: || Box::new(Integrate::default())
     }
 }

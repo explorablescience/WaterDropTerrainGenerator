@@ -11,15 +11,15 @@ use crate::core::tiling::{TileContext, TileHandle, TilePool, crop_center, save_h
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-save",
-    png_bytes: include_bytes!("../../assets/icons/node_save.png")
+    png_bytes: include_bytes!("../../../assets/icons/node_save.png")
 };
 
-/// Passes its input through unchanged as its own output, so it can still sit anywhere in a chain and be inspected in the preview like any other node.
+/// Saves the heightmap to disk as a PNG file.
 #[derive(Debug, Default)]
-pub struct NodeSaveHeightmap {
+pub struct ExportFile {
     file_path: String
 }
-impl NodeSaveHeightmap {
+impl ExportFile {
     fn params() -> &'static [NParamDesc] {
         static SPECS: OnceLock<Vec<NParamDesc>> = OnceLock::new();
         SPECS.get_or_init(|| {
@@ -70,13 +70,13 @@ impl NodeSaveHeightmap {
         save_heightmap_png(&data, output_size, output_size, &path).map_err(NodeError::from)
     }
 }
-impl Node for NodeSaveHeightmap {
+impl Node for ExportFile {
     fn label(&self) -> &str {
-        "Save Heightmap"
+        "Export"
     }
 
     fn category(&self) -> NodeCategory {
-        NodeCategory::Io
+        NodeCategory::Export
     }
     fn icon(&self) -> NodeIcon {
         ICON
@@ -149,9 +149,9 @@ impl Node for NodeSaveHeightmap {
 
 inventory::submit! {
     NodeDescriptor {
-        label: "Save Heightmap",
-        category: NodeCategory::Io,
+        label: "Export",
+        category: NodeCategory::Export,
         icon: ICON,
-        factory: || Box::new(NodeSaveHeightmap::default())
+        factory: || Box::new(ExportFile::default())
     }
 }

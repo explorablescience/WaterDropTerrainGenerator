@@ -49,10 +49,17 @@ pub mod palette {
     // Fallback for a selected node whose category can't be resolved.
     pub const NODE_SELECTED: Color32 = ACCENT;
 
-    // Node-graph category colors - one distinct hue per `NodeCategory`.
-    pub const CATEGORY_GENERATOR: Color32 = Color32::from_rgb(122, 168, 116);
-    pub const CATEGORY_SIMULATION: Color32 = Color32::from_rgb(96, 150, 186);
-    pub const CATEGORY_IO: Color32 = Color32::from_rgb(200, 160, 96);
+    // Node-graph category colors - one distinct hue per `NodeCategory`, spaced around the
+    // wheel and kept clear of ACCENT/HIGHLIGHT_* so a category chip is never mistaken for
+    // a selection or message-severity color.
+    pub const CATEGORY_GENERATION: Color32 = Color32::from_rgb(111, 188, 92);
+    pub const CATEGORY_MODIFICATION: Color32 = Color32::from_rgb(217, 146, 104);
+    pub const CATEGORY_SURFACE: Color32 = Color32::from_rgb(86, 179, 145);
+    pub const CATEGORY_SIMULATION: Color32 = Color32::from_rgb(137, 146, 209);
+    pub const CATEGORY_DATA_EXTRACTION: Color32 = Color32::from_rgb(182, 141, 206);
+    pub const CATEGORY_TEXTURING: Color32 = Color32::from_rgb(213, 134, 189);
+    pub const CATEGORY_UTILITY: Color32 = Color32::from_rgb(166, 162, 155);
+    pub const CATEGORY_EXPORT: Color32 = Color32::from_rgb(203, 207, 89);
 
     // Neutral default fill for graph pins before a category color is applied.
     pub const PIN_DEFAULT: Color32 = Color32::from_rgb(120, 120, 120);
@@ -97,9 +104,14 @@ pub mod fonts {
 
 pub fn category_color(category: NodeCategory) -> egui::Color32 {
     match category {
-        NodeCategory::Generator => palette::CATEGORY_GENERATOR,
+        NodeCategory::Generation => palette::CATEGORY_GENERATION,
+        NodeCategory::Modification => palette::CATEGORY_MODIFICATION,
+        NodeCategory::Surface => palette::CATEGORY_SURFACE,
         NodeCategory::Simulation => palette::CATEGORY_SIMULATION,
-        NodeCategory::Io => palette::CATEGORY_IO
+        NodeCategory::DataExtraction => palette::CATEGORY_DATA_EXTRACTION,
+        NodeCategory::Texturing => palette::CATEGORY_TEXTURING,
+        NodeCategory::Utility => palette::CATEGORY_UTILITY,
+        NodeCategory::Export => palette::CATEGORY_EXPORT,
     }
 }
 

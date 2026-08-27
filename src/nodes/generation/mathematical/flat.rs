@@ -7,18 +7,18 @@ use crate::core::tiling::{TileContext, TileHandle, TilePool};
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-flat",
-    png_bytes: include_bytes!("../../assets/icons/node_flat.png")
+    png_bytes: include_bytes!("../../../../assets/icons/node_flat.png")
 };
 
 #[derive(Debug, Default)]
-pub struct NodeGeneratorFlat;
-impl Node for NodeGeneratorFlat {
+pub struct Flat;
+impl Node for Flat {
     fn label(&self) -> &str {
-        "Flat Generator"
+        "Flat"
     }
 
     fn category(&self) -> NodeCategory {
-        NodeCategory::Generator
+        NodeCategory::Generation
     }
     fn icon(&self) -> NodeIcon {
         ICON
@@ -44,9 +44,9 @@ impl Node for NodeGeneratorFlat {
 
 inventory::submit! {
     NodeDescriptor {
-        label: "Flat Generator",
-        category: NodeCategory::Generator,
+        label: "Flat",
+        category: NodeCategory::Generation,
         icon: ICON,
-        factory: || Box::new(NodeGeneratorFlat)
+        factory: || Box::new(Flat)
     }
 }

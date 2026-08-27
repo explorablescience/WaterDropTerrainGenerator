@@ -21,7 +21,7 @@ impl Node for FakeWorldXMarker {
         "Fake World X Marker"
     }
     fn category(&self) -> NodeCategory {
-        NodeCategory::Generator
+        NodeCategory::Generation
     }
     fn icon(&self) -> NodeIcon {
         TEST_ICON

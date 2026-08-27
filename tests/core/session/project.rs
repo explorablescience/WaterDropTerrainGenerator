@@ -5,7 +5,7 @@ use waterdrop_terrain_generator::core::graph::NodeGraph;
 use waterdrop_terrain_generator::core::node::{self, NParamValue};
 use waterdrop_terrain_generator::core::session::{load_project, save_project};
 use waterdrop_terrain_generator::core::tiling::ChunkGrid;
-use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorPerlin};
+use waterdrop_terrain_generator::nodes::*;
 
 /// A path in the system temp dir unique to this test process/run, so parallel test runs never
 /// collide on the same file. Removed by the caller once the test is done with it.
@@ -18,8 +18,8 @@ fn round_trips_nodes_params_positions_and_edges() {
     let path = temp_project_path("round-trip");
 
     let mut graph = NodeGraph::new(ChunkGrid::single(32));
-    let source = graph.add_node(Box::new(NodeGeneratorPerlin::default()));
-    let sink = graph.add_node(Box::new(NodeErosion::default()));
+    let source = graph.add_node(Box::new(Perlin::default()));
+    let sink = graph.add_node(Box::new(Erosion::default()));
     graph
         .connect(source, 0, sink, 0)
         .expect("connecting a valid pair of sockets should succeed");
@@ -98,7 +98,7 @@ fn unsaved_node_position_defaults_to_origin() {
     let path = temp_project_path("missing-position");
 
     let mut graph = NodeGraph::new(ChunkGrid::single(32));
-    let node = graph.add_node(Box::new(NodeGeneratorPerlin::default()));
+    let node = graph.add_node(Box::new(Perlin::default()));
 
     // Deliberately omit `node`'s position, as if the caller's UI never had one for it.
     save_project(&path, &graph, &HashMap::new())

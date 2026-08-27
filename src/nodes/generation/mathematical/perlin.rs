@@ -8,7 +8,7 @@ use crate::core::tiling::{TileContext, TileHandle, TilePool};
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-perlin",
-    png_bytes: include_bytes!("../../assets/icons/node_perlin.png")
+    png_bytes: include_bytes!("../../../../assets/icons/node_perlin.png")
 };
 
 /// Period (in lattice units) the hashed noise lattice wraps around after, so the noise repeats on a fixed, predictable period rather than an incidental one.
@@ -43,12 +43,12 @@ fn value_noise(x: f32, y: f32) -> f32 {
 }
 
 #[derive(Debug)]
-pub struct NodeGeneratorPerlin {
+pub struct Perlin {
     pub frequency: f32,
     pub amplitude: f32,
     pub octaves: u32
 }
-impl Default for NodeGeneratorPerlin {
+impl Default for Perlin {
     fn default() -> Self {
         Self {
             frequency: 1.0,
@@ -57,7 +57,7 @@ impl Default for NodeGeneratorPerlin {
         }
     }
 }
-impl NodeGeneratorPerlin {
+impl Perlin {
     fn params() -> &'static [NParamDesc] {
         static SPECS: OnceLock<Vec<NParamDesc>> = std::sync::OnceLock::new();
         SPECS.get_or_init(|| {
@@ -114,13 +114,13 @@ impl NodeGeneratorPerlin {
         Arc::new(output)
     }
 }
-impl Node for NodeGeneratorPerlin {
+impl Node for Perlin {
     fn label(&self) -> &str {
-        "Perlin Generator"
+        "Perlin"
     }
 
     fn category(&self) -> NodeCategory {
-        NodeCategory::Generator
+        NodeCategory::Generation
     }
     fn icon(&self) -> NodeIcon {
         ICON
@@ -167,9 +167,9 @@ impl Node for NodeGeneratorPerlin {
 
 inventory::submit! {
     NodeDescriptor {
-        label: "Perlin Generator",
-        category: NodeCategory::Generator,
+        label: "Perlin",
+        category: NodeCategory::Generation,
         icon: ICON,
-        factory: || Box::new(NodeGeneratorPerlin::default())
+        factory: || Box::new(Perlin::default())
     }
 }

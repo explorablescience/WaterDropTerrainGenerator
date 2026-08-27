@@ -112,23 +112,38 @@ pub enum NodeLocality {
 /// High-level grouping of nodes, used to color-code and organize nodes in the graph editor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeCategory {
-    Generator,
+    Generation,
+    Modification,
+    Surface,
     Simulation,
-    Io
+    DataExtraction,
+    Texturing,
+    Utility,
+    Export
 }
 impl NodeCategory {
     /// Every category, in the order they should be listed in the "Add Node" menu.
-    pub const ALL: [NodeCategory; 3] = [
-        NodeCategory::Generator,
+    pub const ALL: [NodeCategory; 8] = [
+        NodeCategory::Generation,
+        NodeCategory::Modification,
+        NodeCategory::Surface,
         NodeCategory::Simulation,
-        NodeCategory::Io
+        NodeCategory::DataExtraction,
+        NodeCategory::Texturing,
+        NodeCategory::Utility,
+        NodeCategory::Export
     ];
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            NodeCategory::Generator => "Generator",
+            NodeCategory::Generation => "Generation",
+            NodeCategory::Modification => "Modification",
+            NodeCategory::Surface => "Surface",
             NodeCategory::Simulation => "Simulation",
-            NodeCategory::Io => "I/O"
+            NodeCategory::DataExtraction => "Data Extraction",
+            NodeCategory::Texturing => "Texturing",
+            NodeCategory::Utility => "Utility",
+            NodeCategory::Export => "Export"
         }
     }
 }

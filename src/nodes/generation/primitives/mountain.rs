@@ -8,17 +8,17 @@ use crate::core::tiling::{TileContext, TileHandle, TilePool};
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-mountain",
-    png_bytes: include_bytes!("../../assets/icons/node_mountain.png")
+    png_bytes: include_bytes!("../../../../assets/icons/node_mountain.png")
 };
 
 /// A very basic `Global` primitive: one smooth dome.
 #[derive(Debug)]
-pub struct NodeMountain {
+pub struct Mountain {
     pub height: f32,
     pub radius: f32,
     pub native_resolution: u32
 }
-impl Default for NodeMountain {
+impl Default for Mountain {
     fn default() -> Self {
         Self {
             height: 2.0,
@@ -27,7 +27,7 @@ impl Default for NodeMountain {
         }
     }
 }
-impl NodeMountain {
+impl Mountain {
     fn params() -> &'static [NParamDesc] {
         static SPECS: OnceLock<Vec<NParamDesc>> = OnceLock::new();
         SPECS.get_or_init(|| {
@@ -73,13 +73,13 @@ impl NodeMountain {
         falloff * self.height
     }
 }
-impl Node for NodeMountain {
+impl Node for Mountain {
     fn label(&self) -> &str {
         "Mountain"
     }
 
     fn category(&self) -> NodeCategory {
-        NodeCategory::Generator
+        NodeCategory::Generation
     }
     fn icon(&self) -> NodeIcon {
         ICON
@@ -141,8 +141,8 @@ impl Node for NodeMountain {
 inventory::submit! {
     NodeDescriptor {
         label: "Mountain",
-        category: NodeCategory::Generator,
+        category: NodeCategory::Generation,
         icon: ICON,
-        factory: || Box::new(NodeMountain::default())
+        factory: || Box::new(Mountain::default())
     }
 }

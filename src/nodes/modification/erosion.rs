@@ -8,21 +8,21 @@ use crate::core::tiling::{TileContext, TileHandle, TilePool};
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-erosion",
-    png_bytes: include_bytes!("../../assets/icons/node_erosion.png")
+    png_bytes: include_bytes!("../../../assets/icons/node_erosion.png")
 };
 
 /// A minimal thermal-erosion node
 #[derive(Debug)]
-pub struct NodeErosion {
+pub struct Erosion {
     /// How strongly each texel is pulled towards its neighbours' average height, in `[0, 1]`.
     strength: f32
 }
-impl Default for NodeErosion {
+impl Default for Erosion {
     fn default() -> Self {
         Self { strength: 0.5 }
     }
 }
-impl NodeErosion {
+impl Erosion {
     fn params() -> &'static [NParamDesc] {
         static SPECS: OnceLock<Vec<NParamDesc>> = OnceLock::new();
         SPECS.get_or_init(|| {
@@ -59,7 +59,7 @@ impl NodeErosion {
         Arc::new(output)
     }
 }
-impl Node for NodeErosion {
+impl Node for Erosion {
     fn label(&self) -> &str {
         "Erosion"
     }
@@ -121,6 +121,6 @@ inventory::submit! {
         label: "Erosion",
         category: NodeCategory::Simulation,
         icon: ICON,
-        factory: || Box::new(NodeErosion::default())
+        factory: || Box::new(Erosion::default())
     }
 }
