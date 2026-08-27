@@ -39,13 +39,20 @@ pub(super) fn load_project(
     let mut new_graph_instance = GraphInstance::default();
     let mut snarl_id_of: HashMap<GraphNodeId, NodeId> = HashMap::new();
     for (&graph_id, &pos) in &built.positions {
-        let snarl_id = new_graph_instance.insert_node(egui::pos2(pos[0], pos[1]), GraphNode::Main(graph_id));
+        let snarl_id =
+            new_graph_instance.insert_node(egui::pos2(pos[0], pos[1]), GraphNode::Main(graph_id));
         snarl_id_of.insert(graph_id, snarl_id);
     }
     for (from_node, from_socket, to_node, to_socket) in &built.edges {
         new_graph_instance.connect(
-            OutPinId { node: snarl_id_of[from_node], output: *from_socket },
-            InPinId { node: snarl_id_of[to_node], input: *to_socket }
+            OutPinId {
+                node: snarl_id_of[from_node],
+                output: *from_socket
+            },
+            InPinId {
+                node: snarl_id_of[to_node],
+                input: *to_socket
+            }
         );
     }
 

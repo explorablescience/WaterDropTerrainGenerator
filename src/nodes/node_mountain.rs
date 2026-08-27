@@ -21,7 +21,11 @@ pub struct NodeMountain {
 }
 impl Default for NodeMountain {
     fn default() -> Self {
-        Self { height: 2.0, radius: 0.1, native_resolution: 256 }
+        Self {
+            height: 2.0,
+            radius: 0.1,
+            native_resolution: 256
+        }
     }
 }
 impl NodeMountain {
@@ -34,14 +38,20 @@ impl NodeMountain {
                     label: "Height",
                     category: "Shape",
                     default: NParamValue::Float(1.0),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 10.0 })
+                    constraints: Some(NParamConstraints::FloatRange {
+                        min: 0.0,
+                        max: 10.0
+                    })
                 },
                 NParamDesc {
                     key: "radius",
                     label: "Radius",
                     category: "Shape",
                     default: NParamValue::Float(0.3),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.01, max: 2.0 })
+                    constraints: Some(NParamConstraints::FloatRange {
+                        min: 0.01,
+                        max: 2.0
+                    })
                 },
                 NParamDesc {
                     key: "native_resolution",
@@ -49,13 +59,12 @@ impl NodeMountain {
                     category: "Shape",
                     default: NParamValue::Int(256),
                     constraints: Some(NParamConstraints::IntRange { min: 16, max: 4096 })
-                }
+                },
             ]
         })
     }
 
-    /// Smooth radial falloff from `center`: `self.height` at the center, `0` at `self.radius` and
-    /// beyond.
+    /// Smooth radial falloff from `center`: `self.height` at the center, `0` at `self.radius` and beyond.
     fn dome(&self, local: (f32, f32), center: (f32, f32)) -> f32 {
         let dx = local.0 - center.0;
         let dy = local.1 - center.1;
@@ -78,7 +87,9 @@ impl Node for NodeMountain {
     }
 
     fn locality(&self) -> NodeLocality {
-        NodeLocality::Global { native_resolution: self.native_resolution as usize }
+        NodeLocality::Global {
+            native_resolution: self.native_resolution as usize
+        }
     }
 
     fn outputs(&self) -> &[NodeSocket] {

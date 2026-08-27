@@ -12,10 +12,7 @@ const ICON: NodeIcon = NodeIcon {
     png_bytes: include_bytes!("../../assets/icons/node_perlin.png")
 };
 
-/// Period (in lattice units) the hashed noise lattice wraps around after. Keeps the noise a
-/// well-defined periodic function of world position - the lattice (and so the noise) repeats on a
-/// fixed, predictable period - rather than one that just happens not to visibly repeat within
-/// whatever extent is currently being viewed.
+/// Period (in lattice units) the hashed noise lattice wraps around after, so the noise repeats on a fixed, predictable period rather than an incidental one.
 const NOISE_PERIOD: i32 = 1024;
 
 /// Cheap integer hash of a lattice point, wrapped to [`NOISE_PERIOD`], mapped to `[-1, 1]`.
@@ -28,10 +25,7 @@ fn hash(ix: i32, iy: i32) -> f32 {
     (h as f32 / u32::MAX as f32) * 2.0 - 1.0
 }
 
-/// A very basic value-noise primitive: hashes the four lattice points around `(x, y)` to a
-/// pseudo-random value each, then smoothly (smoothstep) interpolates between them. This is value
-/// noise, not true gradient-based Perlin noise, but it's periodic (see [`NOISE_PERIOD`]) and cheap
-/// - plenty for a first terrain primitive.
+/// This is value noise, not true gradient-based Perlin noise, but it's periodic (see [`NOISE_PERIOD`]) and cheap.
 fn value_noise(x: f32, y: f32) -> f32 {
     let x0 = x.floor();
     let y0 = y.floor();
@@ -49,7 +43,6 @@ fn value_noise(x: f32, y: f32) -> f32 {
     nx0 + sy * (nx1 - nx0)
 }
 
-/// A node that generates a noise terrain tile.
 #[derive(Debug)]
 pub struct NodeGeneratorPerlin {
     pub frequency: f32,
@@ -101,8 +94,7 @@ impl NodeGeneratorPerlin {
         })
     }
 
-    /// Samples noise at each texel's world-space position (rather than a `[0, 1]` range local to
-    /// the tile), so adjacent chunks of this node line up seamlessly at their shared border.
+    /// Samples at each texel's world-space position (not a `[0, 1]` local range), so adjacent chunks line up seamlessly at their shared border.
     fn process_tile(&self, pool: &Arc<TilePool>, ctx: &TileContext) -> TileHandle {
         let mut output = pool.allocate();
         let s = output.size();

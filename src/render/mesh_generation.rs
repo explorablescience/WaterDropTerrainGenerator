@@ -19,7 +19,8 @@ pub fn heightmap_to_mesh(label: &str, heightmap: &[f32], size: usize, world_offs
     for z in 0..verts {
         for x in 0..verts {
             let height = sample(x as isize, z as isize) * HEIGHT_SCALE;
-            let position = world_offset + Vec3::new(x as f32 * CELL_SIZE, height, z as f32 * CELL_SIZE);
+            let position =
+                world_offset + Vec3::new(x as f32 * CELL_SIZE, height, z as f32 * CELL_SIZE);
 
             // Central-difference slope estimate, used as a smooth per-vertex normal.
             let dx = (sample(x as isize + 1, z as isize) - sample(x as isize - 1, z as isize))

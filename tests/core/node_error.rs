@@ -9,7 +9,10 @@ fn input_not_connected_displays_the_node_and_socket_names() {
         node: "Erosion".to_string(),
         socket: "Height".to_string()
     };
-    assert_eq!(err.to_string(), "\"Erosion\" input \"Height\" is not connected");
+    assert_eq!(
+        err.to_string(),
+        "\"Erosion\" input \"Height\" is not connected"
+    );
 }
 
 #[test]
@@ -20,7 +23,10 @@ fn socket_type_mismatch_displays_both_endpoints() {
         to_node: "B".to_string(),
         to_socket: "Color".to_string()
     };
-    assert_eq!(err.to_string(), "Cannot connect A:Height to B:Color, socket types differ");
+    assert_eq!(
+        err.to_string(),
+        "Cannot connect A:Height to B:Color, socket types differ"
+    );
 }
 
 #[test]

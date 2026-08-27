@@ -1,11 +1,16 @@
 use std::time::Duration;
 
-use waterdrop_terrain_generator::core::node_message::{MessageLifetime, NodeMessage, NodeMessageSeverity, TimedNodeMessage};
+use waterdrop_terrain_generator::core::node_message::{
+    MessageLifetime, NodeMessage, NodeMessageSeverity, TimedNodeMessage
+};
 
 #[test]
 fn constructors_set_the_expected_severity() {
     assert_eq!(NodeMessage::error("x").severity, NodeMessageSeverity::Error);
-    assert_eq!(NodeMessage::warning("x").severity, NodeMessageSeverity::Warning);
+    assert_eq!(
+        NodeMessage::warning("x").severity,
+        NodeMessageSeverity::Warning
+    );
     assert_eq!(NodeMessage::info("x").severity, NodeMessageSeverity::Info);
 }
 
@@ -19,7 +24,11 @@ fn constructors_preserve_the_text() {
 fn persistent_messages_never_expire() {
     let msg = TimedNodeMessage::new(NodeMessage::error("boom"), MessageLifetime::Persistent);
     assert!(!msg.is_expired());
-    assert_eq!(msg.remaining(), None, "a persistent message has no countdown");
+    assert_eq!(
+        msg.remaining(),
+        None,
+        "a persistent message has no countdown"
+    );
 }
 
 #[test]
@@ -39,7 +48,9 @@ fn timed_messages_report_remaining_time_before_expiring() {
         MessageLifetime::Timed(Duration::from_secs(60))
     );
     assert!(!msg.is_expired());
-    let remaining = msg.remaining().expect("a fresh timed message should have time left");
+    let remaining = msg
+        .remaining()
+        .expect("a fresh timed message should have time left");
     assert!(remaining <= Duration::from_secs(60));
     assert!(remaining > Duration::from_secs(50));
 }

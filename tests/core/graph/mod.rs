@@ -2,5 +2,5 @@
 //! `state.rs`), `topology` covers pure graph wiring (`topology.rs`).
 
 mod node_graph;
-mod topology;
 mod terrain_graph;
+mod topology;

@@ -12,15 +12,13 @@ use crate::core::tile_context::TileContext;
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-save",
-    png_bytes: include_bytes!("../../assets/icons/node_save.png"),
+    png_bytes: include_bytes!("../../assets/icons/node_save.png")
 };
 
-/// A sink node that writes its input heightmap to disk as a PNG file. Passes its input through
-/// unchanged as its own output, so it can still sit anywhere in a chain and be inspected in the
-/// preview like any other node.
+/// Passes its input through unchanged as its own output, so it can still sit anywhere in a chain and be inspected in the preview like any other node.
 #[derive(Debug, Default)]
 pub struct NodeSaveHeightmap {
-    file_path: String,
+    file_path: String
 }
 impl NodeSaveHeightmap {
     fn params() -> &'static [NParamDesc] {
@@ -32,21 +30,25 @@ impl NodeSaveHeightmap {
                     label: "File Path",
                     category: "Export",
                     default: NParamValue::String(String::new()),
-                    constraints: None,
+                    constraints: None
                 },
                 NParamDesc {
                     key: "browse",
                     label: "Browse File...",
                     category: "Export",
-                    default: NParamValue::Action { show_success_message: false },
-                    constraints: None,
+                    default: NParamValue::Action {
+                        show_success_message: false
+                    },
+                    constraints: None
                 },
                 NParamDesc {
                     key: "save",
                     label: "Save Heightmap",
                     category: "Export",
-                    default: NParamValue::Action { show_success_message: true },
-                    constraints: None,
+                    default: NParamValue::Action {
+                        show_success_message: true
+                    },
+                    constraints: None
                 },
             ]
         })
@@ -94,7 +96,7 @@ impl Node for NodeSaveHeightmap {
         &[NodeSocket {
             name: "Height",
             dtype: NodePortType::Height,
-            required: true,
+            required: true
         }]
     }
 
@@ -104,15 +106,19 @@ impl Node for NodeSaveHeightmap {
     fn get_param(&self, key: &str) -> Option<NParamValue> {
         match key {
             "file_path" => Some(NParamValue::String(self.file_path.clone())),
-            "browse" => Some(NParamValue::Action { show_success_message: false }),
-            "save" => Some(NParamValue::Action { show_success_message: true }),
-            _ => None,
+            "browse" => Some(NParamValue::Action {
+                show_success_message: false
+            }),
+            "save" => Some(NParamValue::Action {
+                show_success_message: true
+            }),
+            _ => None
         }
     }
     fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), NodeError> {
         match (key, value) {
             ("file_path", NParamValue::String(v)) => self.file_path = v,
-            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into()),
+            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into())
         }
         Ok(())
     }
@@ -121,7 +127,7 @@ impl Node for NodeSaveHeightmap {
         &self,
         _pool: &std::sync::Arc<TilePool>,
         inputs: &[TileHandle],
-        _ctx: &TileContext,
+        _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(inputs.to_vec())
     }
@@ -130,7 +136,7 @@ impl Node for NodeSaveHeightmap {
         &mut self,
         key: &str,
         output: &[TileHandle],
-        output_size: usize,
+        output_size: usize
     ) -> Result<(), NodeError> {
         match key {
             "browse" => {
@@ -146,7 +152,7 @@ impl Node for NodeSaveHeightmap {
                 Ok(())
             }
             "save" => self.save_to_disk(output, output_size),
-            _ => Err(format!("Unknown action '{}'", key).into()),
+            _ => Err(format!("Unknown action '{}'", key).into())
         }
     }
 }

@@ -1,6 +1,4 @@
-//! Assembles a chunked graph's per-chunk output into one full-terrain buffer - the stitching step
-//! behind whole-terrain export (and any future full-terrain preview), as opposed to previewing or
-//! saving just the currently selected chunk.
+//! Assembles a chunked graph's per-chunk output into one full-terrain buffer - the stitching step behind whole-terrain export.
 
 use crate::core::{
     graph::{GraphNodeId, NodeGraph, NodeGraphProcessResult},
@@ -8,11 +6,7 @@ use crate::core::{
     tile_allocator::crop_center
 };
 
-/// Evaluates `node_id` for every chunk of `graph`'s chunk grid and blits each chunk's cropped core
-/// region into one full-terrain buffer, in row-major order.
-///
-/// Returns the assembled data along with its width and height in texels
-/// (`chunks_x * tile_size` by `chunks_y * tile_size`).
+/// Blits each chunk's cropped core region into one full-terrain buffer, in row-major order. Returns the data plus its width/height in texels (`chunks_x * tile_size` by `chunks_y * tile_size`).
 pub fn assemble_terrain(
     graph: &mut NodeGraph,
     node_id: GraphNodeId
@@ -26,8 +20,7 @@ pub fn assemble_terrain(
     for chunk in chunk_grid.coords() {
         let tiles = match graph.process_chunk(node_id, chunk)? {
             NodeGraphProcessResult::Processed(_, tiles) => tiles,
-            // Evaluation is synchronous and always resolves within one call; a `Processing`
-            // result here would mean the graph was left mid-cycle, which is an internal bug.
+            // Evaluation is synchronous and always resolves within one call; `Processing` here means the graph was left mid-cycle, an internal bug.
             NodeGraphProcessResult::Processing => return Err(NodeError::NodeNotEvaluated(node_id))
         };
         let Some(heightmap) = tiles.first() else {

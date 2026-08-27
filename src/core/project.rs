@@ -1,7 +1,4 @@
-//! Serializes a [`NodeGraph`] to disk and rebuilds one from disk, independent of any particular
-//! graph editor UI. A UI layer only needs to supply each node's editor position on save, and gets
-//! back enough information on load (positions, connections) to rebuild its own view without
-//! having to separately introspect the loaded `NodeGraph`.
+//! Serializes/rebuilds a [`NodeGraph`], independent of any graph editor UI: the UI supplies node positions on save and gets enough back on load to rebuild its view without introspecting `NodeGraph`.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -15,20 +12,17 @@ use crate::core::{
     node_registry
 };
 
-/// On-disk representation of a saved node graph.
 #[derive(Serialize, Deserialize)]
 struct ProjectFile {
     version: u32,
-    /// Absent in `version: 1` files, saved before chunking existed - `load_project` falls back to
-    /// a single-chunk grid built from the caller-supplied tile size in that case.
+    /// Absent in `version: 1` files, saved before chunking existed - `load_project` falls back to a single-chunk grid built from the caller-supplied tile size.
     #[serde(default)]
     chunk_grid: Option<ChunkGridDto>,
     nodes: Vec<ProjectNode>,
     edges: Vec<ProjectEdge>
 }
 
-/// On-disk representation of a [`ChunkGrid`]: the terrain-level layout is a deliberate,
-/// persisted property of the project, not a runtime/session setting.
+/// The terrain-level layout is a deliberate, persisted property of the project, not a runtime/session setting.
 #[derive(Serialize, Deserialize)]
 struct ChunkGridDto {
     chunks_x: u32,
@@ -46,7 +40,12 @@ impl ChunkGridDto {
         }
     }
     fn into_grid(self) -> ChunkGrid {
-        ChunkGrid::new(self.chunks_x, self.chunks_y, self.tile_size, self.world_scale)
+        ChunkGrid::new(
+            self.chunks_x,
+            self.chunks_y,
+            self.tile_size,
+            self.world_scale
+        )
     }
 }
 
@@ -54,8 +53,7 @@ impl ChunkGridDto {
 struct ProjectNode {
     /// Id local to this file, used only to resolve `ProjectEdge` endpoints below.
     id: usize,
-    /// Matches `Node::label()`, which registered node types also use as their "Add Node" menu
-    /// entry (see `node_registry`), so it doubles as a stable type identifier.
+    /// Matches `Node::label()`, which also doubles as the "Add Node" menu entry (see `node_registry`), so it works as a stable type identifier.
     node_type: String,
     position: [f32; 2],
     params: Vec<(String, ParamValueDto)>
@@ -69,8 +67,7 @@ struct ProjectEdge {
     to_socket: usize
 }
 
-/// Mirrors `NParamValue`, minus the stateless `Action` variant: a button press has nothing to
-/// persist, so nodes are reloaded with actions left untriggered.
+/// Mirrors `NParamValue` minus the stateless `Action` variant - a button press has nothing to persist.
 #[derive(Serialize, Deserialize, Clone)]
 enum ParamValueDto {
     Int(i32),
@@ -107,9 +104,7 @@ impl ParamValueDto {
     }
 }
 
-/// A freshly rebuilt graph, along with the editor position and connections of every node in it -
-/// everything a UI layer needs to rebuild its own node-position view (e.g. an `egui-snarl`
-/// `Snarl`) without needing any further introspection into `NodeGraph`'s internal topology.
+/// Everything a UI layer needs to rebuild its own node-position view (e.g. an `egui-snarl` `Snarl`) without introspecting `NodeGraph`'s topology.
 pub struct BuiltGraph {
     pub graph: NodeGraph,
     pub positions: HashMap<GraphNodeId, [f32; 2]>,
@@ -117,17 +112,18 @@ pub struct BuiltGraph {
     pub edges: Vec<(GraphNodeId, usize, GraphNodeId, usize)>
 }
 
-/// Serializes `graph` (every node, its parameters and connections) plus each node's editor
-/// position to `path` as JSON. `positions` need not cover every node in `graph`: a missing entry
-/// is saved as `[0.0, 0.0]`.
+/// `positions` need not cover every node in `graph`: a missing entry is saved as `[0.0, 0.0]`.
 pub fn save_project(
     path: &Path,
     graph: &NodeGraph,
     positions: &HashMap<GraphNodeId, [f32; 2]>
 ) -> Result<(), String> {
     let ids: Vec<GraphNodeId> = graph.node_ids().collect();
-    let id_map: HashMap<GraphNodeId, usize> =
-        ids.iter().enumerate().map(|(file_id, id)| (*id, file_id)).collect();
+    let id_map: HashMap<GraphNodeId, usize> = ids
+        .iter()
+        .enumerate()
+        .map(|(file_id, id)| (*id, file_id))
+        .collect();
 
     let mut nodes = Vec::with_capacity(ids.len());
     for &graph_id in &ids {
@@ -153,7 +149,9 @@ pub fn save_project(
     for &graph_id in &ids {
         let inputs = graph.inputs(graph_id).map_err(|e| e.to_string())?;
         for (socket, input) in inputs.iter().enumerate() {
-            let Some((from_node, from_socket)) = input else { continue };
+            let Some((from_node, from_socket)) = input else {
+                continue;
+            };
             edges.push(ProjectEdge {
                 from_node: id_map[from_node],
                 from_socket: *from_socket,
@@ -217,5 +215,9 @@ pub fn load_project(path: &Path, tile_size: usize) -> Result<BuiltGraph, String>
         edges.push((from_node, edge.from_socket, to_node, edge.to_socket));
     }
 
-    Ok(BuiltGraph { graph, positions, edges })
+    Ok(BuiltGraph {
+        graph,
+        positions,
+        edges
+    })
 }

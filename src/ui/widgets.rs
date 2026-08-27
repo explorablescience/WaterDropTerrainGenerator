@@ -1,16 +1,17 @@
-use wde::prelude::ui::egui;
 use crate::{
     core::{
         node::NodeIcon,
         node_message::NodeMessage,
         node_parameters::{NParamConstraints, NParamDesc, NParamValue}
-    }, ui::theme::{self, palette::{self, BG_CARD}}
+    },
+    ui::theme::{
+        self,
+        palette::{self, BG_CARD}
+    }
 };
+use wde::prelude::ui::egui;
 
-/// Draws a node's error/warning/info feedback as a small stack of banners, meant to sit between
-/// a node's title and its parameters: a desaturated tint of the message's severity color for the
-/// background, and the full color for the border and text. Each message gets its own rounded
-/// rectangle, with a small gap separating it from the one before it.
+/// Background is a desaturated tint of the severity color; border/text use the full color.
 pub fn node_messages(ui: &mut egui::Ui, messages: &[NodeMessage]) {
     for message in messages {
         ui.add_space(6.0);
@@ -35,7 +36,6 @@ pub fn node_messages(ui: &mut egui::Ui, messages: &[NodeMessage]) {
     }
 }
 
-/// A draggable numeric value pill for a node parameter
 pub fn slider(
     ui: &mut egui::Ui,
     desc: &NParamDesc,
@@ -57,9 +57,6 @@ pub fn slider(
     response
 }
 
-/// A row of two draggable numeric pills (X/Y) sharing one range/type, for a `Vector2`/`Vector2Int`
-/// node parameter. Sits below a small dim header carrying the parameter's own label, matching the
-/// category-header style used elsewhere in the properties panel.
 pub fn vector2(
     ui: &mut egui::Ui,
     desc: &NParamDesc,
@@ -87,10 +84,28 @@ pub fn vector2(
     let response = ui
         .horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = gap;
-            let x_response =
-                value_pill(ui, id.with("x"), half_width, "X", color, &mut value.0, min.0, max.0, is_int);
-            let y_response =
-                value_pill(ui, id.with("y"), half_width, "Y", color, &mut value.1, min.1, max.1, is_int);
+            let x_response = value_pill(
+                ui,
+                id.with("x"),
+                half_width,
+                "X",
+                color,
+                &mut value.0,
+                min.0,
+                max.0,
+                is_int
+            );
+            let y_response = value_pill(
+                ui,
+                id.with("y"),
+                half_width,
+                "Y",
+                color,
+                &mut value.1,
+                min.1,
+                max.1,
+                is_int
+            );
             x_response | y_response
         })
         .inner;
@@ -100,10 +115,7 @@ pub fn vector2(
     response
 }
 
-/// Shared painting/interaction logic behind [`slider`] and [`vector2`]: a `width`-wide draggable
-/// pill showing `label` on the left and the current value on the right, with double-click-to-type
-/// editing. Each pill needs its own persistent `id` so co-located pills (e.g. a vector2's X/Y)
-/// don't fight over drag/edit state.
+/// Shared by [`slider`] and [`vector2`]; each pill needs its own persistent `id` so co-located pills (e.g. a vector2's X/Y) don't fight over drag/edit state.
 #[allow(clippy::too_many_arguments)]
 fn value_pill(
     ui: &mut egui::Ui,
@@ -123,15 +135,13 @@ fn value_pill(
     let desired_size = egui::Vec2::new(width, 20.0);
     let (rect, mut response) = ui.allocate_exact_size(desired_size, egui::Sense::click_and_drag());
 
-    // Handle double-click to enter edit mode
     let mut editing = ui.data_mut(|d| d.get_temp::<String>(id));
     if response.double_clicked() {
         editing = Some(format!("{value:.decimals$}"));
         ui.data_mut(|d| d.insert_temp(id, editing.clone().unwrap()));
         ui.memory_mut(|m| m.request_focus(id));
     }
- 
-    // Handle dragging
+
     if response.dragged() && editing.is_none() {
         let new_value = if has_range {
             response.interact_pointer_pos().map(|pos| {
@@ -153,8 +163,7 @@ fn value_pill(
     if has_range {
         *value = value.clamp(min, max);
     }
- 
-    // Painting
+
     let rounding = egui::CornerRadius::same(2);
     let background_color = color.gamma_multiply(0.3);
     let text_color = color.gamma_multiply(1.3);
@@ -165,23 +174,34 @@ fn value_pill(
 
         painter.rect_filled(rect, rounding, BG_CARD);
 
-        let t = if has_range { (*value - min) / (max - min).max(f32::EPSILON) } else { 0.0 };
+        let t = if has_range {
+            (*value - min) / (max - min).max(f32::EPSILON)
+        } else {
+            0.0
+        };
         let fill_width = rect.width() * t.clamp(0.0, 1.0);
         if fill_width > 0.0 {
-            let fill_rect = egui::Rect::from_min_size(rect.min, egui::Vec2::new(fill_width, rect.height()));
+            let fill_rect =
+                egui::Rect::from_min_size(rect.min, egui::Vec2::new(fill_width, rect.height()));
             painter.rect_filled(fill_rect, rounding, background_color);
         }
 
-        painter.rect_stroke(rect, rounding, egui::Stroke::new(4.0, BG_CARD), egui::StrokeKind::Outside);
+        painter.rect_stroke(
+            rect,
+            rounding,
+            egui::Stroke::new(4.0, BG_CARD),
+            egui::StrokeKind::Outside
+        );
 
-        // A bright vertical bar marking the exact current-value position on the track.
         if has_range {
             let marker_width = 2.0;
-            let marker_x = (rect.left() + fill_width)
-                .clamp(rect.left() + marker_width * 0.5, rect.right() - marker_width * 0.5);
+            let marker_x = (rect.left() + fill_width).clamp(
+                rect.left() + marker_width * 0.5,
+                rect.right() - marker_width * 0.5
+            );
             let marker_rect = egui::Rect::from_center_size(
                 egui::pos2(marker_x, rect.center().y),
-                egui::vec2(marker_width, rect.height() - 4.0),
+                egui::vec2(marker_width, rect.height() - 4.0)
             );
             painter.rect_filled(marker_rect, egui::CornerRadius::ZERO, marker_color);
         }
@@ -191,7 +211,7 @@ fn value_pill(
             egui::Align2::LEFT_CENTER,
             label,
             theme::body_font(theme::fonts::FONT_SIZE_BODY),
-            text_color,
+            text_color
         );
 
         painter.text(
@@ -199,20 +219,19 @@ fn value_pill(
             egui::Align2::RIGHT_CENTER,
             format!("{value:.decimals$}"),
             theme::body_font(theme::fonts::FONT_SIZE_BODY),
-            text_color,
+            text_color
         );
     }
- 
-    // Editing text field
+
     if let Some(mut text) = editing.clone() {
         let text_response = ui.put(
             rect,
             egui::TextEdit::singleline(&mut text)
                 .font(theme::heading_font(theme::fonts::FONT_SIZE_BODY))
                 .horizontal_align(egui::Align::Center)
-                .margin(egui::Margin::symmetric(padding as i8, 0)),
+                .margin(egui::Margin::symmetric(padding as i8, 0))
         );
- 
+
         if text_response.lost_focus() {
             if let Ok(parsed) = text.trim().parse::<f32>() {
                 let parsed = if is_int { parsed.round() } else { parsed };
@@ -229,9 +248,7 @@ fn value_pill(
     response
 }
 
-/// A full-width text input for a string node parameter, styled to match [`slider`]: a flat
-/// BG_CARD pill with the parameter's label baked in on the left and its value editable across
-/// the rest of the row.
+/// Styled to match [`slider`]: a flat pill with the label baked in on the left.
 pub fn text_field(
     ui: &mut egui::Ui,
     label: &str,
@@ -257,22 +274,25 @@ pub fn text_field(
         let painter = ui.painter();
 
         painter.rect_filled(rect, rounding, BG_CARD);
-        painter.rect_stroke(rect, rounding, egui::Stroke::new(4.0, BG_CARD), egui::StrokeKind::Outside);
+        painter.rect_stroke(
+            rect,
+            rounding,
+            egui::Stroke::new(4.0, BG_CARD),
+            egui::StrokeKind::Outside
+        );
 
         painter.text(
             rect.left_center() + egui::Vec2::new(padding, 0.0),
             egui::Align2::LEFT_CENTER,
             label,
             font.clone(),
-            palette::TEXT_DISABLED,
+            palette::TEXT_DISABLED
         );
     }
 
-    // The editable value fills the right side of the pill, centered within that space, with a
-    // bit of margin so it never touches the label or the pill's right edge.
     let field_rect = egui::Rect::from_min_max(
         egui::pos2(rect.left() + padding * 2.0 + label_width, rect.top()),
-        egui::pos2(rect.right() - padding_right, rect.bottom()),
+        egui::pos2(rect.right() - padding_right, rect.bottom())
     );
 
     let mut edit = egui::TextEdit::singleline(value)
@@ -281,7 +301,12 @@ pub fn text_field(
         .horizontal_align(egui::Align::Center)
         .vertical_align(egui::Align::Center)
         .frame(false)
-        .margin(egui::Margin { left: 16, right: 0, top: 0, bottom: 0 });
+        .margin(egui::Margin {
+            left: 16,
+            right: 0,
+            top: 0,
+            bottom: 0
+        });
     if let Some(char_limit) = char_limit {
         edit = edit.char_limit(char_limit);
     }
@@ -292,11 +317,7 @@ pub fn text_field(
     response
 }
 
-/// A full-width, filled button for a stateless `NParamValue::Action` parameter, styled to match
-/// [`slider`]/[`text_field`]: a flat pill with a centered label. `on_click` is invoked once,
-/// synchronously, the moment the button is clicked - the caller supplies whatever data the click
-/// needs to act on (e.g. the node's resolved inputs and other parameters) already baked into the
-/// closure.
+/// `on_click` is invoked once, synchronously, the moment the button is clicked.
 pub fn button(
     ui: &mut egui::Ui,
     label: &str,
@@ -323,7 +344,7 @@ pub fn button(
             egui::Align2::CENTER_CENTER,
             label,
             theme::body_font(theme::fonts::FONT_SIZE_BODY),
-            color.gamma_multiply(1.3),
+            color.gamma_multiply(1.3)
         );
     }
 
@@ -337,7 +358,6 @@ pub fn button(
 }
 
 const ENUM_ROW_HEIGHT: f32 = 22.0;
-/// Displays a label and a toggle switch
 pub fn toggle_switch(
     ui: &mut egui::Ui,
     label: &str,
@@ -375,8 +395,7 @@ pub fn toggle_switch(
         } else {
             palette::BG_WIDGET
         };
-        let track_stroke =
-            egui::Stroke::new(1.0, if *on { track_fill } else { palette::BORDER });
+        let track_stroke = egui::Stroke::new(1.0, if *on { track_fill } else { palette::BORDER });
         ui.painter().rect(
             rect,
             radius,
@@ -400,16 +419,14 @@ pub fn toggle_switch(
     response
 }
 
-/// A parameter row control for an `NParamValue::Enum`: a dim label vertically centered against
-/// either a compact segmented control (2-3 options) or a dropdown (4+ options, so the row never
-/// grows wider than the panel).
+/// Segmented control for 2-3 options, dropdown for 4+ so the row never grows wider than the panel.
 pub fn enum_selector(
     ui: &mut egui::Ui,
     id_salt: impl std::hash::Hash,
     label: &str,
     color: egui::Color32,
     options: &[String],
-    current: &mut String,
+    current: &mut String
 ) -> egui::Response {
     enum_label(ui, &format!("  {}", label));
 
@@ -420,32 +437,29 @@ pub fn enum_selector(
     }
 }
 
-/// Draws `label` sized to exactly its own text width and [`ENUM_ROW_HEIGHT`] tall, vertically
-/// centered, so it lines up with the control drawn in the next grid cell regardless of that
-/// control's own height.
+/// Fixed at [`ENUM_ROW_HEIGHT`] so it lines up with the control in the next grid cell regardless of that control's own height.
 fn enum_label(ui: &mut egui::Ui, label: &str) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(
         label.to_owned(),
         theme::body_font(theme::fonts::FONT_SIZE_BODY),
-        palette::TEXT_DISABLED,
+        palette::TEXT_DISABLED
     );
     let desired_size = egui::vec2(galley.size().x, ENUM_ROW_HEIGHT);
     let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
     if ui.is_rect_visible(rect) {
         let text_pos = rect.left_center() - egui::vec2(0.0, galley.size().y * 0.5);
-        ui.painter().galley(text_pos, galley, palette::TEXT_DISABLED);
+        ui.painter()
+            .galley(text_pos, galley, palette::TEXT_DISABLED);
     }
     response
 }
 
-/// A compact segmented control for a small enum: every segment shares one `BG_MAIN_COLOR` track
-/// rect, split evenly across the cell's available width so the whole control adapts to the panel
-/// instead of overflowing it.
+/// Segments split evenly across the cell's available width so the control adapts to the panel instead of overflowing it.
 fn enum_pills(
     ui: &mut egui::Ui,
     color: egui::Color32,
     options: &[String],
-    current: &mut String,
+    current: &mut String
 ) -> egui::Response {
     let text_padding_y = 4.0;
     let desired_size = egui::vec2(ui.available_width(), ENUM_ROW_HEIGHT + text_padding_y * 2.0);
@@ -453,7 +467,8 @@ fn enum_pills(
     let rounding = egui::CornerRadius::same(theme::layout::WIDGET_ROUNDING);
 
     if ui.is_rect_visible(rect) {
-        ui.painter().rect_filled(rect, rounding, palette::BG_MAIN_COLOR);
+        ui.painter()
+            .rect_filled(rect, rounding, palette::BG_MAIN_COLOR);
     }
 
     let padding = 3.0;
@@ -462,7 +477,7 @@ fn enum_pills(
     for (i, option) in options.iter().enumerate() {
         let seg_rect = egui::Rect::from_min_size(
             rect.min + egui::vec2(seg_width * i as f32, 0.0),
-            egui::vec2(seg_width, rect.height()),
+            egui::vec2(seg_width, rect.height())
         );
         let seg_id = response.id.with(("enum-pill", i));
         let seg_response = ui.interact(seg_rect, seg_id, egui::Sense::click());
@@ -475,17 +490,23 @@ fn enum_pills(
         if ui.is_rect_visible(seg_rect) {
             let fill_rect = seg_rect.shrink2(egui::vec2(padding, padding_y));
             if selected {
-                ui.painter().rect_filled(fill_rect, rounding, color.gamma_multiply(0.3));
+                ui.painter()
+                    .rect_filled(fill_rect, rounding, color.gamma_multiply(0.3));
             } else if seg_response.hovered() {
-                ui.painter().rect_filled(fill_rect, rounding, palette::BG_WIDGET_HOVERED);
+                ui.painter()
+                    .rect_filled(fill_rect, rounding, palette::BG_WIDGET_HOVERED);
             }
-            let text_color = if selected { color.gamma_multiply(1.3) } else { palette::TEXT_MUTED };
+            let text_color = if selected {
+                color.gamma_multiply(1.3)
+            } else {
+                palette::TEXT_MUTED
+            };
             ui.painter().with_clip_rect(seg_rect).text(
                 seg_rect.center(),
                 egui::Align2::CENTER_CENTER,
                 option,
                 theme::body_font(theme::fonts::FONT_SIZE_BODY),
-                text_color,
+                text_color
             );
         }
 
@@ -495,13 +516,12 @@ fn enum_pills(
     response
 }
 
-/// A dropdown for a larger enum, stretched to the cell's available width so it stays within the
-/// panel instead of using the style's fixed `combo_width`.
+/// Stretched to the cell's available width instead of the style's fixed `combo_width`.
 fn enum_dropdown(
     ui: &mut egui::Ui,
     id_salt: impl std::hash::Hash,
     options: &[String],
-    current: &mut String,
+    current: &mut String
 ) -> egui::Response {
     let width = ui.available_width();
     ui.allocate_ui_with_layout(
@@ -514,7 +534,10 @@ fn enum_dropdown(
                 .width(width)
                 .show_ui(ui, |ui| {
                     for option in options {
-                        if ui.selectable_value(current, option.clone(), option).clicked() {
+                        if ui
+                            .selectable_value(current, option.clone(), option)
+                            .clicked()
+                        {
                             changed = true;
                         }
                     }
@@ -524,25 +547,20 @@ fn enum_dropdown(
                 response.mark_changed();
             }
             response
-        },
+        }
     )
     .inner
 }
 
-/// Builds a node's PNG logo as an egui image, tinted with `color` so it always matches its
-/// node's category color. The source image is expected to be a white glyph on a transparent
-/// background.
+/// Source image is expected to be a white glyph on a transparent background so `color` tints cleanly.
 pub fn node_icon_image(icon: NodeIcon, color: egui::Color32) -> egui::Image<'static> {
     egui::Image::from_bytes(format!("bytes://{}.png", icon.id), icon.png_bytes).tint(color)
 }
 
-/// Paints a node's PNG logo inside `rect`, tinted with `color` so it always matches its node's
-/// category color.
 pub fn paint_node_icon(ui: &egui::Ui, rect: egui::Rect, icon: NodeIcon, color: egui::Color32) {
     node_icon_image(icon, color).paint_at(ui, rect);
 }
 
-/// Paints a chevron for a collapsible menu.
 pub fn menu_icon(ui: &mut egui::Ui, openness: f32, response: &egui::Response) {
     let color = if response.hovered() {
         palette::TEXT
@@ -555,7 +573,8 @@ pub fn menu_icon(ui: &mut egui::Ui, openness: f32, response: &egui::Response) {
 
     let mut points = vec![rect.left_top(), rect.center_bottom(), rect.right_top()];
     use std::f32::consts::TAU;
-    let rotation = egui::emath::Rot2::from_angle(egui::remap(openness, 0.0..=1.0, -TAU / 4.0..=0.0));
+    let rotation =
+        egui::emath::Rot2::from_angle(egui::remap(openness, 0.0..=1.0, -TAU / 4.0..=0.0));
     for p in &mut points {
         *p = rect.center() + rotation * (*p - rect.center());
     }
@@ -563,4 +582,3 @@ pub fn menu_icon(ui: &mut egui::Ui, openness: f32, response: &egui::Response) {
     ui.painter()
         .add(egui::Shape::line(points, egui::Stroke::new(1.5, color)));
 }
-

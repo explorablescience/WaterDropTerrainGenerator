@@ -3,12 +3,16 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use waterdrop_terrain_generator::core::chunk_grid::{ChunkCoord, ChunkGrid};
 use waterdrop_terrain_generator::core::graph::{NodeGraph, NodeGraphProcessResult};
-use waterdrop_terrain_generator::core::node::{Node, NodeCategory, NodeIcon, NodeLocality, NodePortType, NodeSocket};
+use waterdrop_terrain_generator::core::node::{
+    Node, NodeCategory, NodeIcon, NodeLocality, NodePortType, NodeSocket
+};
 use waterdrop_terrain_generator::core::node_error::NodeError;
 use waterdrop_terrain_generator::core::node_parameters::NParamValue;
 use waterdrop_terrain_generator::core::tile_allocator::{TileHandle, TilePool};
 use waterdrop_terrain_generator::core::tile_context::TileContext;
-use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin, NodeIntegrate};
+use waterdrop_terrain_generator::nodes::{
+    NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin, NodeIntegrate
+};
 
 #[test]
 fn test_node_graph_connections() {
@@ -168,7 +172,10 @@ fn node_mut_lets_callers_mutate_a_node_in_place() {
         .set_param("strength", NParamValue::Float(0.1))
         .unwrap();
 
-    assert_eq!(graph.node(id).unwrap().get_param("strength"), Some(NParamValue::Float(0.1)));
+    assert_eq!(
+        graph.node(id).unwrap().get_param("strength"),
+        Some(NParamValue::Float(0.1))
+    );
 }
 
 #[test]
@@ -197,7 +204,10 @@ fn mutating_a_node_invalidates_its_own_and_downstream_cached_output() {
         NodeGraphProcessResult::Processed(g, _) => g,
         _ => panic!("expected the graph to finish processing")
     };
-    assert_eq!(first, cached, "an unchanged graph should be served from cache");
+    assert_eq!(
+        first, cached,
+        "an unchanged graph should be served from cache"
+    );
 
     // Changing the source's parameter should force both it and its downstream consumer to
     // recompute, advancing the generation counter. This also covers a source that has since
@@ -213,7 +223,10 @@ fn mutating_a_node_invalidates_its_own_and_downstream_cached_output() {
         NodeGraphProcessResult::Processed(g, _) => g,
         _ => panic!("expected the graph to finish processing")
     };
-    assert!(after_change > cached, "changing an upstream parameter should force recomputation");
+    assert!(
+        after_change > cached,
+        "changing an upstream parameter should force recomputation"
+    );
 }
 
 #[test]
@@ -236,7 +249,10 @@ fn is_processing_is_true_immediately_after_a_node_is_computed() {
     assert!(graph.is_processing());
 }
 
-const TEST_ICON: NodeIcon = NodeIcon { id: "test-icon", png_bytes: &[] };
+const TEST_ICON: NodeIcon = NodeIcon {
+    id: "test-icon",
+    png_bytes: &[]
+};
 
 /// A node whose `process` counts how many times it actually runs (as opposed to being served
 /// from cache), so a test can prove a `Global` node isn't recomputed once per chunk. Its output is
@@ -258,10 +274,16 @@ impl Node for FakeGlobalSource {
         TEST_ICON
     }
     fn locality(&self) -> NodeLocality {
-        NodeLocality::Global { native_resolution: self.native_resolution }
+        NodeLocality::Global {
+            native_resolution: self.native_resolution
+        }
     }
     fn outputs(&self) -> &[NodeSocket] {
-        &[NodeSocket { name: "Height", dtype: NodePortType::Height, required: true }]
+        &[NodeSocket {
+            name: "Height",
+            dtype: NodePortType::Height,
+            required: true
+        }]
     }
     fn process(
         &self,
@@ -295,7 +317,11 @@ impl Node for FakeCountingSource {
         TEST_ICON
     }
     fn outputs(&self) -> &[NodeSocket] {
-        &[NodeSocket { name: "Height", dtype: NodePortType::Height, required: true }]
+        &[NodeSocket {
+            name: "Height",
+            dtype: NodePortType::Height,
+            required: true
+        }]
     }
     fn process(
         &self,
@@ -312,23 +338,35 @@ impl Node for FakeCountingSource {
 fn requesting_the_same_chunk_twice_hits_the_per_chunk_cache() {
     let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
     let calls = Arc::new(AtomicUsize::new(0));
-    let id = graph.add_node(Box::new(FakeCountingSource { calls: calls.clone() }));
+    let id = graph.add_node(Box::new(FakeCountingSource {
+        calls: calls.clone()
+    }));
 
     graph.process_chunk(id, ChunkCoord(0, 0)).unwrap();
     graph.process_chunk(id, ChunkCoord(0, 0)).unwrap();
 
-    assert_eq!(calls.load(Ordering::SeqCst), 1, "the second request for the same chunk should be served from cache");
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "the second request for the same chunk should be served from cache"
+    );
 }
 
 #[test]
 fn different_chunks_of_the_same_node_are_computed_and_cached_independently() {
     let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
     let calls = Arc::new(AtomicUsize::new(0));
-    let id = graph.add_node(Box::new(FakeCountingSource { calls: calls.clone() }));
+    let id = graph.add_node(Box::new(FakeCountingSource {
+        calls: calls.clone()
+    }));
 
     graph.process_chunk(id, ChunkCoord(0, 0)).unwrap();
     graph.process_chunk(id, ChunkCoord(1, 0)).unwrap();
-    assert_eq!(calls.load(Ordering::SeqCst), 2, "each distinct chunk should be computed once");
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        2,
+        "each distinct chunk should be computed once"
+    );
 
     // Re-requesting chunk 0 should still be cached, independent of chunk 1 having since run.
     graph.process_chunk(id, ChunkCoord(0, 0)).unwrap();
@@ -404,7 +442,10 @@ fn a_global_node_is_evaluated_once_regardless_of_how_many_chunks_request_it() {
     // consumer - the engine no longer resamples a `Global` ancestor's output automatically.
     let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
     let calls = Arc::new(AtomicUsize::new(0));
-    let source = graph.add_node(Box::new(FakeGlobalSource { calls: calls.clone(), native_resolution: 6 }));
+    let source = graph.add_node(Box::new(FakeGlobalSource {
+        calls: calls.clone(),
+        native_resolution: 6
+    }));
     let integrate = graph.add_node(Box::new(NodeIntegrate::default()));
     let erosion = graph.add_node(Box::new(NodeErosion::default()));
     graph.connect(source, 0, integrate, 0).unwrap();
@@ -415,17 +456,26 @@ fn a_global_node_is_evaluated_once_regardless_of_how_many_chunks_request_it() {
     // Re-requesting a chunk already computed should also not touch the global node again.
     graph.process_chunk(erosion, ChunkCoord(0, 0)).unwrap();
 
-    assert_eq!(calls.load(Ordering::SeqCst), 1, "the global node's whole-terrain pass should be memoized across every chunk");
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "the global node's whole-terrain pass should be memoized across every chunk"
+    );
 }
 
 #[test]
 fn integrate_maps_world_positions_into_its_globals_local_space_via_scale_and_position() {
     // World space is centered on the grid, so this single chunk's core spans world x in [-2, 2).
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0));
-    let source = graph.add_node(Box::new(FakeGlobalWorldXMarker { native_resolution: 8 }));
+    let source = graph.add_node(Box::new(FakeGlobalWorldXMarker {
+        native_resolution: 8
+    }));
     // `scale = 4` gives the source a 4-world-unit physical footprint, `position = 0` centers that
     // footprint on the terrain's own origin.
-    let integrate = graph.add_node(Box::new(NodeIntegrate { scale: 4.0, position: (0.0, 0.0) }));
+    let integrate = graph.add_node(Box::new(NodeIntegrate {
+        scale: 4.0,
+        position: (0.0, 0.0)
+    }));
     graph.connect(source, 0, integrate, 0).unwrap();
 
     let tiles = match graph.process_chunk(integrate, ChunkCoord(0, 0)).unwrap() {
@@ -442,7 +492,12 @@ fn integrate_maps_world_positions_into_its_globals_local_space_via_scale_and_pos
     let row: Vec<f32> = (0..4).map(|x| tiles[0][x]).collect();
     let expected = [-0.5, -0.25, 0.0, 0.25];
     for (got, want) in row.iter().zip(expected.iter()) {
-        assert!((got - want).abs() < 1e-4, "got {:?}, expected {:?}", row, expected);
+        assert!(
+            (got - want).abs() < 1e-4,
+            "got {:?}, expected {:?}",
+            row,
+            expected
+        );
     }
 }
 
@@ -456,18 +511,34 @@ fn integrates_physical_size_is_independent_of_the_globals_native_resolution() {
     // different resolutions (same scale/position) disagree anywhere, resolution must be leaking
     // into the physical footprint.
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0));
-    let low_res = graph.add_node(Box::new(FakeGlobalWorldXMarker { native_resolution: 4 }));
-    let high_res = graph.add_node(Box::new(FakeGlobalWorldXMarker { native_resolution: 64 }));
-    let integrate_low = graph.add_node(Box::new(NodeIntegrate { scale: 5.0, position: (0.0, 0.0) }));
-    let integrate_high = graph.add_node(Box::new(NodeIntegrate { scale: 5.0, position: (0.0, 0.0) }));
+    let low_res = graph.add_node(Box::new(FakeGlobalWorldXMarker {
+        native_resolution: 4
+    }));
+    let high_res = graph.add_node(Box::new(FakeGlobalWorldXMarker {
+        native_resolution: 64
+    }));
+    let integrate_low = graph.add_node(Box::new(NodeIntegrate {
+        scale: 5.0,
+        position: (0.0, 0.0)
+    }));
+    let integrate_high = graph.add_node(Box::new(NodeIntegrate {
+        scale: 5.0,
+        position: (0.0, 0.0)
+    }));
     graph.connect(low_res, 0, integrate_low, 0).unwrap();
     graph.connect(high_res, 0, integrate_high, 0).unwrap();
 
-    let low = match graph.process_chunk(integrate_low, ChunkCoord(0, 0)).unwrap() {
+    let low = match graph
+        .process_chunk(integrate_low, ChunkCoord(0, 0))
+        .unwrap()
+    {
         NodeGraphProcessResult::Processed(_, tiles) => tiles[0].clone(),
         _ => panic!("expected the graph to finish processing")
     };
-    let high = match graph.process_chunk(integrate_high, ChunkCoord(0, 0)).unwrap() {
+    let high = match graph
+        .process_chunk(integrate_high, ChunkCoord(0, 0))
+        .unwrap()
+    {
         NodeGraphProcessResult::Processed(_, tiles) => tiles[0].clone(),
         _ => panic!("expected the graph to finish processing")
     };
@@ -477,7 +548,9 @@ fn integrates_physical_size_is_independent_of_the_globals_native_resolution() {
             (low[i] - high[i]).abs() < 1e-4,
             "texel {} differs between a 4-texel and a 64-texel global source at the same scale/position ({} vs {}) - \
              native_resolution must be leaking into the physical footprint",
-            i, low[i], high[i]
+            i,
+            low[i],
+            high[i]
         );
     }
 }
@@ -499,10 +572,16 @@ impl Node for FakeGlobalWorldXMarker {
         TEST_ICON
     }
     fn locality(&self) -> NodeLocality {
-        NodeLocality::Global { native_resolution: self.native_resolution }
+        NodeLocality::Global {
+            native_resolution: self.native_resolution
+        }
     }
     fn outputs(&self) -> &[NodeSocket] {
-        &[NodeSocket { name: "Height", dtype: NodePortType::Height, required: true }]
+        &[NodeSocket {
+            name: "Height",
+            dtype: NodePortType::Height,
+            required: true
+        }]
     }
     fn process(
         &self,
@@ -527,7 +606,9 @@ fn a_directly_requested_global_node_always_returns_its_own_bare_result_centered_
     // shows its own bare, self-centered shape - the same regardless of which chunk asked for it.
     // Mapping it onto the actual terrain is the explicit job of an integration node instead.
     let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
-    let source = graph.add_node(Box::new(FakeGlobalWorldXMarker { native_resolution: 8 }));
+    let source = graph.add_node(Box::new(FakeGlobalWorldXMarker {
+        native_resolution: 8
+    }));
 
     let chunk0 = match graph.process_chunk(source, ChunkCoord(0, 0)).unwrap() {
         NodeGraphProcessResult::Processed(_, tiles) => tiles[0].clone(),
@@ -548,7 +629,10 @@ fn a_directly_requested_global_node_always_returns_its_own_bare_result_centered_
     // right at local x = 0.
     let s = chunk0.size();
     assert_eq!(s, 8);
-    assert!(chunk0[4].abs() < 1e-6, "the center of a global node's bare result should sit at local (0, 0)");
+    assert!(
+        chunk0[4].abs() < 1e-6,
+        "the center of a global node's bare result should sit at local (0, 0)"
+    );
 }
 
 #[test]

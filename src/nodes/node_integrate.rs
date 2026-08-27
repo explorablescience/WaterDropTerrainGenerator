@@ -22,7 +22,10 @@ pub struct NodeIntegrate {
 }
 impl Default for NodeIntegrate {
     fn default() -> Self {
-        Self { position: (0.0, 0.0), scale: 1.0 }
+        Self {
+            position: (0.0, 0.0),
+            scale: 1.0
+        }
     }
 }
 impl NodeIntegrate {
@@ -45,7 +48,10 @@ impl NodeIntegrate {
                     label: "Scale",
                     category: "Placement",
                     default: NParamValue::Float(1.0),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.001, max: 10.0 })
+                    constraints: Some(NParamConstraints::FloatRange {
+                        min: 0.001,
+                        max: 10.0
+                    })
                 },
             ]
         })
@@ -105,9 +111,7 @@ impl Node for NodeIntegrate {
     ) -> Result<Vec<TileHandle>, NodeError> {
         let input = &inputs[0];
         let input_size = input.size();
-        // The physical footprint is `scale` alone - not `input_size` (native_resolution), which
-        // only picks how many texels sample that same footprint, not how large it is. `input`'s
-        // own coordinate frame is the same fixed one every `Global` node computes in.
+        // The physical footprint is `scale` alone - `input_size` only picks how many texels sample it, not how large it is.
         let input_ctx = TileContext::for_global(input_size);
 
         let mut output = pool.allocate();

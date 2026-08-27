@@ -2,8 +2,8 @@ use egui_snarl::{
     InPin, NodeId, OutPin, Snarl,
     ui::{
         BackgroundPattern, NodeLayout, PinInfo, PinPlacement, PinShape, SnarlPin, SnarlStyle,
-        SnarlViewer, SnarlWidget, WireLayer, WireStyle,
-    },
+        SnarlViewer, SnarlWidget, WireLayer, WireStyle
+    }
 };
 use wde::prelude::{ui::egui, *};
 
@@ -13,31 +13,29 @@ use crate::{
         graph::GraphNodeId,
         node::{Node, NodeCategory, NodeIcon},
         node_error::NodeError,
-        node_registry,
+        node_registry
     },
     ui::{
         theme::{self, palette::BG_GRAPH},
-        widgets,
-    },
+        widgets
+    }
 };
 
 pub type GraphInstance = Snarl<GraphNode>;
 pub enum GraphNode {
-    /// Represents a node in the graph that corresponds to a node in the underlying `NodeGraph`.
-    Main(GraphNodeId),
+    Main(GraphNodeId)
 }
 
 /// Identifies a node both in the `egui-snarl` UI graph and in the underlying `NodeGraph`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SelectedNode {
     pub snarl_id: NodeId,
-    pub graph_id: GraphNodeId,
+    pub graph_id: GraphNodeId
 }
 
-/// Represents the viewer for the graph editor, which manages the interaction between the UI and the underlying terrain graph.
 struct GraphViewer {
     selected: Option<SelectedNode>,
-    terrain_graph: TerrainGraphHolder,
+    terrain_graph: TerrainGraphHolder
 }
 impl SnarlViewer<GraphNode> for GraphViewer {
     fn title(&mut self, node: &GraphNode) -> String {
@@ -69,22 +67,20 @@ impl SnarlViewer<GraphNode> for GraphViewer {
     }
 
     fn connect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<GraphNode>) {
-        // Connects pins in terrain graph. An input socket can only hold one connection, so
-        // this replaces whatever was previously plugged into `to`, and rejects the connection
-        // outright if the pin types don't match.
+        // An input socket can only hold one connection, so this replaces whatever was previously plugged into `to`.
         let GraphNode::Main(from_graph_id) = &snarl[from.id.node];
         let GraphNode::Main(to_graph_id) = &snarl[to.id.node];
         if let Err(e) = self.terrain_graph.write().graph_mut().connect(
             *from_graph_id,
             from.id.output,
             *to_graph_id,
-            to.id.input,
+            to.id.input
         ) {
             match e {
                 NodeError::SocketTypeMismatch { .. } => {
                     warn!("Cannot connect pins: socket types don't match.");
                 }
-                _ => error!("Failed to connect nodes: {}", e),
+                _ => error!("Failed to connect nodes: {}", e)
             }
             return;
         }
@@ -117,7 +113,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         _inputs: &[InPin],
         _outputs: &[OutPin],
         ui: &mut egui::Ui,
-        instance: &mut GraphInstance,
+        instance: &mut GraphInstance
     ) {
         let label = self.title(&instance[node]);
         let Some(category) = self.node_category(&instance[node]) else {
@@ -130,14 +126,14 @@ impl SnarlViewer<GraphNode> for GraphViewer {
             if let Some(icon) = icon {
                 let (rect, _) = ui.allocate_exact_size(
                     egui::Vec2::splat(theme::fonts::FONT_SIZE_NODE_TITLE),
-                    egui::Sense::hover(),
+                    egui::Sense::hover()
                 );
                 widgets::paint_node_icon(ui, rect, icon, color);
             }
             ui.label(
                 egui::RichText::new(label)
                     .color(color)
-                    .font(theme::heading_font(theme::fonts::FONT_SIZE_NODE_TITLE)),
+                    .font(theme::heading_font(theme::fonts::FONT_SIZE_NODE_TITLE))
             );
         });
     }
@@ -145,7 +141,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         &mut self,
         pin: &InPin,
         ui: &mut egui::Ui,
-        instance: &mut GraphInstance,
+        instance: &mut GraphInstance
     ) -> impl SnarlPin + 'static {
         let GraphNode::Main(graph_id) = &instance[pin.id.node];
         let terrain_graph = self.terrain_graph.read();
@@ -165,7 +161,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         &mut self,
         pin: &OutPin,
         ui: &mut egui::Ui,
-        instance: &mut GraphInstance,
+        instance: &mut GraphInstance
     ) -> impl SnarlPin + 'static {
         let GraphNode::Main(graph_id) = &instance[pin.id.node];
         let terrain_graph = self.terrain_graph.read();
@@ -189,7 +185,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         &mut self,
         pos: egui::Pos2,
         ui: &mut egui::Ui,
-        snarl: &mut Snarl<GraphNode>,
+        snarl: &mut Snarl<GraphNode>
     ) {
         // Match the styling of the top menu bar so this popup menu doesn't look inconsistent.
         ui.set_style(theme::menu_style());
@@ -197,14 +193,13 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         ui.label(
             egui::RichText::new("Add Node")
                 .color(theme::palette::TEXT_MUTED)
-                .font(theme::heading_font(theme::fonts::FONT_SIZE_SMALL)),
+                .font(theme::heading_font(theme::fonts::FONT_SIZE_SMALL))
         );
         ui.add_space(2.0);
         ui.separator();
         ui.add_space(2.0);
 
-        // Every node type registers itself with `inventory::submit!` (see `node_registry`), so
-        // this menu only needs to group and display whatever is currently registered.
+        // Every node type registers itself with `inventory::submit!` (see `node_registry`).
         for category in NodeCategory::ALL {
             let nodes: Vec<_> = node_registry::registered_nodes()
                 .filter(|descriptor| descriptor.category == category)
@@ -228,7 +223,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
                             ui.close();
                         }
                     }
-                },
+                }
             );
         }
     }
@@ -239,7 +234,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         node: NodeId,
         _inputs: &[InPin],
         _outputs: &[OutPin],
-        snarl: &Snarl<GraphNode>,
+        snarl: &Snarl<GraphNode>
     ) -> egui::Frame {
         let color = self
             .node_category(&snarl[node])
@@ -253,7 +248,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         _node: NodeId,
         _inputs: &[InPin],
         _outputs: &[OutPin],
-        _snarl: &Snarl<GraphNode>,
+        _snarl: &Snarl<GraphNode>
     ) -> egui::Frame {
         default.stroke(egui::Stroke::NONE)
     }
@@ -263,7 +258,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         node: NodeId,
         rect: egui::Rect,
         ui: &mut egui::Ui,
-        snarl: &mut Snarl<GraphNode>,
+        snarl: &mut Snarl<GraphNode>
     ) {
         let to_global = ui
             .ctx()
@@ -282,19 +277,18 @@ impl SnarlViewer<GraphNode> for GraphViewer {
             let GraphNode::Main(graph_id) = &snarl[node];
             self.selected = Some(SelectedNode {
                 snarl_id: node,
-                graph_id: *graph_id,
+                graph_id: *graph_id
             });
         }
     }
 }
 impl GraphViewer {
-    /// Applies the selection highlight stroke, in the given color, to the node frame when the
-    /// given node is selected.
+    /// Applies the selection highlight stroke only when `node` is selected.
     fn selection_frame(
         &self,
         default: egui::Frame,
         node: NodeId,
-        color: egui::Color32,
+        color: egui::Color32
     ) -> egui::Frame {
         if self
             .selected
@@ -333,8 +327,7 @@ impl GraphViewer {
         self.selected = Some(SelectedNode { snarl_id, graph_id });
     }
 
-    /// Removes a node from both the terrain graph and the ui, clearing the selection if it
-    /// pointed at the removed node.
+    /// Clears the selection if it pointed at the removed node.
     fn remove_node(&mut self, node: NodeId, snarl: &mut Snarl<GraphNode>) {
         let GraphNode::Main(graph_id) = &snarl[node];
         if self
@@ -370,31 +363,27 @@ fn show_pin_label(ui: &mut egui::Ui, name: &str, connected: bool) {
             .color(color)
             .font(egui::FontId::new(
                 theme::fonts::FONT_SIZE_NODE_PIN,
-                egui::FontFamily::Proportional,
-            )),
+                egui::FontFamily::Proportional
+            ))
     );
 }
 
-/// Displays the graph editor using egui-snarl.
-///
-/// Returns the id of the node currently selected by the user, if any.
 pub fn show_graph(
     id: egui::Id,
     ui: &mut egui::Ui,
     graph_instance: &mut GraphInstance,
-    terrain_graph: TerrainGraphHolder,
+    terrain_graph: TerrainGraphHolder
 ) -> Option<SelectedNode> {
     let style = SnarlStyle {
         node_layout: Some(
             NodeLayout::coil()
                 .with_min_pin_row_height(theme::layout::NODE_PIN_ROW_HEIGHT)
-                .with_equal_pin_rows(),
+                .with_equal_pin_rows()
         ),
         node_frame: None,
         header_frame: None,
 
         collapsible: Some(false),
-        // Collapsing is disabled
         header_drag_space: Some(egui::Vec2::ZERO),
         pin_size: Some(14.0),
         pin_fill: Some(theme::palette::PIN_DEFAULT),
@@ -411,7 +400,7 @@ pub fn show_graph(
         bg_pattern: Some(BackgroundPattern::grid(egui::vec2(50.0, 50.0), 0.0)),
         bg_pattern_stroke: Some(egui::Stroke::new(
             0.1,
-            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 12),
+            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 12)
         )),
 
         min_scale: Some(0.4),
@@ -422,23 +411,20 @@ pub fn show_graph(
         ..SnarlStyle::default()
     };
 
-    // Initialize the viewer with the currently selected node, if any.
     let selected_node_id = egui::Id::new("panel-graph-selected-node");
     let mut viewer = GraphViewer {
         selected: ui
             .ctx()
             .data(|d| d.get_temp::<SelectedNode>(selected_node_id)),
-        terrain_graph,
+        terrain_graph
     };
 
-    // Show the graph editor
     SnarlWidget::new()
         .id(id)
         .style(style)
         .show(graph_instance, &mut viewer, ui);
 
-    // Delete the selected node when Delete/Backspace is pressed, unless the user is typing into
-    // some other widget (e.g. a parameter field) that should receive the key instead.
+    // Skip if the user is typing into some other widget (e.g. a parameter field) that should receive the key instead.
     let delete_pressed =
         ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace));
     if delete_pressed
@@ -448,12 +434,11 @@ pub fn show_graph(
         viewer.remove_node(selected.snarl_id, graph_instance);
     }
 
-    // Update the selected node in the egui context so it can be retrieved later
     match viewer.selected {
         Some(node) => ui.ctx().data_mut(|d| d.insert_temp(selected_node_id, node)),
         None => ui
             .ctx()
-            .data_mut(|d| d.remove::<SelectedNode>(selected_node_id)),
+            .data_mut(|d| d.remove::<SelectedNode>(selected_node_id))
     }
     viewer.selected
 }

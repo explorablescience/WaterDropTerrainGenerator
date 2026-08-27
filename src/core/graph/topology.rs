@@ -70,12 +70,15 @@ impl Topology {
         let from_label = from_socket_desc.name;
 
         let to_entry = self.entry(to_node)?;
-        let to_socket_desc = to_entry.instance.inputs().get(to_socket).ok_or(
-            NodeError::InputSocketNotFound {
-                node: format!("{:?}", to_node),
-                socket: to_socket
-            }
-        )?;
+        let to_socket_desc =
+            to_entry
+                .instance
+                .inputs()
+                .get(to_socket)
+                .ok_or(NodeError::InputSocketNotFound {
+                    node: format!("{:?}", to_node),
+                    socket: to_socket
+                })?;
         if to_socket_desc.dtype != from_dtype {
             return Err(NodeError::SocketTypeMismatch {
                 from_node: format!("{:?}", from_node),
@@ -84,8 +87,7 @@ impl Topology {
                 to_socket: to_socket_desc.name.to_string()
             });
         }
-        // An input pin can only ever hold one connection: replace whatever was already
-        // plugged into it rather than rejecting the new connection.
+        // An input pin can only ever hold one connection: replace whatever was already plugged into it.
         let existing = to_entry.inputs[to_socket];
         if let Some((old_from_node, old_from_socket)) = existing {
             self.disconnect(old_from_node, old_from_socket, to_node, to_socket)?;
@@ -133,8 +135,7 @@ impl Topology {
         Ok(())
     }
 
-    /// Every node id still present in the graph, in ascending order. Removed slots (kept around
-    /// so surviving ids stay stable) are skipped.
+    /// In ascending order; removed slots (kept around so surviving ids stay stable) are skipped.
     pub fn node_ids(&self) -> impl Iterator<Item = GraphNodeId> + '_ {
         self.nodes
             .iter()
@@ -158,8 +159,7 @@ impl Topology {
         Ok(&self.entry(id)?.outputs)
     }
 
-    /// Human-readable name of the output socket at `socket` on `node_id`, falling back to its
-    /// numeric index if the node or socket no longer exists.
+    /// Falls back to the numeric index if the node or socket no longer exists.
     fn output_socket_label(&self, node_id: GraphNodeId, socket: usize) -> String {
         self.entry(node_id)
             .ok()
@@ -168,8 +168,7 @@ impl Topology {
             .unwrap_or_else(|| socket.to_string())
     }
 
-    /// Human-readable name of the input socket at `socket` on `node_id`, falling back to its
-    /// numeric index if the node or socket no longer exists.
+    /// Falls back to the numeric index if the node or socket no longer exists.
     fn input_socket_label(&self, node_id: GraphNodeId, socket: usize) -> String {
         self.entry(node_id)
             .ok()

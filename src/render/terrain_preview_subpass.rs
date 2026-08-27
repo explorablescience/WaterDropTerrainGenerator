@@ -6,7 +6,7 @@ use wde::prelude::*;
 
 use crate::render::terrain_preview_pipeline::TerrainPreviewRenderPipeline;
 
-/// What [`update_terrain_preview`](super::update_terrain_preview) wants drawn through [`SubRenderPassTerrainPreview`] this frame 
+/// What [`update_terrain_preview`](super::update_terrain_preview) wants drawn through [`SubRenderPassTerrainPreview`] this frame
 #[derive(Resource, Default, Clone)]
 pub(crate) struct TerrainPreviewMeshes {
     pub meshes: Vec<Handle<Mesh>>,
@@ -56,7 +56,9 @@ impl RenderSubPass for SubRenderPassTerrainPreview {
 
         // One mesh command + draw per chunk
         for handle in &chunk_meshes.meshes {
-            let Some(mesh) = meshes.get(handle.id()) else { continue };
+            let Some(mesh) = meshes.get(handle.id()) else {
+                continue;
+            };
             commands.push(SubPassCommand::Mesh(Some(handle.id())));
             commands.push(SubPassCommand::DrawBatches(vec![DrawCommandsBatch {
                 bind_group: None,

@@ -12,8 +12,18 @@ fn to_texel_is_the_inverse_of_world_pos() {
     for (x, y) in [(0, 0), (3, 7), (15, 15)] {
         let pos = ctx.world_pos(x, y);
         let (tx, ty) = ctx.to_texel(pos);
-        assert!((tx - x as f32).abs() < 1e-5, "expected texel x {}, got {}", x, tx);
-        assert!((ty - y as f32).abs() < 1e-5, "expected texel y {}, got {}", y, ty);
+        assert!(
+            (tx - x as f32).abs() < 1e-5,
+            "expected texel x {}, got {}",
+            x,
+            tx
+        );
+        assert!(
+            (ty - y as f32).abs() < 1e-5,
+            "expected texel y {}, got {}",
+            y,
+            ty
+        );
     }
 }
 
@@ -42,7 +52,10 @@ fn to_local_and_to_texel_compose_into_the_manual_integration_formula() {
     let local = TileContext::to_local(world, position, scale);
     let (sx, sy) = input_ctx.to_texel(local);
 
-    let expected_local = ((world.0 - position.0) / scale, (world.1 - position.1) / scale);
+    let expected_local = (
+        (world.0 - position.0) / scale,
+        (world.1 - position.1) / scale
+    );
     let expected_sx = (expected_local.0 + 0.5) * 8.0;
     let expected_sy = (expected_local.1 + 0.5) * 8.0;
     assert!((sx - expected_sx).abs() < 1e-5);

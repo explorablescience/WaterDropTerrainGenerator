@@ -10,25 +10,20 @@ use crate::core::{
     tile_context::TileContext
 };
 
-/// Represents a node in the node graph, which can have input and output sockets for connecting to other nodes.
-/// It is responsible for processing data and producing output based on its inputs.
 pub trait Node: Debug + Send + Sync {
     fn label(&self) -> &str;
 
-    /// The category this node belongs to. Drives the color the graph editor uses for the node's
-    /// outline, title, pins and icon.
+    /// Drives the color the graph editor uses for the node's outline, title, pins and icon.
     fn category(&self) -> NodeCategory;
-    /// The logo shown next to this node's title, hinting at what the node does: a stable id
-    /// (used as the egui image cache key) paired with the node's PNG icon bytes.
+    /// A stable id (used as the egui image cache key) paired with the node's PNG icon bytes.
     fn icon(&self) -> NodeIcon;
 
-    /// Size of the kernel (in texels) that this node operates on. Used to determine padding.
+    /// Kernel size in texels; used to determine padding.
     fn size(&self) -> usize {
         0
     }
 
-    /// Where this node's computation is scoped. Defaults to `Local`, which covers most nodes
-    /// (generators, filters, combinators): they can be computed independently for each chunk.
+    /// Defaults to `Local`, which covers most nodes: they can be computed independently for each chunk.
     fn locality(&self) -> NodeLocality {
         NodeLocality::Local
     }
@@ -39,21 +34,17 @@ pub trait Node: Debug + Send + Sync {
         &[]
     }
 
-    /// Returns a slice of parameter descriptions for this node.
     fn desc_params(&self) -> &[NParamDesc] {
         &[]
     }
-    /// Gets the value of a parameter by its key. Returns `None` if the parameter does not exist.
     fn get_param(&self, _key: &str) -> Option<NParamValue> {
         None
     }
-    /// Sets the value of a parameter by its key. Returns an error if the parameter does not exist or if the value is invalid.
     fn set_param(&mut self, _key: &str, _value: NParamValue) -> Result<(), NodeError> {
         Err("Parameter not found".into())
     }
 
-    /// Called when a button is pressed in the node's UI (that is an `NParamValue::Action`). The `key` identifies which button was pressed.
-    /// The `output` slice contains the node's output tiles, and `output_size` is the size of the output tiles. Returns an error if the action fails.
+    /// Called when an `NParamValue::Action` button is pressed in the node's UI; `key` identifies which one.
     fn on_action(
         &mut self,
         _key: &str,
@@ -63,9 +54,7 @@ pub trait Node: Debug + Send + Sync {
         Err("Action not supported".into())
     }
 
-    /// Processes the node's inputs and produces its outputs, allocating any new tiles from `pool`.
-    /// `ctx` describes where in the terrain this call is computing - only position-aware nodes
-    /// need to use it.
+    /// `ctx` describes where in the terrain this call is computing - only position-aware nodes need to use it.
     fn process(
         &self,
         _pool: &Arc<TilePool>,
@@ -75,7 +64,6 @@ pub trait Node: Debug + Send + Sync {
         Ok(vec![])
     }
 
-    /// Returns a hash representing the current state of the node's parameters, used for caching.
     fn params_hash(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         for param in self.desc_params() {
@@ -88,31 +76,26 @@ pub trait Node: Debug + Send + Sync {
     }
 }
 
-/// NodeSocket represents an input or output socket of a node, which can be connected to other nodes.
 pub struct NodeSocket {
     pub name: &'static str,
     pub dtype: NodePortType,
     pub required: bool
 }
-/// PortType represents the type of data that can be passed through a node's input or output socket.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodePortType {
     Height, // Scalar heightfield (f32 per texel)
-    Mask,   // Scalar mask (f32 per texel) - Same as Height, but used for masks
+    Mask,   // Same as Height, but used for masks
     Color,  // RGBA texture
     Vector, // Vector field (f32x3 per texel)
-    Scalar  // Scalar value (f32) - Used for parameters, not textures
+    Scalar  // Scalar value (f32) - used for parameters, not textures
 }
 
-/// Where a node's computation is scoped, mirroring Gaea 2's distinction between tiled ("local")
-/// and whole-build ("global") nodes.
+/// Mirrors Gaea 2's distinction between tiled ("local") and whole-build ("global") nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeLocality {
-    /// Computed independently for each chunk, given just that chunk's (padded) tile and a
-    /// world-space coordinate frame to sample consistently across chunk borders.
+    /// Given just that chunk's (padded) tile and a world-space coordinate frame to sample consistently across chunk borders.
     Local,
-    /// Needs to see the whole terrain at once and can't be split into independent chunks.
-    /// Evaluated using the integration node, which thus converts it back to chunked terrain.
+    /// Evaluated using the integration node, which converts it back to chunked terrain.
     Global { native_resolution: usize }
 }
 
@@ -125,8 +108,11 @@ pub enum NodeCategory {
 }
 impl NodeCategory {
     /// Every category, in the order they should be listed in the "Add Node" menu.
-    pub const ALL: [NodeCategory; 3] =
-        [NodeCategory::Generator, NodeCategory::Simulation, NodeCategory::Io];
+    pub const ALL: [NodeCategory; 3] = [
+        NodeCategory::Generator,
+        NodeCategory::Simulation,
+        NodeCategory::Io
+    ];
 
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -137,10 +123,7 @@ impl NodeCategory {
     }
 }
 
-/// Identifies the PNG logo drawn next to a node's title in the graph editor: a stable id used as
-/// the egui image cache key, paired with the embedded PNG bytes. The image is expected to be a
-/// white glyph on a transparent background, so the UI layer can tint it with the node's category
-/// color.
+/// The image is expected to be a white glyph on a transparent background so the UI layer can tint it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeIcon {
     pub id: &'static str,

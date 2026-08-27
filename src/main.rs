@@ -2,14 +2,14 @@ use bevy::prelude::*;
 use waterdrop_terrain_generator::{DEBUG_MODE, TerrainGraphHolder, render, ui};
 use wde::{CustomBevyPlugins, prelude::*};
 
-/// Custom WaterDropEngine plugins.
 #[derive(Default)]
 struct CustomWdePlugins;
 impl Plugin for CustomWdePlugins {
     fn build(&self, app: &mut App) {
-        // Must be inserted before `wde::wde_editor::EditorPlugin` and friends, which only fill
-        // in the default (enabled) via `init_resource` if it isn't already set.
-        app.insert_resource(EngineUiConfig { enabled: DEBUG_MODE });
+        // Must be inserted before `wde::wde_editor::EditorPlugin` and friends, which only set the default via `init_resource` if it isn't already set.
+        app.insert_resource(EngineUiConfig {
+            enabled: DEBUG_MODE
+        });
 
         app.add_plugins((
             wde::wde_logger::LogPlugin {
@@ -19,7 +19,10 @@ impl Plugin for CustomWdePlugins {
                     .join("log.txt"),
                 ..default()
             }
-            .with_crate_level("waterdrop_terrain_generator", wde::wde_logger::LogLevel::DEBUG),
+            .with_crate_level(
+                "waterdrop_terrain_generator",
+                wde::wde_logger::LogLevel::DEBUG
+            ),
             wde::wde_renderer::RenderPlugin {
                 window_title: "WaterDrop Terrain Generator".into(),
                 window_resolution: (1600, 900),
@@ -42,18 +45,12 @@ impl Plugin for CustomWdePlugins {
 }
 
 fn main() {
-    // Create the app
     let mut app = App::new();
-
-    // Add default plugins
     app.add_plugins((CustomBevyPlugins, CustomWdePlugins));
-
-    // Run the app
     app.run();
 }
 
 fn default_scene(mut commands: Commands) {
-    // Main camera
     commands.spawn((
         Name::new("Main Camera"),
         Transform::from_xyz(-6.0, 13.0, -4.0),
@@ -61,7 +58,6 @@ fn default_scene(mut commands: Commands) {
         ThirdPersonController::default()
     ));
 
-    // Spawn the lights
     commands.spawn((
         Name::new("Sun Light"),
         DirectionalLight {

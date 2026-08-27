@@ -9,5 +9,6 @@ pub mod node_parameters;
 pub mod node_registry;
 pub mod project;
 pub mod terrain_export;
+pub mod terrain_graph;
 pub mod tile_allocator;
 pub mod tile_context;

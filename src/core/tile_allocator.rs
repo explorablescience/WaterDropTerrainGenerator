@@ -3,24 +3,19 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-/// A tile of data produced by a node's output socket and consumed by downstream nodes.
 pub type TileHandle = Arc<TileBuffer>;
 
-/// A buffer that holds the data of a tile.
-/// It can be allocated from a [`TilePool`] and will be returned to the pool when dropped.
-/// To access the data, you can dereference the buffer to get a slice of f32 values.
+/// Allocated from a [`TilePool`]; returned to the pool when dropped. Deref to a `[f32]` slice for the data.
 #[derive(Debug, Clone)]
 pub struct TileBuffer {
     data: Vec<f32>,
     pool: Arc<TilePool>
 }
 impl TileBuffer {
-    /// Returns the size of the tile (number of f32 values).
     pub fn size(&self) -> usize {
         self.pool.tile_length()
     }
 
-    /// Returns true if the tile is empty.
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
@@ -38,7 +33,6 @@ impl std::ops::DerefMut for TileBuffer {
 }
 impl Drop for TileBuffer {
     fn drop(&mut self) {
-        // Put the tile back into the pool when the buffer is dropped.
         self.pool
             .free
             .lock()
@@ -47,23 +41,14 @@ impl Drop for TileBuffer {
     }
 }
 
-/// A pool of tiles that can be allocated and deallocated.
-/// Each tile is represented by a [`TileBuffer`].
 #[derive(Debug)]
 pub struct TilePool {
     free: Mutex<Vec<Vec<f32>>>,
     tile_length: usize,
-    /// Number of distinct tile buffers ever created by this pool (free or in use). The pool
-    /// never shrinks a buffer's capacity back to the allocator, so this is also the pool's
-    /// current heap footprint in tiles.
+    /// Never shrunk back to the allocator, so this also doubles as the pool's current heap footprint in tiles.
     allocated_tiles: AtomicUsize
 }
 impl TilePool {
-    /// Creates a new tile pool with the given tile length.
-    ///
-    /// # Arguments
-    /// * `tile_length` - The length of each tile in the pool in a given number of texels (e.g., 3 for a 3x3 tile, 5 for a 5x5 tile, etc.).
-    ///
     /// Pools are shared by nodes across the graph, so they're always handed out behind an [`Arc`].
     pub fn new(tile_length: usize) -> Arc<Self> {
         Arc::new(Self {
@@ -73,7 +58,6 @@ impl TilePool {
         })
     }
 
-    /// Allocates a tile from the pool and returns a [`TileBuffer`] that holds the data of the tile.
     /// If the pool is empty, a new zero-filled tile is created.
     pub fn allocate(self: &Arc<Self>) -> TileBuffer {
         let tile = self.free.lock().unwrap().pop().unwrap_or_else(|| {
@@ -99,8 +83,7 @@ impl TilePool {
     }
 }
 
-/// Bilinearly samples a `size x size` grid at texel coordinates `x, y`, clamping to the grid's
-/// edge when they fall outside `[0, size - 1]`.
+/// Clamps to the grid's edge when `x, y` fall outside `[0, size - 1]`.
 pub fn bilinear_sample(data: &[f32], size: usize, x: f32, y: f32) -> f32 {
     let px = |x: usize, y: usize| data[y * size + x];
 
@@ -118,9 +101,7 @@ pub fn bilinear_sample(data: &[f32], size: usize, x: f32, y: f32) -> f32 {
     top * (1.0 - ty) + bottom * ty
 }
 
-/// Extracts the centered `target_size x target_size` interior out of a `full_size x full_size`
-/// tile - i.e. crops off the kernel-padding margin around a node's requested output, whether
-/// that's a single tile's own padding or one chunk's margin ring in a chunk grid.
+/// Crops off the kernel-padding margin around a node's requested output.
 pub fn crop_center(data: &[f32], full_size: usize, target_size: usize) -> Vec<f32> {
     if full_size == target_size {
         return data.to_vec();

@@ -1,13 +1,18 @@
 use std::sync::Arc;
 
 use waterdrop_terrain_generator::core::graph::{NodeGraph, NodeGraphProcessResult};
-use waterdrop_terrain_generator::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
+use waterdrop_terrain_generator::core::node::{
+    Node, NodeCategory, NodeIcon, NodePortType, NodeSocket
+};
 use waterdrop_terrain_generator::core::node_error::NodeError;
 use waterdrop_terrain_generator::core::tile_allocator::{TileHandle, TilePool};
 use waterdrop_terrain_generator::core::tile_context::TileContext;
 use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
 
-const TEST_ICON: NodeIcon = NodeIcon { id: "test-icon", png_bytes: &[] };
+const TEST_ICON: NodeIcon = NodeIcon {
+    id: "test-icon",
+    png_bytes: &[]
+};
 
 /// A minimal source node with a single required `Height` output, used to exercise graph wiring
 /// without depending on any of the "real" nodes' own processing behaviour.
@@ -24,7 +29,11 @@ impl Node for FakeHeightSource {
         TEST_ICON
     }
     fn outputs(&self) -> &[NodeSocket] {
-        &[NodeSocket { name: "Height", dtype: NodePortType::Height, required: true }]
+        &[NodeSocket {
+            name: "Height",
+            dtype: NodePortType::Height,
+            required: true
+        }]
     }
     fn process(
         &self,
@@ -51,7 +60,11 @@ impl Node for FakeMaskSink {
         TEST_ICON
     }
     fn inputs(&self) -> &[NodeSocket] {
-        &[NodeSocket { name: "Mask", dtype: NodePortType::Mask, required: true }]
+        &[NodeSocket {
+            name: "Mask",
+            dtype: NodePortType::Mask,
+            required: true
+        }]
     }
 }
 
@@ -70,10 +83,18 @@ impl Node for FakeOptionalSink {
         TEST_ICON
     }
     fn inputs(&self) -> &[NodeSocket] {
-        &[NodeSocket { name: "Height", dtype: NodePortType::Height, required: false }]
+        &[NodeSocket {
+            name: "Height",
+            dtype: NodePortType::Height,
+            required: false
+        }]
     }
     fn outputs(&self) -> &[NodeSocket] {
-        &[NodeSocket { name: "Height", dtype: NodePortType::Height, required: true }]
+        &[NodeSocket {
+            name: "Height",
+            dtype: NodePortType::Height,
+            required: true
+        }]
     }
     fn process(
         &self,
@@ -102,7 +123,10 @@ fn connecting_to_an_out_of_range_output_socket_fails() {
     let sink = graph.add_node(Box::new(NodeErosion::default()));
 
     let result = graph.connect(source, 5, sink, 0);
-    assert!(matches!(result, Err(NodeError::OutputSocketNotFound { .. })));
+    assert!(matches!(
+        result,
+        Err(NodeError::OutputSocketNotFound { .. })
+    ));
 }
 
 #[test]
@@ -120,7 +144,9 @@ fn optional_unconnected_input_is_fed_a_neutral_zero_tile() {
     let mut graph = NodeGraph::new(4);
     let sink = graph.add_node(Box::new(FakeOptionalSink));
 
-    let result = graph.process(sink).expect("processing with an unconnected optional input should succeed");
+    let result = graph
+        .process(sink)
+        .expect("processing with an unconnected optional input should succeed");
     let NodeGraphProcessResult::Processed(_, outputs) = result else {
         panic!("expected the graph to finish processing")
     };
@@ -134,11 +160,19 @@ fn connecting_a_second_source_to_an_occupied_input_replaces_the_first() {
     let b = graph.add_node(Box::new(NodeGeneratorPerlin::default()));
     let sink = graph.add_node(Box::new(NodeErosion::default()));
 
-    graph.connect(a, 0, sink, 0).expect("first connection should succeed");
-    graph.connect(b, 0, sink, 0).expect("replacing the first connection should succeed");
+    graph
+        .connect(a, 0, sink, 0)
+        .expect("first connection should succeed");
+    graph
+        .connect(b, 0, sink, 0)
+        .expect("replacing the first connection should succeed");
 
     let inputs = graph.inputs(sink).expect("sink should exist");
-    assert_eq!(inputs, &[Some((b, 0))], "the input should now come from b, not a");
+    assert_eq!(
+        inputs,
+        &[Some((b, 0))],
+        "the input should now come from b, not a"
+    );
 }
 
 #[test]
@@ -148,7 +182,9 @@ fn disconnect_removes_the_edge_and_leaves_the_input_socket_empty() {
     let sink = graph.add_node(Box::new(NodeErosion::default()));
     graph.connect(source, 0, sink, 0).unwrap();
 
-    graph.disconnect(source, 0, sink, 0).expect("disconnecting an existing edge should succeed");
+    graph
+        .disconnect(source, 0, sink, 0)
+        .expect("disconnecting an existing edge should succeed");
     assert_eq!(graph.inputs(sink).unwrap(), &[None]);
 
     // Processing should now fail again since the required input is gone.

@@ -1,6 +1,5 @@
 use std::hash::Hash;
 
-/// Represents the value of a node parameter, which can be of various types.
 #[derive(Debug, Clone, PartialEq)]
 pub enum NParamValue {
     Int(i32),
@@ -8,13 +7,12 @@ pub enum NParamValue {
     Bool(bool),
     String(String),
     Enum(String),
-    /// A 2D float vector (e.g. a normalized position), edited as a pair of X/Y sliders.
+    /// Edited as a pair of X/Y sliders.
     Vector2(f32, f32),
-    /// A 2D integer vector (e.g. a texel offset), edited as a pair of X/Y sliders.
+    /// Edited as a pair of X/Y sliders.
     Vector2Int(i32, i32),
-    /// A stateless trigger, rendered as a button in the properties panel.
+    /// Rendered as a button in the properties panel.
     Action {
-        // Whether to show a success message in the UI after the action is performed.
         show_success_message: bool
     }
 }
@@ -35,17 +33,17 @@ impl Hash for NParamValue {
                 x.hash(state);
                 y.hash(state);
             }
-            NParamValue::Action { show_success_message } => show_success_message.hash(state)
+            NParamValue::Action {
+                show_success_message
+            } => show_success_message.hash(state)
         }
     }
 }
 
-/// Describes a node parameter, including its name, type, default value, and optional constraints.
 pub struct NParamDesc {
     pub key: &'static str,
     pub label: &'static str,
-    /// Groups this parameter with others of the same category in the properties panel (e.g.
-    /// `"Noise"`, `"Simulation"`). Purely presentational; has no effect on processing.
+    /// Purely presentational (e.g. `"Noise"`, `"Simulation"`); has no effect on processing.
     pub category: &'static str,
     pub default: NParamValue,
     pub constraints: Option<NParamConstraints>
@@ -58,26 +56,35 @@ impl Hash for NParamDesc {
     }
 }
 
-/// Constraints for validating node parameters.
 pub enum NParamConstraints {
-    /// The value must be an integer within the specified range (inclusive).
-    IntRange { min: i32, max: i32 },
-    /// The value must be a float within the specified range (inclusive).
-    FloatRange { min: f32, max: f32 },
-    /// The value must be a string with a maximum length.
-    StringMaxLength { max_length: usize },
-    /// The value must be one of the specified options.
-    EnumOneOf { options: Vec<&'static str> },
-    /// The value must be a 2D float vector with each component within the specified range
-    /// (inclusive), independently per axis.
-    Vector2Range { min: (f32, f32), max: (f32, f32) },
-    /// The value must be a 2D integer vector with each component within the specified range
-    /// (inclusive), independently per axis.
-    Vector2IntRange { min: (i32, i32), max: (i32, i32) },
-    /// Custom validation function. The function should return `Ok(())` if the value is valid, or an `Err(String)` with an error message if invalid.
+    /// Inclusive.
+    IntRange {
+        min: i32,
+        max: i32
+    },
+    /// Inclusive.
+    FloatRange {
+        min: f32,
+        max: f32
+    },
+    StringMaxLength {
+        max_length: usize
+    },
+    EnumOneOf {
+        options: Vec<&'static str>
+    },
+    /// Inclusive, independently per axis.
+    Vector2Range {
+        min: (f32, f32),
+        max: (f32, f32)
+    },
+    /// Inclusive, independently per axis.
+    Vector2IntRange {
+        min: (i32, i32),
+        max: (i32, i32)
+    },
     Custom(NParamValidator)
 }
-/// Custom validation function for a node parameter.
 pub type NParamValidator = Box<dyn Fn(&NParamValue) -> Result<(), String> + Send + Sync>;
 impl NParamConstraints {
     pub fn validate(&self, value: &NParamValue) -> Result<(), String> {

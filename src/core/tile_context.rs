@@ -3,18 +3,12 @@
 
 use crate::core::chunk_grid::ChunkCoord;
 
-/// Everything a [`Node::process`](crate::core::node::Node::process) implementation needs to know
-/// about *where* it's computing. Position-aware nodes (noise generators, world-space masks) use
-/// this to sample consistently across chunk borders; kernel-only nodes (erosion, blur, combine)
-/// can ignore it entirely, same as they already ignore the tile pool today.
+/// Position-aware nodes (noise generators, world-space masks) use this to sample consistently across chunk borders; kernel-only nodes can ignore it entirely.
 #[derive(Debug, Clone, Copy)]
 pub struct TileContext {
-    /// The chunk being computed. `None` during the single whole-terrain pass used to evaluate a
-    /// `Global` node (see `NodeLocality`) - a `Global` node computes its own bare, self-contained
-    /// result (see [`TileContext::for_global`]), not any one chunk of the terrain.
+    /// `None` during the whole-terrain pass used to evaluate a `Global` node (see [`TileContext::for_global`]), which computes its own bare result rather than any one chunk.
     pub chunk: Option<ChunkCoord>,
-    /// World-space position of this tile's (0, 0) texel. For a chunk, already offset to account
-    /// for the margin ring around its core region.
+    /// World-space position of this tile's (0, 0) texel. For a chunk, already offset for the margin ring around its core region.
     pub world_origin: (f32, f32),
     /// World units covered by one texel, per axis.
     pub world_step: (f32, f32),
@@ -22,8 +16,7 @@ pub struct TileContext {
     pub world_extent: (f32, f32)
 }
 impl TileContext {
-    /// Constructs a `TileContext` for a `Global` node, which is evaluated once for the whole
-    /// terrain at its own `native_resolution` (see [`NodeLocality`]).
+    /// For a `Global` node, evaluated once for the whole terrain at its own `native_resolution`.
     pub fn for_global(native_resolution: usize) -> TileContext {
         let step = 1.0 / native_resolution as f32;
         TileContext {
@@ -42,17 +35,12 @@ impl TileContext {
         )
     }
 
-    /// Alias of [`Self::world_pos`] for use inside a `Global` node's own `process()`: there, this
-    /// context's frame *is* the node's bare local space (see [`Self::for_global`]), so a call site
-    /// reads truer to what it actually means as `local_pos` than as `world_pos`.
+    /// Alias of [`Self::world_pos`]: inside a `Global` node this context's frame *is* its bare local space, so `local_pos` reads truer at the call site.
     pub fn local_pos(&self, x: usize, y: usize) -> (f32, f32) {
         self.world_pos(x, y)
     }
 
-    /// A position already expressed in this context's own frame -> fractional texel indices into
-    /// the tile it describes. The inverse of [`Self::world_pos`]/[`Self::local_pos`] - e.g. an
-    /// integration node uses this to turn a `Global` input's own local position (from
-    /// [`Self::to_local`]) into texel coordinates it can bilinearly sample that input at.
+    /// Inverse of [`Self::world_pos`]/[`Self::local_pos`]; e.g. an integration node uses this to turn a `Global` input's local position into texel coordinates to bilinearly sample it at.
     pub fn to_texel(&self, pos: (f32, f32)) -> (f32, f32) {
         (
             (pos.0 - self.world_origin.0) / self.world_step.0,
@@ -62,16 +50,17 @@ impl TileContext {
 
     /// Normalizes a world-space position into `[0, 1)` across this context's `world_extent`.
     pub fn normalize(&self, world: (f32, f32)) -> (f32, f32) {
-        (world.0 / self.world_extent.0 + 0.5, world.1 / self.world_extent.1 + 0.5)
+        (
+            world.0 / self.world_extent.0 + 0.5,
+            world.1 / self.world_extent.1 + 0.5
+        )
     }
 
-    /// Maps a world-space position into an arbitrarily placed frame's own local space, given that
-    /// frame's `position` (world-space location of its local origin) and `scale` (world units its
-    /// local unit spans). This is what an integration node applies to go from the terrain's world
-    /// position to wherever its `Global` input's own bare, self-centered result (see
-    /// [`Self::for_global`]) should be read from - the counterpart to [`Self::to_texel`], which
-    /// then turns that local position into actual texel coordinates.
+    /// Maps world-space into an arbitrarily placed frame's local space, given that frame's `position` (world origin) and `scale` (world units per local unit). Counterpart to [`Self::to_texel`].
     pub fn to_local(world: (f32, f32), position: (f32, f32), scale: f32) -> (f32, f32) {
-        ((world.0 - position.0) / scale, (world.1 - position.1) / scale)
+        (
+            (world.0 - position.0) / scale,
+            (world.1 - position.1) / scale
+        )
     }
 }

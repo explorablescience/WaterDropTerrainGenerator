@@ -21,7 +21,12 @@ fn coords_are_listed_in_row_major_order() {
     let coords: Vec<ChunkCoord> = grid.coords().collect();
     assert_eq!(
         coords,
-        vec![ChunkCoord(0, 0), ChunkCoord(1, 0), ChunkCoord(0, 1), ChunkCoord(1, 1)]
+        vec![
+            ChunkCoord(0, 0),
+            ChunkCoord(1, 0),
+            ChunkCoord(0, 1),
+            ChunkCoord(1, 1)
+        ]
     );
 }
 
@@ -37,12 +42,20 @@ fn world_space_is_centered_on_the_whole_grid_not_a_corner() {
     // symmetrically around world (0, 0).
     let grid = ChunkGrid::new(3, 3, 8, 1.0);
     let ctx = grid.chunk_context(ChunkCoord(1, 1), 0);
-    assert_eq!(ctx.world_origin, (-4.0, -4.0), "the center chunk's core should start at -half its own width");
+    assert_eq!(
+        ctx.world_origin,
+        (-4.0, -4.0),
+        "the center chunk's core should start at -half its own width"
+    );
 
     // An even chunk count centers on the shared corner of the four middle chunks instead.
     let grid = ChunkGrid::new(2, 2, 8, 1.0);
     let ctx = grid.chunk_context(ChunkCoord(1, 1), 0);
-    assert_eq!(ctx.world_origin, (0.0, 0.0), "chunk (1, 1) of a 2x2 grid should start exactly at the origin");
+    assert_eq!(
+        ctx.world_origin,
+        (0.0, 0.0),
+        "chunk (1, 1) of a 2x2 grid should start exactly at the origin"
+    );
 }
 
 #[test]
@@ -69,5 +82,8 @@ fn global_context_is_centered_on_its_own_local_grid_independent_of_the_chunk_gri
 
     // Its center texel sits at (or right next to) local (0, 0), not the grid's own origin.
     let (cx, cy) = ctx.world_pos(2, 2);
-    assert!(cx.abs() < 1e-6 && cy.abs() < 1e-6, "texel (2, 2) of a 4x4 global context should be at local (0, 0)");
+    assert!(
+        cx.abs() < 1e-6 && cy.abs() < 1e-6,
+        "texel (2, 2) of a 4x4 global context should be at local (0, 0)"
+    );
 }

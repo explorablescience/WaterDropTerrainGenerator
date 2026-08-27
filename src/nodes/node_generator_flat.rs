@@ -11,7 +11,6 @@ const ICON: NodeIcon = NodeIcon {
     png_bytes: include_bytes!("../../assets/icons/node_flat.png")
 };
 
-/// A node that generates a flat terrain tile.
 #[derive(Debug, Default)]
 pub struct NodeGeneratorFlat;
 impl Node for NodeGeneratorFlat {

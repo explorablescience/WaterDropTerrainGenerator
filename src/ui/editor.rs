@@ -37,7 +37,6 @@ impl Plugin for EditorPanelsPlugin {
     }
 }
 
-/// List of the editor's panels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EditorPanels {
     Engine,
@@ -45,7 +44,6 @@ pub enum EditorPanels {
     Properties
 }
 
-/// Stores the layout of the different panels
 struct EditorLayout {
     tree: Tree<EditorPanels>,
     panel_to_id: HashMap<EditorPanels, TileId>
@@ -61,7 +59,6 @@ impl Default for EditorLayout {
         let node_info = tiles.insert_pane(EditorPanels::Properties);
         panel_to_id.insert(EditorPanels::Properties, node_info);
 
-        // Split the layout into the different panels
         let main_column = tiles.insert_container(Linear::new_binary(
             LinearDir::Vertical,
             [engine, graph_editor],
@@ -83,7 +80,6 @@ impl Default for EditorLayout {
 #[derive(Resource, Default)]
 struct EngineViewportRect(Option<egui::Rect>);
 
-// Utility function to block camera input outside the engine viewport
 fn block_camera_input_outside_engine(
     engine_rect: Res<EngineViewportRect>,
     windows: Query<&Window>,
@@ -137,7 +133,6 @@ fn draw_editor(
         &mut last_project_path
     );
 
-    // Create the central panel with the editor layout
     let frame = egui::Frame::central_panel(&ctx.0.style())
         .inner_margin(0.0)
         .fill(egui::Color32::TRANSPARENT);
@@ -156,8 +151,7 @@ fn draw_editor(
             layout.tree.ui(&mut behavior, ui);
         });
 
-    // Update the engine viewport rectangle to the same inset border rect the engine pane draws
-    // (see `editor_behavior::panel_border_rect`).
+    // Matches the same inset border rect the engine pane draws (see `editor_behavior::panel_border_rect`).
     engine_rect.0 = layout
         .tree
         .tiles
@@ -165,8 +159,7 @@ fn draw_editor(
         .map(|rect| editor_behavior::panel_border_rect(rect, outer_rect));
 }
 
-/// Handles clicks on the "File/Save Project" and "File/Load Project" menu entries, prompting for
-/// a file via a native dialog and running the matching save/load logic in `project_io`.
+/// Handles clicks on the "File/Save Project" and "File/Load Project" menu entries.
 fn handle_file_menu(
     ui_menu: &mut UIMenu,
     graph_instance: &mut GraphInstance,
@@ -176,7 +169,8 @@ fn handle_file_menu(
     if *ui_menu.clicked_mut("File/Save Project") {
         *ui_menu.clicked_mut("File/Save Project") = false;
 
-        let mut dialog = FileDialog::new().add_filter(PROJECT_FILE_FILTER_NAME, &[PROJECT_FILE_EXTENSION]);
+        let mut dialog =
+            FileDialog::new().add_filter(PROJECT_FILE_FILTER_NAME, &[PROJECT_FILE_EXTENSION]);
         if let Some(path) = last_project_path.as_deref() {
             if let Some(dir) = path.parent() {
                 dialog = dialog.set_directory(dir);
@@ -193,7 +187,11 @@ fn handle_file_menu(
                     info!("Saved terrain graph to '{}'", path.display());
                     *last_project_path = Some(path);
                 }
-                Err(e) => error!("Failed to save terrain graph to '{}': {}", path.display(), e)
+                Err(e) => error!(
+                    "Failed to save terrain graph to '{}': {}",
+                    path.display(),
+                    e
+                )
             }
         }
     }
@@ -201,7 +199,8 @@ fn handle_file_menu(
     if *ui_menu.clicked_mut("File/Load Project") {
         *ui_menu.clicked_mut("File/Load Project") = false;
 
-        let mut dialog = FileDialog::new().add_filter(PROJECT_FILE_FILTER_NAME, &[PROJECT_FILE_EXTENSION]);
+        let mut dialog =
+            FileDialog::new().add_filter(PROJECT_FILE_FILTER_NAME, &[PROJECT_FILE_EXTENSION]);
         if let Some(dir) = last_project_path.as_deref().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
         }
@@ -212,7 +211,11 @@ fn handle_file_menu(
                     info!("Loaded terrain graph from '{}'", path.display());
                     *last_project_path = Some(path);
                 }
-                Err(e) => error!("Failed to load terrain graph from '{}': {}", path.display(), e)
+                Err(e) => error!(
+                    "Failed to load terrain graph from '{}': {}",
+                    path.display(),
+                    e
+                )
             }
         }
     }

@@ -7,7 +7,6 @@ use bevy::{
 };
 use wde::prelude::*;
 
-/// Pipeline for terrain-preview chunk meshes
 #[derive(Default, Asset, Clone, TypePath, Debug)]
 pub(crate) struct TerrainPreviewRenderPipeline(pub CachedPipelineIndex);
 impl RenderAsset for TerrainPreviewRenderPipeline {
@@ -36,7 +35,11 @@ impl RenderAsset for TerrainPreviewRenderPipeline {
                         camera.iter().next().map(|(_, c)| c.layout.clone()),
                         pbr_materials.iter().next().map(|(_, m)| m.layout.clone()),
                     ],
-                    depth: DepthDescriptor { enabled: true, write: true, ..Default::default() },
+                    depth: DepthDescriptor {
+                        enabled: true,
+                        write: true,
+                        ..Default::default()
+                    },
                     render_targets: Some(vec![
                         // Same order as the PbrDeferredTextures
                         PbrTextureFormat::DEPTH,  // Depth

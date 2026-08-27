@@ -10,18 +10,13 @@ use crate::{
     }
 };
 
-/// Define the behavior of the editor's panels, including how they are displayed and interacted with.
 pub struct EditorBehavior<'a> {
-    /// Unique identifier for the graph editor pane
     pub graph_id: egui::Id,
-    /// Instance of the graph editor's underlying data structure
     pub graph_instance: &'a mut GraphInstance,
 
-    /// Reference to the terrain graph holder, which manages the terrain graph data
     pub terrain_graph: TerrainGraphHolder,
 
-    /// Rect of the whole tile tree, used to tell a tile's outer edges (which get the full
-    /// border inset) apart from edges shared with a neighboring tile (which get half of it).
+    /// Used to tell a tile's outer edges (which get the full border inset) apart from edges shared with a neighboring tile (which get half of it).
     pub outer_rect: egui::Rect
 }
 impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
@@ -31,7 +26,6 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
         _tile_id: egui_tiles::TileId,
         pane: &mut EditorPanels
     ) -> egui_tiles::UiResponse {
-        // Every panel gets its own inset "inside panel"
         let tile_rect = ui.max_rect();
         let border_rect = panel_border_rect(tile_rect, self.outer_rect);
         if matches!(pane, EditorPanels::Engine) {
@@ -46,7 +40,6 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
                 .rect_filled(tile_rect, 0, theme::palette::BG_EXTREME);
         }
 
-        // Graph/Properties get an extra content "card" on top of the panel background
         let content_rect = if matches!(pane, EditorPanels::Engine) {
             border_rect
         } else {
@@ -91,8 +84,7 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
         Self::get_pane_title(pane).into()
     }
 
-    /// Give the active tab a thin accent-colored outline instead of the default plain one, so
-    /// the currently focused panel is unambiguous at a glance.
+    /// Thin accent-colored outline instead of the default, so the focused panel is unambiguous at a glance.
     fn tab_outline_stroke(
         &self,
         _visuals: &egui::Visuals,
@@ -131,10 +123,7 @@ impl<'a> EditorBehavior<'a> {
     }
 }
 
-/// The "inside panel" rect for a tile: inset from `tile_rect` by the full panel border inset on
-/// any side that touches the outer edge of the whole tile tree (`outer_rect`), or by half that
-/// inset on any side shared with a neighboring tile — so the gap between two adjacent panels'
-/// borders matches the gap between a panel and the outer edge, instead of being twice as wide.
+/// Half inset on edges shared with a neighboring tile, so the gap between two adjacent panels matches the gap to the outer edge instead of doubling.
 pub fn panel_border_rect(tile_rect: egui::Rect, outer_rect: egui::Rect) -> egui::Rect {
     const EPS: f32 = 0.5;
     let full = theme::layout::PANEL_BORDER_INSET;
@@ -167,8 +156,7 @@ pub fn panel_border_rect(tile_rect: egui::Rect, outer_rect: egui::Rect) -> egui:
     )
 }
 
-/// Fills `outer` with `color`, except for the `inner` rect carved out of its middle. Used to
-/// backdrop the margin around the engine pane's live viewport without ever painting over it.
+/// Backdrops the margin around the engine pane's live viewport without ever painting over it.
 fn paint_frame_gap(
     painter: &egui::Painter,
     outer: egui::Rect,

@@ -53,7 +53,11 @@ fn round_trips_nodes_params_positions_and_edges() {
         .expect("the Erosion node should be present after reload");
 
     assert_eq!(
-        built.graph.node(loaded_source).unwrap().get_param("frequency"),
+        built
+            .graph
+            .node(loaded_source)
+            .unwrap()
+            .get_param("frequency"),
         Some(NParamValue::Float(2.5)),
         "parameter value set before saving should round-trip"
     );
@@ -98,11 +102,16 @@ fn unsaved_node_position_defaults_to_origin() {
     let node = graph.add_node(Box::new(NodeGeneratorPerlin::default()));
 
     // Deliberately omit `node`'s position, as if the caller's UI never had one for it.
-    save_project(&path, &graph, &HashMap::new()).expect("saving should succeed even without positions");
+    save_project(&path, &graph, &HashMap::new())
+        .expect("saving should succeed even without positions");
     let built = load_project(&path, 32).expect("loading should succeed");
     std::fs::remove_file(&path).ok();
 
-    let loaded = built.graph.node_ids().next().expect("the node should still be saved");
+    let loaded = built
+        .graph
+        .node_ids()
+        .next()
+        .expect("the node should still be saved");
     assert_eq!(built.positions[&loaded], [0.0, 0.0]);
     let _ = node; // only used to build the graph above
 }
@@ -118,7 +127,10 @@ fn unknown_node_type_fails_to_load() {
 
     let result = load_project(&path, 32);
     std::fs::remove_file(&path).ok();
-    assert!(result.is_err(), "loading a project with an unregistered node type should fail");
+    assert!(
+        result.is_err(),
+        "loading a project with an unregistered node type should fail"
+    );
 }
 
 #[test]
@@ -128,7 +140,10 @@ fn malformed_json_fails_to_load() {
 
     let result = load_project(&path, 32);
     std::fs::remove_file(&path).ok();
-    assert!(result.is_err(), "loading malformed JSON should fail rather than panic");
+    assert!(
+        result.is_err(),
+        "loading malformed JSON should fail rather than panic"
+    );
 }
 
 #[test]
@@ -140,18 +155,20 @@ fn missing_file_fails_to_load() {
 #[test]
 fn legacy_v1_project_without_a_chunk_grid_loads_as_a_single_chunk() {
     let path = temp_project_path("legacy-v1");
-    std::fs::write(
-        &path,
-        r#"{"version":1,"nodes":[],"edges":[]}"#
-    )
-    .expect("writing the test fixture should succeed");
+    std::fs::write(&path, r#"{"version":1,"nodes":[],"edges":[]}"#)
+        .expect("writing the test fixture should succeed");
 
-    let built = load_project(&path, 64).expect("a v1 project without a chunk_grid field should still load");
+    let built =
+        load_project(&path, 64).expect("a v1 project without a chunk_grid field should still load");
     std::fs::remove_file(&path).ok();
 
     let grid = built.graph.chunk_grid();
     assert_eq!((grid.chunks_x(), grid.chunks_y()), (1, 1));
-    assert_eq!(grid.tile_size(), 64, "the caller-supplied tile size should back the fallback grid");
+    assert_eq!(
+        grid.tile_size(),
+        64,
+        "the caller-supplied tile size should back the fallback grid"
+    );
 }
 
 #[test]

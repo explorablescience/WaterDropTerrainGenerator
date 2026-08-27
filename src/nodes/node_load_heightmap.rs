@@ -11,25 +11,22 @@ use crate::core::tile_context::TileContext;
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-load",
-    png_bytes: include_bytes!("../../assets/icons/node_load.png"),
+    png_bytes: include_bytes!("../../assets/icons/node_load.png")
 };
 
-/// A heightmap decoded from disk, kept in memory so `process` can resample it at whatever
-/// resolution the graph requests without touching the filesystem again.
+/// Kept in memory so `process` can resample it at whatever resolution the graph requests without touching the filesystem again.
 #[derive(Debug, Clone)]
 struct LoadedImage {
     data: Vec<f32>,
     width: u32,
-    height: u32,
+    height: u32
 }
 
-/// A source node that reads a heightmap PNG from disk and outputs it, resampled to whatever tile
-/// resolution the graph requests - the same way a procedural generator evaluates at any
-/// resolution, rather than being tied to the file's own pixel dimensions.
+/// Outputs the loaded PNG resampled to whatever tile resolution the graph requests, the same way a procedural generator evaluates at any resolution.
 #[derive(Debug, Default)]
 pub struct NodeLoadHeightmap {
     file_path: String,
-    loaded: Option<LoadedImage>,
+    loaded: Option<LoadedImage>
 }
 impl NodeLoadHeightmap {
     fn params() -> &'static [NParamDesc] {
@@ -41,21 +38,25 @@ impl NodeLoadHeightmap {
                     label: "File Path",
                     category: "Import",
                     default: NParamValue::String(String::new()),
-                    constraints: None,
+                    constraints: None
                 },
                 NParamDesc {
                     key: "browse",
                     label: "Browse File...",
                     category: "Import",
-                    default: NParamValue::Action { show_success_message: false },
-                    constraints: None,
+                    default: NParamValue::Action {
+                        show_success_message: false
+                    },
+                    constraints: None
                 },
                 NParamDesc {
                     key: "load",
                     label: "Load Heightmap",
                     category: "Import",
-                    default: NParamValue::Action { show_success_message: true },
-                    constraints: None,
+                    default: NParamValue::Action {
+                        show_success_message: true
+                    },
+                    constraints: None
                 },
             ]
         })
@@ -75,7 +76,7 @@ impl NodeLoadHeightmap {
         self.loaded = Some(LoadedImage {
             data,
             width,
-            height,
+            height
         });
         Ok(())
     }
@@ -114,7 +115,7 @@ impl Node for NodeLoadHeightmap {
         &[NodeSocket {
             name: "Height",
             dtype: NodePortType::Height,
-            required: true,
+            required: true
         }]
     }
 
@@ -124,15 +125,19 @@ impl Node for NodeLoadHeightmap {
     fn get_param(&self, key: &str) -> Option<NParamValue> {
         match key {
             "file_path" => Some(NParamValue::String(self.file_path.clone())),
-            "browse" => Some(NParamValue::Action { show_success_message: false }),
-            "load" => Some(NParamValue::Action { show_success_message: true }),
-            _ => None,
+            "browse" => Some(NParamValue::Action {
+                show_success_message: false
+            }),
+            "load" => Some(NParamValue::Action {
+                show_success_message: true
+            }),
+            _ => None
         }
     }
     fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), NodeError> {
         match (key, value) {
             ("file_path", NParamValue::String(v)) => self.file_path = v,
-            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into()),
+            (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into())
         }
         Ok(())
     }
@@ -141,7 +146,7 @@ impl Node for NodeLoadHeightmap {
         &mut self,
         key: &str,
         _output: &[TileHandle],
-        _output_size: usize,
+        _output_size: usize
     ) -> Result<(), NodeError> {
         match key {
             "browse" => {
@@ -157,7 +162,7 @@ impl Node for NodeLoadHeightmap {
                 Ok(())
             }
             "load" => self.load_from_disk(),
-            _ => Err(format!("Unknown action '{}'", key).into()),
+            _ => Err(format!("Unknown action '{}'", key).into())
         }
     }
 
@@ -165,16 +170,15 @@ impl Node for NodeLoadHeightmap {
         &self,
         pool: &Arc<TilePool>,
         _inputs: &[TileHandle],
-        ctx: &TileContext,
+        ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
         let Some(image) = &self.loaded else {
             return Err(NodeError::ProcessingFailed(
-                "No heightmap loaded - browse to a PNG file and click 'Load Heightmap'".to_string(),
+                "No heightmap loaded - browse to a PNG file and click 'Load Heightmap'".to_string()
             ));
         };
 
-        // The loaded image is treated as covering the whole terrain, so each chunk samples its
-        // own footprint of it rather than every chunk redundantly showing the whole image.
+        // The loaded image covers the whole terrain, so each chunk samples its own footprint of it.
         let mut output = pool.allocate();
         let s = output.size();
         for y in 0..s {

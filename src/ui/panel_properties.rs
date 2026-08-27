@@ -1,18 +1,20 @@
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainGraphHolder, core::{
+    TerrainGraphHolder,
+    core::{
         graph::{GraphNodeId, NodeGraphProcessResult},
         node_error::NodeError,
         node_message::NodeMessage,
-        node_parameters::{NParamConstraints, NParamValue},
-    }, ui::{theme, widgets},
+        node_parameters::{NParamConstraints, NParamValue}
+    },
+    ui::{theme, widgets}
 };
 
 pub fn draw_properties(
     ui: &mut egui::Ui,
     terrain_graph: &TerrainGraphHolder,
-    selected_node: Option<GraphNodeId>,
+    selected_node: Option<GraphNodeId>
 ) {
     egui::Frame::NONE
         .inner_margin(egui::Margin::symmetric(12, 10))
@@ -22,7 +24,6 @@ pub fn draw_properties(
             }
             let graph_id = selected_node.unwrap();
 
-            // Title bar
             egui::Frame::new()
                 .fill(theme::palette::BG_PANEL)
                 .inner_margin(egui::Margin::symmetric(12, 10))
@@ -45,30 +46,32 @@ pub fn draw_properties(
                         |ui| {
                             let (rect, _) = ui.allocate_exact_size(
                                 egui::Vec2::splat(theme::fonts::FONT_SIZE_NODE_TITLE),
-                                egui::Sense::hover(),
+                                egui::Sense::hover()
                             );
                             widgets::paint_node_icon(ui, rect, icon, color);
                             ui.label(
                                 egui::RichText::new(label)
                                     .font(theme::heading_font(theme::fonts::FONT_SIZE_TITLE))
-                                    .color(theme::palette::TEXT),
+                                    .color(theme::palette::TEXT)
                             );
                         },
                         |ui| {
                             egui::Frame::new()
                                 .fill(color.gamma_multiply(0.18))
-                                .corner_radius(egui::CornerRadius::same(theme::layout::CHIP_ROUNDING))
+                                .corner_radius(egui::CornerRadius::same(
+                                    theme::layout::CHIP_ROUNDING
+                                ))
                                 .inner_margin(egui::Margin::symmetric(8, 3))
                                 .show(ui, |ui| {
                                     ui.label(
                                         egui::RichText::new(category.display_name())
                                             .font(theme::heading_font(
-                                                theme::fonts::FONT_SIZE_SMALL,
+                                                theme::fonts::FONT_SIZE_SMALL
                                             ))
-                                            .color(color),
+                                            .color(color)
                                     );
                                 });
-                        },
+                        }
                     );
                 });
 
@@ -78,32 +81,38 @@ pub fn draw_properties(
         });
 }
 
-/// Resolves `graph_id`'s output tiles (running the graph up to it if it's dirty) and hands them
-/// off to `Node::on_action`, so an `NParamValue::Action` button can act on the same data the node would otherwise pass downstream.
 fn collect_node_messages(
     ui: &egui::Ui,
     terrain_graph: &TerrainGraphHolder,
-    graph_id: GraphNodeId,
+    graph_id: GraphNodeId
 ) -> Vec<NodeMessage> {
     let mut terrain_graph = terrain_graph.write();
     terrain_graph.prune_expired_messages();
 
     let mut messages = Vec::new();
-    // Uses the non-committing `NodeGraph::process` rather than `TerrainGraph::process`: the
-    // latter's generation bookkeeping is one-shot and reserved for `update_terrain_preview`,
-    // the sole consumer that's supposed to act on "new output is available".
+    // Uses `NodeGraph::process` rather than `TerrainGraph::process`: the latter's generation bookkeeping is reserved for `update_terrain_preview` alone.
     if let Err(err) = terrain_graph.graph_mut().process(graph_id) {
         let text = match &err {
-            NodeError::InputNotConnected { node_id, node, socket } => {
+            NodeError::InputNotConnected {
+                node_id,
+                node,
+                socket
+            } => {
                 if *node_id == graph_id {
                     format!("Input \"{}\" is not connected", socket)
                 } else {
-                    format!("Upstream node \"{}\" has a disconnected input \"{}\"", node, socket)
+                    format!(
+                        "Upstream node \"{}\" has a disconnected input \"{}\"",
+                        node, socket
+                    )
                 }
             }
             _ => err.to_string()
         };
-        messages.push(NodeMessage { severity: err.severity(), text });
+        messages.push(NodeMessage {
+            severity: err.severity(),
+            text
+        });
     }
     if let Some(message) = terrain_graph.action_message(graph_id) {
         messages.push(message.clone());
@@ -116,13 +125,11 @@ fn collect_node_messages(
     messages
 }
 
-/// Represents the range of values that a parameter can take, used for rendering appropriate UI controls.
-/// Float/Int parameters read their range straight from `NParamDesc::constraints` inside
-/// [`widgets::slider`] instead, since that widget takes the descriptor directly.
+/// Float/Int parameters read their range straight from `NParamDesc::constraints` inside [`widgets::slider`] instead, since that widget takes the descriptor directly.
 enum ParamRange {
     StringMaxLength(usize),
     EnumOneOf(Vec<String>),
-    None,
+    None
 }
 
 struct ParamSpec {
@@ -130,7 +137,7 @@ struct ParamSpec {
     label: &'static str,
     category: &'static str,
     default: NParamValue,
-    range: ParamRange,
+    range: ParamRange
 }
 
 /// Draws the UI for editing the parameters of a node, grouped into cards by [`NParamDesc::category`].
@@ -148,14 +155,14 @@ fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph
                     Some(NParamConstraints::EnumOneOf { options }) => {
                         ParamRange::EnumOneOf(options.iter().map(ToString::to_string).collect())
                     }
-                    _ => ParamRange::None,
+                    _ => ParamRange::None
                 };
                 ParamSpec {
                     key: desc.key,
                     label: desc.label,
                     category: desc.category,
                     default: desc.default.clone(),
-                    range,
+                    range
                 }
             })
             .collect()
@@ -169,17 +176,21 @@ fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph
     for (i, spec) in param_specs.iter().enumerate() {
         match categories.iter_mut().find(|(c, _)| *c == spec.category) {
             Some((_, indices)) => indices.push(i),
-            None => categories.push((spec.category, vec![i])),
+            None => categories.push((spec.category, vec![i]))
         }
     }
 
-    // Draw each category as a collapsible card with a grid of parameter rows.
     for (category, indices) in categories.iter() {
         ui.add_space(6.0);
 
         egui::Frame::new()
             .fill(theme::palette::BG_WIDGET)
-            .inner_margin(egui::Margin { left: 0, right: 20, top: 6, bottom: 6 })
+            .inner_margin(egui::Margin {
+                left: 0,
+                right: 20,
+                top: 6,
+                bottom: 6
+            })
             .corner_radius(egui::CornerRadius::same(theme::layout::CARD_ROUNDING))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
@@ -187,7 +198,7 @@ fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph
                 egui::CollapsingHeader::new(
                     egui::RichText::new(format!("  {}", category))
                         .font(theme::heading_font(theme::fonts::FONT_SIZE_HEADING))
-                        .color(theme::palette::TEXT_DISABLED),
+                        .color(theme::palette::TEXT_DISABLED)
                 )
                 .icon(widgets::menu_icon)
                 .default_open(true)
@@ -198,9 +209,7 @@ fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph
                     let mut prev_row_drawn = false;
                     let mut i = 0;
                     while i < indices.len() {
-                        // Float/Int sliders and String fields paint their own full-width pill
-                        // (see `widgets::slider` / `widgets::text_field`), so they get their own
-                        // row instead of sharing the label|control grid with Bool/Enum.
+                        // Float/Int/String/Vector2/Action paint their own full-width pill, so they get their own row instead of sharing the label|control grid with Bool/Enum.
                         let is_full_width = |idx: usize| {
                             matches!(
                                 param_specs[idx].default,
@@ -229,7 +238,12 @@ fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph
                                 .striped(false)
                                 .show(ui, |ui| {
                                     for &j in &indices[start..i] {
-                                        show_param_row(ui, terrain_graph, graph_id, &param_specs[j]);
+                                        show_param_row(
+                                            ui,
+                                            terrain_graph,
+                                            graph_id,
+                                            &param_specs[j]
+                                        );
                                     }
                                 });
                             grid_run += 1;
@@ -241,13 +255,12 @@ fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph
     }
 }
 
-/// Draws one parameter as a `label | control` grid row and, if the control was edited, writes
-/// the new value back into the graph.
+/// If the control was edited, writes the new value back into the graph.
 fn show_param_row(
     ui: &mut egui::Ui,
     terrain_graph: &TerrainGraphHolder,
     graph_id: GraphNodeId,
-    spec: &ParamSpec,
+    spec: &ParamSpec
 ) {
     let current = terrain_graph
         .read()
@@ -307,7 +320,10 @@ fn show_param_row(
             let color = theme::category_color(node.category());
             let mut v = (x as f32, y as f32);
             let changed = widgets::vector2(ui, desc, color, &mut v).changed();
-            changed.then_some(NParamValue::Vector2Int(v.0.round() as i32, v.1.round() as i32))
+            changed.then_some(NParamValue::Vector2Int(
+                v.0.round() as i32,
+                v.1.round() as i32
+            ))
         }
         NParamValue::Bool(mut v) => {
             let color = {
@@ -326,7 +342,7 @@ fn show_param_row(
             };
             let char_limit = match spec.range {
                 ParamRange::StringMaxLength(max_length) => Some(max_length),
-                _ => None,
+                _ => None
             };
             let changed = widgets::text_field(ui, spec.label, color, &mut v, char_limit).changed();
             changed.then_some(NParamValue::String(v))
@@ -339,7 +355,7 @@ fn show_param_row(
             };
             let options = match &spec.range {
                 ParamRange::EnumOneOf(options) => options.clone(),
-                _ => Vec::new(),
+                _ => Vec::new()
             };
             let changed = widgets::enum_selector(
                 ui,
@@ -347,12 +363,14 @@ fn show_param_row(
                 spec.label,
                 color,
                 &options,
-                &mut v,
+                &mut v
             )
             .changed();
             changed.then_some(NParamValue::Enum(v))
         }
-        NParamValue::Action { show_success_message } => {
+        NParamValue::Action {
+            show_success_message
+        } => {
             let color = {
                 let terrain_graph_read = terrain_graph.read();
                 let node = terrain_graph_read.graph().node(graph_id).unwrap();
@@ -362,7 +380,13 @@ fn show_param_row(
             let key = spec.key;
             let action_label = spec.label;
             widgets::button(ui, spec.label, color, move || {
-                run_node_action(&terrain_graph, graph_id, key, action_label, show_success_message);
+                run_node_action(
+                    &terrain_graph,
+                    graph_id,
+                    key,
+                    action_label,
+                    show_success_message
+                );
             });
             None
         }
@@ -379,29 +403,27 @@ fn show_param_row(
             (node_label, result)
         };
         if let Err(err) = result {
-            error!("Failed to set parameter {} of node {}: {}", spec.key, node_label, err);
+            error!(
+                "Failed to set parameter {} of node {}: {}",
+                spec.key, node_label, err
+            );
             terrain_graph.set_action_result(graph_id, Err(err));
         }
     }
 }
 
-/// Runs a node's action (button press) and records the result in the terrain graph, so it can be
-/// displayed in the UI. If the action fails, logs an error with the node's label and the action's
-/// key and shows it (persists until the next attempt). If it succeeds, shows a "completed"
-/// message that fades out on its own when `show_success_message` is set, otherwise clears
-/// whatever feedback was shown before.
+/// Records the result in the terrain graph so it can be displayed in the UI.
 fn run_node_action(
     terrain_graph: &TerrainGraphHolder,
     graph_id: GraphNodeId,
     key: &str,
     action_label: &str,
-    show_success_message: bool,
+    show_success_message: bool
 ) {
     let output_size = terrain_graph.read().graph().tile_size();
 
     let mut terrain_graph = terrain_graph.write();
-    // Best-effort: the action still runs (with an empty `output`) if the node's inputs aren't
-    // fully wired up yet, e.g. so a "browse for a folder" action works before the graph does.
+    // Best-effort: runs with an empty `output` if the node's inputs aren't fully wired up yet, e.g. so a "browse for a folder" action works before the graph does.
     let output = match terrain_graph.graph_mut().process(graph_id) {
         Ok(NodeGraphProcessResult::Processed(_, tiles)) => tiles,
         Ok(NodeGraphProcessResult::Processing) => Vec::new(),
@@ -419,8 +441,7 @@ fn run_node_action(
     };
     match result {
         Ok(()) if show_success_message => {
-            terrain_graph
-                .set_action_result(graph_id, Ok(format!("{} completed", action_label)));
+            terrain_graph.set_action_result(graph_id, Ok(format!("{} completed", action_label)));
         }
         Ok(()) => terrain_graph.clear_action_message(graph_id),
         Err(err) => {

@@ -13,7 +13,8 @@ use crate::{
         tile_allocator::crop_center
     },
     render::{
-        mesh_generation::heightmap_to_mesh, terrain_preview_pipeline::TerrainPreviewRenderPipeline,
+        mesh_generation::heightmap_to_mesh,
+        terrain_preview_pipeline::TerrainPreviewRenderPipeline,
         terrain_preview_subpass::{SubRenderPassTerrainPreview, TerrainPreviewMeshes}
     }
 };
@@ -34,7 +35,6 @@ impl Plugin for RenderPlugin {
             .add_systems(Startup, create_material)
             .add_systems(Update, update_terrain_preview);
 
-        // Terrain-preview chunk meshes subpass
         app.add_plugins(RenderPipelineRegisterPlugin::<TerrainPreviewRenderPipeline>::default());
 
         // Extract the terrain-preview meshes from the main world into the render world every frame
@@ -53,10 +53,9 @@ impl Plugin for RenderPlugin {
     }
 }
 
-/// Render state for one chunk
 struct ChunkPreview {
     core_data: Vec<f32>,
-    /// Whether `core_data` is the flat fallback shown when this chunk's node can't be evaluated
+    /// Whether `core_data` is the flat fallback shown when this chunk's node can't be evaluated.
     is_flat: bool,
     mesh_handle: Option<Handle<Mesh>>
 }
@@ -84,10 +83,9 @@ pub(crate) fn update_terrain_preview(
     mut terrain_preview_meshes: ResMut<TerrainPreviewMeshes>,
     terrain_graph: Res<TerrainGraphHolder>
 ) {
-    // Get selected node from terrain graph
     let selected_node = match terrain_graph.read().selected_node {
         Some(node_id) => node_id,
-        None => return // No node selected
+        None => return
     };
     let locality = match terrain_graph.read().graph().node(selected_node) {
         Ok(node) => node.locality(),
@@ -137,21 +135,25 @@ fn update_local_preview(
     let chunk_grid = *terrain_graph.read().graph().chunk_grid();
     let tile_size = chunk_grid.tile_size();
 
-    // Pass 1
     let mut live_chunks = HashSet::new();
     let mut changed_chunks = HashSet::new();
     for chunk in chunk_grid.coords() {
         live_chunks.insert(chunk);
 
-        match terrain_graph.write().process_chunk(selected_node, chunk, force) {
+        match terrain_graph
+            .write()
+            .process_chunk(selected_node, chunk, force)
+        {
             Ok(Some((_, tiles))) => {
-                let Some(heightmap) = tiles.first() else { continue };
+                let Some(heightmap) = tiles.first() else {
+                    continue;
+                };
                 let internal_size = heightmap.size();
                 let data = crop_center(heightmap, internal_size, tile_size);
                 set_chunk_data(terrain_preview, chunk, data, false);
                 changed_chunks.insert(chunk);
             }
-            Ok(None) => {} // No new output tiles for this chunk
+            Ok(None) => {}
             Err(e) => {
                 match e {
                     InputNotConnected { node, socket, .. } => {
@@ -161,36 +163,51 @@ fn update_local_preview(
                         );
                     }
                     _ => {
-                        error!("Error while processing terrain graph for chunk {:?}: {:?}", chunk, e);
+                        error!(
+                            "Error while processing terrain graph for chunk {:?}: {:?}",
+                            chunk, e
+                        );
                     }
                 }
-                // The selected node can't be evaluated: show a flat chunk instead of leaving
-                // whatever was last rendered on screen.
-                let already_flat = terrain_preview.chunks.get(&chunk).is_some_and(|c| c.is_flat);
+                // Show a flat chunk instead of leaving whatever was last rendered on screen.
+                let already_flat = terrain_preview
+                    .chunks
+                    .get(&chunk)
+                    .is_some_and(|c| c.is_flat);
                 if !already_flat {
-                    set_chunk_data(terrain_preview, chunk, vec![0.0; tile_size * tile_size], true);
+                    set_chunk_data(
+                        terrain_preview,
+                        chunk,
+                        vec![0.0; tile_size * tile_size],
+                        true
+                    );
                     changed_chunks.insert(chunk);
                 }
             }
         }
     }
 
-    // Pass 2
     for chunk in &changed_chunks {
         let padded = padded_heightmap(*chunk, tile_size, &terrain_preview.chunks);
         let world_offset = chunk_origin(*chunk, &chunk_grid);
-        let mesh = heightmap_to_mesh(&format!("terrain-preview-{}-{}", chunk.0, chunk.1), &padded, tile_size, world_offset);
+        let mesh = heightmap_to_mesh(
+            &format!("terrain-preview-{}-{}", chunk.0, chunk.1),
+            &padded,
+            tile_size,
+            world_offset
+        );
         upsert_chunk_mesh(meshes, terrain_preview, *chunk, mesh);
     }
 
     // Drop any chunks that are no longer in the grid
-    terrain_preview.chunks.retain(|chunk, _| live_chunks.contains(chunk));
+    terrain_preview
+        .chunks
+        .retain(|chunk, _| live_chunks.contains(chunk));
 
     publish_preview_meshes(terrain_preview, terrain_preview_meshes, material_handle);
 }
 
-/// Renders `selected_node`'s own bare, self-centered result (see `TileContext::for_global`) as one
-/// single mesh sized to `native_resolution`, centered at the world origin.
+/// Renders `selected_node`'s own bare, self-centered result (see `TileContext::for_global`) as one mesh, centered at the world origin.
 #[allow(clippy::too_many_arguments)]
 fn update_global_preview(
     meshes: &mut Assets<Mesh>,
@@ -209,7 +226,10 @@ fn update_global_preview(
 
     let mut changed = false;
 
-    match terrain_graph.write().process_chunk(selected_node, chunk, force) {
+    match terrain_graph
+        .write()
+        .process_chunk(selected_node, chunk, force)
+    {
         Ok(Some((_, tiles))) => {
             if let Some(heightmap) = tiles.first() {
                 let internal_size = heightmap.size();
@@ -218,7 +238,7 @@ fn update_global_preview(
                 changed = true;
             }
         }
-        Ok(None) => {} // No new output tiles
+        Ok(None) => {}
         Err(e) => {
             match e {
                 InputNotConnected { node, socket, .. } => {
@@ -227,11 +247,22 @@ fn update_global_preview(
                         node, socket
                     );
                 }
-                _ => error!("Error while processing terrain graph for the global preview: {:?}", e)
+                _ => error!(
+                    "Error while processing terrain graph for the global preview: {:?}",
+                    e
+                )
             }
-            let already_flat = terrain_preview.chunks.get(&chunk).is_some_and(|c| c.is_flat);
+            let already_flat = terrain_preview
+                .chunks
+                .get(&chunk)
+                .is_some_and(|c| c.is_flat);
             if !already_flat {
-                set_chunk_data(terrain_preview, chunk, vec![0.0; native_resolution * native_resolution], true);
+                set_chunk_data(
+                    terrain_preview,
+                    chunk,
+                    vec![0.0; native_resolution * native_resolution],
+                    true
+                );
                 changed = true;
             }
         }
@@ -241,14 +272,18 @@ fn update_global_preview(
         let padded = padded_heightmap(chunk, native_resolution, &terrain_preview.chunks);
         let extent = native_resolution as f32 * CELL_SIZE;
         let world_offset = Vec3::new(-extent * 0.5, 0.0, -extent * 0.5);
-        let mesh = heightmap_to_mesh("terrain-preview-global", &padded, native_resolution, world_offset);
+        let mesh = heightmap_to_mesh(
+            "terrain-preview-global",
+            &padded,
+            native_resolution,
+            world_offset
+        );
         upsert_chunk_mesh(meshes, terrain_preview, chunk, mesh);
     }
 
     publish_preview_meshes(terrain_preview, terrain_preview_meshes, material_handle);
 }
 
-/// Publishes every mesh currently held in `terrain_preview` to the terrain-preview render subpass.
 fn publish_preview_meshes(
     terrain_preview: &TerrainPreview,
     terrain_preview_meshes: &mut TerrainPreviewMeshes,
@@ -262,18 +297,27 @@ fn publish_preview_meshes(
     terrain_preview_meshes.material = Some(material_handle);
 }
 
-/// Stores `data` as `chunk`'s current core heightmap, creating its preview entry if this is the
-/// first time `chunk` has been seen.
-fn set_chunk_data(terrain_preview: &mut TerrainPreview, chunk: ChunkCoord, data: Vec<f32>, is_flat: bool) {
+/// Creates `chunk`'s preview entry if this is the first time it's been seen.
+fn set_chunk_data(
+    terrain_preview: &mut TerrainPreview,
+    chunk: ChunkCoord,
+    data: Vec<f32>,
+    is_flat: bool
+) {
     match terrain_preview.chunks.get_mut(&chunk) {
         Some(preview) => {
             preview.core_data = data;
             preview.is_flat = is_flat;
         }
         None => {
-            terrain_preview
-                .chunks
-                .insert(chunk, ChunkPreview { core_data: data, is_flat, mesh_handle: None });
+            terrain_preview.chunks.insert(
+                chunk,
+                ChunkPreview {
+                    core_data: data,
+                    is_flat,
+                    mesh_handle: None
+                }
+            );
         }
     }
 }
@@ -283,11 +327,19 @@ fn chunk_origin(chunk: ChunkCoord, grid: &ChunkGrid) -> Vec3 {
     let step = grid.tile_size() as f32 * CELL_SIZE;
     let extent_x = grid.chunks_x() as f32 * step;
     let extent_y = grid.chunks_y() as f32 * step;
-    Vec3::new(chunk.0 as f32 * step - extent_x * 0.5, 0.0, chunk.1 as f32 * step - extent_y * 0.5)
+    Vec3::new(
+        chunk.0 as f32 * step - extent_x * 0.5,
+        0.0,
+        chunk.1 as f32 * step - extent_y * 0.5
+    )
 }
 
 /// Builds `chunk`'s `(tile_size + 3) x (tile_size + 3)` heightmap for [`heightmap_to_mesh`]
-fn padded_heightmap(chunk: ChunkCoord, tile_size: usize, chunks: &HashMap<ChunkCoord, ChunkPreview>) -> Vec<f32> {
+fn padded_heightmap(
+    chunk: ChunkCoord,
+    tile_size: usize,
+    chunks: &HashMap<ChunkCoord, ChunkPreview>
+) -> Vec<f32> {
     let padded = tile_size + 3;
     let mut out = vec![0.0; padded * padded];
     for pz in 0..padded {
@@ -315,9 +367,10 @@ fn sample_across_chunks(
     if let Some(preview) = chunks.get(&neighbor) {
         return preview.core_data[sz as usize * tile_size + sx as usize];
     }
-    // No such chunk (grid edge) or it hasn't produced data yet: fall back to clamping within
-    // this chunk's own tile, same as an unchunked tile always did at its own edge.
-    let Some(own) = chunks.get(&chunk) else { return 0.0 };
+    // No such chunk (grid edge) or no data yet: clamp within this chunk's own tile, same as an unchunked tile always did at its own edge.
+    let Some(own) = chunks.get(&chunk) else {
+        return 0.0;
+    };
     let csx = lx.clamp(0, size - 1) as usize;
     let csz = lz.clamp(0, size - 1) as usize;
     own.core_data[csz * tile_size + csx]
@@ -329,12 +382,23 @@ fn locate(l: isize, size: isize) -> (i32, isize) {
 }
 
 /// Reuses the existing mesh asset for `chunk` if present, otherwise creates a new one.
-fn upsert_chunk_mesh(meshes: &mut Assets<Mesh>, terrain_preview: &mut TerrainPreview, chunk: ChunkCoord, mesh: Mesh) {
-    let existing = terrain_preview.chunks.get(&chunk).and_then(|c| c.mesh_handle.clone());
+fn upsert_chunk_mesh(
+    meshes: &mut Assets<Mesh>,
+    terrain_preview: &mut TerrainPreview,
+    chunk: ChunkCoord,
+    mesh: Mesh
+) {
+    let existing = terrain_preview
+        .chunks
+        .get(&chunk)
+        .and_then(|c| c.mesh_handle.clone());
     match existing {
         Some(handle) => {
             if let Err(e) = meshes.insert(handle.id(), mesh) {
-                error!("Failed to update terrain preview mesh for chunk {:?}: {:?}", chunk, e);
+                error!(
+                    "Failed to update terrain preview mesh for chunk {:?}: {:?}",
+                    chunk, e
+                );
             }
         }
         None => {

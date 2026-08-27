@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use wde::prelude::*;
 
-use crate::ui::{editor::EditorPanelsPlugin, footer::FooterPlugin, panel_terrain_settings::draw_terrain_settings};
+use crate::ui::{
+    editor::EditorPanelsPlugin, footer::FooterPlugin, panel_terrain_settings::draw_terrain_settings
+};
 
 mod editor;
 mod editor_behavior;
@@ -22,9 +24,7 @@ impl Plugin for UIPlugin {
     }
 }
 
-/// Applies the editor's fonts and style to the shared egui context, installs the image loaders
-/// needed to decode node icons from PNG bytes, and disables WaterDropEngine's own frame-data
-/// overlay in favor of the equivalent stats in the editor's own footer (see `ui::footer`).
+/// Disables WaterDropEngine's own frame-data overlay in favor of the equivalent stats in the editor's own footer (see `ui::footer`).
 fn install_theme(
     ctx: Res<UIContext>,
     mut ui_menu: ResMut<UIMenu>,
