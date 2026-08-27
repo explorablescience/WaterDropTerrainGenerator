@@ -52,14 +52,14 @@ pub mod palette {
     // Node-graph category colors - one distinct hue per `NodeCategory`, spaced around the
     // wheel and kept clear of ACCENT/HIGHLIGHT_* so a category chip is never mistaken for
     // a selection or message-severity color.
-    pub const CATEGORY_GENERATION: Color32 = Color32::from_rgb(111, 188, 92);
-    pub const CATEGORY_MODIFICATION: Color32 = Color32::from_rgb(217, 146, 104);
-    pub const CATEGORY_SURFACE: Color32 = Color32::from_rgb(86, 179, 145);
-    pub const CATEGORY_SIMULATION: Color32 = Color32::from_rgb(137, 146, 209);
-    pub const CATEGORY_DATA_EXTRACTION: Color32 = Color32::from_rgb(182, 141, 206);
-    pub const CATEGORY_TEXTURING: Color32 = Color32::from_rgb(213, 134, 189);
-    pub const CATEGORY_UTILITY: Color32 = Color32::from_rgb(166, 162, 155);
-    pub const CATEGORY_EXPORT: Color32 = Color32::from_rgb(203, 207, 89);
+    pub const CATEGORY_GENERATION: Color32 = Color32::from_rgb(132, 188, 118);
+    pub const CATEGORY_MODIFICATION: Color32 = Color32::from_rgb(210, 157, 127);
+    pub const CATEGORY_SURFACE: Color32 = Color32::from_rgb(116, 180, 156);
+    pub const CATEGORY_SIMULATION: Color32 = Color32::from_rgb(154, 161, 208);
+    pub const CATEGORY_DATA_EXTRACTION: Color32 = Color32::from_rgb(187, 157, 205);
+    pub const CATEGORY_TEXTURING: Color32 = Color32::from_rgb(209, 153, 192);
+    pub const CATEGORY_UTILITY: Color32 = Color32::from_rgb(173, 169, 164);
+    pub const CATEGORY_EXPORT: Color32 = Color32::from_rgb(199, 202, 119);
 
     // Neutral default fill for graph pins before a category color is applied.
     pub const PIN_DEFAULT: Color32 = Color32::from_rgb(120, 120, 120);
