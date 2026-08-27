@@ -25,9 +25,7 @@ impl ChunkGrid {
         Self { chunks_x, chunks_y, tile_size, world_scale }
     }
 
-    /// A degenerate 1x1 grid spanning the whole terrain in a single chunk, with `world_scale` set
-    /// so the chunk covers exactly one world unit - i.e. today's single-tile behavior, expressed
-    /// as the trivial case of a chunk grid.
+    /// A degenerate 1x1 grid spanning the whole terrain in a single chunk.
     pub fn single(tile_size: usize) -> Self {
         Self::new(1, 1, tile_size, 1.0 / tile_size as f32)
     }
@@ -63,9 +61,10 @@ impl ChunkGrid {
 
     /// World-space position of `chunk`'s core (0, 0) texel, i.e. excluding any margin.
     fn chunk_world_origin(&self, chunk: ChunkCoord) -> (f32, f32) {
+        let (ex, ey) = self.world_extent();
         (
-            chunk.0 as f32 * self.tile_size as f32 * self.world_scale,
-            chunk.1 as f32 * self.tile_size as f32 * self.world_scale
+            chunk.0 as f32 * self.tile_size as f32 * self.world_scale - ex * 0.5,
+            chunk.1 as f32 * self.tile_size as f32 * self.world_scale - ey * 0.5
         )
     }
 
@@ -77,26 +76,9 @@ impl ChunkGrid {
         let step = self.world_scale;
         TileContext {
             chunk: Some(chunk),
-            chunks_x: self.chunks_x,
-            chunks_y: self.chunks_y,
             world_origin: (ox - margin as f32 * step, oy - margin as f32 * step),
             world_step: (step, step),
             world_extent: self.world_extent()
-        }
-    }
-
-    /// Context for the single whole-terrain pass used to evaluate a `Global` node: covers the
-    /// entire extent of the grid in `native_resolution x native_resolution` texels, independent of
-    /// the chunk layout.
-    pub fn whole_context(&self, native_resolution: usize) -> TileContext {
-        let (ex, ey) = self.world_extent();
-        TileContext {
-            chunk: None,
-            chunks_x: self.chunks_x,
-            chunks_y: self.chunks_y,
-            world_origin: (0.0, 0.0),
-            world_step: (ex / native_resolution as f32, ey / native_resolution as f32),
-            world_extent: (ex, ey)
         }
     }
 }

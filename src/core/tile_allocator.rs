@@ -99,6 +99,25 @@ impl TilePool {
     }
 }
 
+/// Bilinearly samples a `size x size` grid at texel coordinates `x, y`, clamping to the grid's
+/// edge when they fall outside `[0, size - 1]`.
+pub fn bilinear_sample(data: &[f32], size: usize, x: f32, y: f32) -> f32 {
+    let px = |x: usize, y: usize| data[y * size + x];
+
+    let fx = x.clamp(0.0, (size - 1) as f32);
+    let fy = y.clamp(0.0, (size - 1) as f32);
+    let x0 = fx as usize;
+    let y0 = fy as usize;
+    let x1 = (x0 + 1).min(size - 1);
+    let y1 = (y0 + 1).min(size - 1);
+    let tx = fx - x0 as f32;
+    let ty = fy - y0 as f32;
+
+    let top = px(x0, y0) * (1.0 - tx) + px(x1, y0) * tx;
+    let bottom = px(x0, y1) * (1.0 - tx) + px(x1, y1) * tx;
+    top * (1.0 - ty) + bottom * ty
+}
+
 /// Extracts the centered `target_size x target_size` interior out of a `full_size x full_size`
 /// tile - i.e. crops off the kernel-padding margin around a node's requested output, whether
 /// that's a single tile's own padding or one chunk's margin ring in a chunk grid.

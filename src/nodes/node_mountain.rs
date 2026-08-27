@@ -12,22 +12,16 @@ const ICON: NodeIcon = NodeIcon {
     png_bytes: include_bytes!("../../assets/icons/node_mountain.png")
 };
 
-/// Resolution (texels per axis) of the whole-terrain buffer this node computes its shape into,
-/// independent of the chunk grid - see [`NodeLocality::Global`].
-const NATIVE_RESOLUTION: usize = 256;
-
-/// A very basic `Global` primitive: one smooth dome centered on the terrain. A mountain like this
-/// doesn't tile - it has to be computed once over the whole extent rather than per chunk, so each
-/// chunk instead gets its own cropped, resampled slice of the single shared shape.
+/// A very basic `Global` primitive: one smooth dome.
 #[derive(Debug)]
 pub struct NodeMountain {
-    pub center: (f32, f32),
     pub height: f32,
-    pub radius: f32
+    pub radius: f32,
+    pub native_resolution: u32
 }
 impl Default for NodeMountain {
     fn default() -> Self {
-        Self { center: (0.5, 0.5), height: 1.0, radius: 2.0 }
+        Self { height: 2.0, radius: 0.1, native_resolution: 256 }
     }
 }
 impl NodeMountain {
@@ -35,16 +29,6 @@ impl NodeMountain {
         static SPECS: OnceLock<Vec<NParamDesc>> = OnceLock::new();
         SPECS.get_or_init(|| {
             vec![
-                NParamDesc {
-                    key: "center",
-                    label: "Center",
-                    category: "Shape",
-                    default: NParamValue::Vector2(0.5, 0.5),
-                    constraints: Some(NParamConstraints::Vector2Range {
-                        min: (0.0, 0.0),
-                        max: (1.0, 1.0)
-                    })
-                },
                 NParamDesc {
                     key: "height",
                     label: "Height",
@@ -56,18 +40,25 @@ impl NodeMountain {
                     key: "radius",
                     label: "Radius",
                     category: "Shape",
-                    default: NParamValue::Float(2.0),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.1, max: 50.0 })
+                    default: NParamValue::Float(0.3),
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.01, max: 2.0 })
                 },
+                NParamDesc {
+                    key: "native_resolution",
+                    label: "Native Resolution",
+                    category: "Shape",
+                    default: NParamValue::Int(256),
+                    constraints: Some(NParamConstraints::IntRange { min: 16, max: 4096 })
+                }
             ]
         })
     }
 
     /// Smooth radial falloff from `center`: `self.height` at the center, `0` at `self.radius` and
     /// beyond.
-    fn dome(&self, world: (f32, f32), center: (f32, f32)) -> f32 {
-        let dx = world.0 - center.0;
-        let dy = world.1 - center.1;
+    fn dome(&self, local: (f32, f32), center: (f32, f32)) -> f32 {
+        let dx = local.0 - center.0;
+        let dy = local.1 - center.1;
         let dist = (dx * dx + dy * dy).sqrt();
         let t = (1.0 - dist / self.radius).clamp(0.0, 1.0);
         let falloff = t * t * (3.0 - 2.0 * t); // smoothstep
@@ -87,7 +78,7 @@ impl Node for NodeMountain {
     }
 
     fn locality(&self) -> NodeLocality {
-        NodeLocality::Global { native_resolution: NATIVE_RESOLUTION }
+        NodeLocality::Global { native_resolution: self.native_resolution as usize }
     }
 
     fn outputs(&self) -> &[NodeSocket] {
@@ -103,17 +94,17 @@ impl Node for NodeMountain {
     }
     fn get_param(&self, key: &str) -> Option<NParamValue> {
         match key {
-            "center" => Some(NParamValue::Vector2(self.center.0, self.center.1)),
             "height" => Some(NParamValue::Float(self.height)),
             "radius" => Some(NParamValue::Float(self.radius)),
+            "native_resolution" => Some(NParamValue::Int(self.native_resolution as i32)),
             _ => None
         }
     }
     fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), NodeError> {
         match (key, value) {
-            ("center", NParamValue::Vector2(x, y)) => self.center = (x, y),
             ("height", NParamValue::Float(v)) => self.height = v,
             ("radius", NParamValue::Float(v)) => self.radius = v,
+            ("native_resolution", NParamValue::Int(v)) => self.native_resolution = v as u32,
             (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into())
         }
         Ok(())
@@ -127,11 +118,10 @@ impl Node for NodeMountain {
     ) -> Result<Vec<TileHandle>, NodeError> {
         let mut output = pool.allocate();
         let s = output.size();
-        let center = (self.center.0 * ctx.world_size().0, self.center.1 * ctx.world_size().1);
         for y in 0..s {
             for x in 0..s {
-                let world_pos = ctx.world_pos(x, y);
-                output[y * s + x] = self.dome(world_pos, center);
+                let local = ctx.world_pos(x, y);
+                output[y * s + x] = self.dome(local, (0.0, 0.0));
             }
         }
         Ok(vec![Arc::new(output)])

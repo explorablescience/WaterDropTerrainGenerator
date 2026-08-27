@@ -52,11 +52,12 @@ fn assembles_each_chunks_core_region_at_its_grid_offset() {
     let (data, width, height) = assemble_terrain(&mut graph, node).expect("assembling should succeed");
     assert_eq!((width, height), (8, 4));
 
+    // World space is centered on the whole grid, so the 8-wide combined extent spans [-4, 4).
     for y in 0..height {
         let row = &data[y * width..(y + 1) * width];
         assert_eq!(
             row,
-            [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            [-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0],
             "row {y} should be a continuous world-x ramp across both chunks, not each chunk restarting at 0"
         );
     }

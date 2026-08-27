@@ -216,10 +216,7 @@ impl NodeGraph {
         Ok(seen)
     }
 
-    /// Tile size the pool needs so that every `Local` node feeding `node_id` has enough padding
-    /// around the requested `tile_size` output to sample its kernel without going out of bounds.
-    /// `Global` ancestors contribute no padding of their own: the crop/resample step that
-    /// integrates their output already produces exactly the size asked of it.
+    /// Required tile size including paddings.
     fn required_internal_tile_size(&self, node_id: GraphNodeId) -> Result<usize, NodeError> {
         let padding: usize = self
             .collect_ancestors(node_id)?
@@ -237,25 +234,12 @@ impl NodeGraph {
         Ok(self.chunk_grid.tile_size() + 2 * padding)
     }
 
-    /// Evaluates `node_id` for a specific `chunk` of this graph's [`ChunkGrid`]. If `node_id` is a
-    /// `Global` node
+    /// Evaluates `node_id` for a specific `chunk` of this graph's [`ChunkGrid`].
     pub fn process_chunk(&mut self, node_id: GraphNodeId, chunk: ChunkCoord) -> Result<NodeGraphProcessResult, NodeError> {
         if let NodeLocality::Global { native_resolution } = self.topology.node(node_id)?.locality() {
             let global_pool = TilePool::new(native_resolution);
-            let global_ctx = self.chunk_grid.whole_context(native_resolution);
-            let (generation, tiles) =
-                match self.process_scoped(node_id, EvalScope::Global, &global_pool, &global_ctx)? {
-                    NodeGraphProcessResult::Processed(generation, tiles) => (generation, tiles),
-                    processing @ NodeGraphProcessResult::Processing => return Ok(processing)
-                };
-
-            let chunk_pool = TilePool::new(self.chunk_grid.tile_size());
-            let chunk_ctx = self.chunk_grid.chunk_context(chunk, 0);
-            let cropped = tiles
-                .iter()
-                .map(|tile| resample(tile, &global_ctx, &chunk_pool, &chunk_ctx))
-                .collect();
-            return Ok(NodeGraphProcessResult::Processed(generation, cropped));
+            let global_ctx = TileContext::for_global(native_resolution);
+            return self.process_scoped(node_id, EvalScope::Global, &global_pool, &global_ctx);
         }
 
         let internal_tile_size = self.required_internal_tile_size(node_id)?;
@@ -277,6 +261,8 @@ impl NodeGraph {
         self.process_chunk(node_id, ChunkCoord(0, 0))
     }
 
+    /// Evaluates `node_id` for a specific `scope`, which may be either a single chunk or the whole terrain.
+    /// Returns `NodeGraphProcessResult::Processing` if the node is already being evaluated on the current call stack, which indicates a cycle in the dependency graph.
     fn process_scoped(
         &mut self,
         node_id: GraphNodeId,
@@ -341,18 +327,12 @@ impl NodeGraph {
                 continue;
             };
 
-            // Crossing into a `Global` ancestor switches to its own whole-terrain pool/context
-            // (independent of `native_resolution`, however that compares to the current tile
-            // size) and its result is resampled into the shape this call expects. A `Local`
-            // ancestor is evaluated directly in the current scope/pool/context - chunk-by-chunk
-            // if `scope` is a `Chunk`, or as one more part of the whole-terrain pass if `scope`
-            // is `Global`.
             let from_locality = self.topology.node(*from_node)?.locality();
             let (child_scope, child_pool, child_ctx) = match from_locality {
                 NodeLocality::Global { native_resolution } => (
                     EvalScope::Global,
                     TilePool::new(native_resolution),
-                    self.chunk_grid.whole_context(native_resolution)
+                    TileContext::for_global(native_resolution)
                 ),
                 NodeLocality::Local => (scope, pool.clone(), *ctx)
             };
@@ -367,11 +347,6 @@ impl NodeGraph {
                     }
                 },
                 NodeGraphProcessResult::Processing => return Ok(NodeGraphProcessResult::Processing)
-            };
-            let tile = if matches!(from_locality, NodeLocality::Global { .. }) {
-                resample(&tile, &child_ctx, pool, ctx)
-            } else {
-                tile
             };
             input_tiles.push(tile);
             input_keys.push(cache_key_of(self.cache.state(*from_node, child_scope)));
@@ -395,46 +370,6 @@ impl NodeGraph {
 
         Ok(NodeGraphProcessResult::Processed(self.generation, output))
     }
-}
-
-/// Resamples `src` (covering `src_ctx`'s region at its own resolution) into a freshly allocated
-/// tile from `dst_pool`, covering `dst_ctx`'s region. This is the "integration" step that lets a
-/// `Local` node consume a `Global` node's whole-extent output as if it were an ordinary per-chunk
-/// input tile, and lets a `Global` node itself consume another `Global` node's output at a
-/// different native resolution. Uses bilinear filtering; positions outside `src`'s extent clamp to
-/// its edge.
-fn resample(src: &TileHandle, src_ctx: &TileContext, dst_pool: &Arc<TilePool>, dst_ctx: &TileContext) -> TileHandle {
-    let mut dst = dst_pool.allocate();
-    let dst_size = dst.size();
-    let src_size = src.size();
-    for y in 0..dst_size {
-        for x in 0..dst_size {
-            let (wx, wy) = dst_ctx.world_pos(x, y);
-            let sx = (wx - src_ctx.world_origin.0) / src_ctx.world_step.0;
-            let sy = (wy - src_ctx.world_origin.1) / src_ctx.world_step.1;
-            dst[y * dst_size + x] = bilinear_sample(src, src_size, sx, sy);
-        }
-    }
-    Arc::new(dst)
-}
-
-/// Bilinearly samples a `size x size` grid at texel coordinates `x, y`, clamping to the grid's
-/// edge when they fall outside `[0, size - 1]`.
-fn bilinear_sample(data: &[f32], size: usize, x: f32, y: f32) -> f32 {
-    let px = |x: usize, y: usize| data[y * size + x];
-
-    let fx = x.clamp(0.0, (size - 1) as f32);
-    let fy = y.clamp(0.0, (size - 1) as f32);
-    let x0 = fx as usize;
-    let y0 = fy as usize;
-    let x1 = (x0 + 1).min(size - 1);
-    let y1 = (y0 + 1).min(size - 1);
-    let tx = fx - x0 as f32;
-    let ty = fy - y0 as f32;
-
-    let top = px(x0, y0) * (1.0 - tx) + px(x1, y0) * tx;
-    let bottom = px(x0, y1) * (1.0 - tx) + px(x1, y1) * tx;
-    top * (1.0 - ty) + bottom * ty
 }
 
 fn compute_cache_key(

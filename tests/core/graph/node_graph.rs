@@ -8,7 +8,7 @@ use waterdrop_terrain_generator::core::node_error::NodeError;
 use waterdrop_terrain_generator::core::node_parameters::NParamValue;
 use waterdrop_terrain_generator::core::tile_allocator::{TileHandle, TilePool};
 use waterdrop_terrain_generator::core::tile_context::TileContext;
-use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
+use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin, NodeIntegrate};
 
 #[test]
 fn test_node_graph_connections() {
@@ -386,23 +386,29 @@ fn perlin_generator_samples_a_shared_world_coordinate_frame_across_chunks() {
         value
     };
 
-    // Chunk 1's texel (0, 0) sits at world position (4, 0) - one step past chunk 0's world span.
+    // World space is centered on the whole grid: chunk 0 spans world x in [-4, 0) and chunk 1
+    // spans [0, 4) at world y = -2, so chunk 1's texel (0, 0) sits at world position (0, -2) -
+    // continuing chunk 0's span rather than restarting it.
     let s = chunk1.size();
     assert_eq!(s, 4, "no downstream kernel node means no margin padding");
     assert!(
-        (chunk1[0] - expected_at(4.0, 0.0)).abs() < 1e-5,
-        "chunk 1's first texel should sample world position (4, 0), continuing the same noise \
+        (chunk1[0] - expected_at(0.0, -2.0)).abs() < 1e-5,
+        "chunk 1's first texel should sample world position (0, -2), continuing the same noise \
          field chunk 0 started, not restart at a tile-local (0, 0)"
     );
 }
 
 #[test]
 fn a_global_node_is_evaluated_once_regardless_of_how_many_chunks_request_it() {
+    // Reached through an explicit `NodeIntegrate` now, rather than wired straight into a `Local`
+    // consumer - the engine no longer resamples a `Global` ancestor's output automatically.
     let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
     let calls = Arc::new(AtomicUsize::new(0));
     let source = graph.add_node(Box::new(FakeGlobalSource { calls: calls.clone(), native_resolution: 6 }));
+    let integrate = graph.add_node(Box::new(NodeIntegrate::default()));
     let erosion = graph.add_node(Box::new(NodeErosion::default()));
-    graph.connect(source, 0, erosion, 0).unwrap();
+    graph.connect(source, 0, integrate, 0).unwrap();
+    graph.connect(integrate, 0, erosion, 0).unwrap();
 
     graph.process_chunk(erosion, ChunkCoord(0, 0)).unwrap();
     graph.process_chunk(erosion, ChunkCoord(1, 0)).unwrap();
@@ -413,28 +419,71 @@ fn a_global_node_is_evaluated_once_regardless_of_how_many_chunks_request_it() {
 }
 
 #[test]
-fn a_global_nodes_output_is_resampled_to_fit_the_requesting_chunks_tile() {
-    let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
-    let calls = Arc::new(AtomicUsize::new(0));
-    // A native resolution that doesn't line up with the chunk tile size, to exercise resampling
-    // rather than a lucky same-size copy.
-    let source = graph.add_node(Box::new(FakeGlobalSource { calls, native_resolution: 6 }));
-    let erosion = graph.add_node(Box::new(NodeErosion::default()));
-    graph.connect(source, 0, erosion, 0).unwrap();
+fn integrate_maps_world_positions_into_its_globals_local_space_via_scale_and_position() {
+    // World space is centered on the grid, so this single chunk's core spans world x in [-2, 2).
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0));
+    let source = graph.add_node(Box::new(FakeGlobalWorldXMarker { native_resolution: 8 }));
+    // `scale = 4` gives the source a 4-world-unit physical footprint, `position = 0` centers that
+    // footprint on the terrain's own origin.
+    let integrate = graph.add_node(Box::new(NodeIntegrate { scale: 4.0, position: (0.0, 0.0) }));
+    graph.connect(source, 0, integrate, 0).unwrap();
 
-    let tiles = match graph.process_chunk(erosion, ChunkCoord(0, 0)).unwrap() {
+    let tiles = match graph.process_chunk(integrate, ChunkCoord(0, 0)).unwrap() {
         NodeGraphProcessResult::Processed(_, tiles) => tiles,
         _ => panic!("expected the graph to finish processing")
     };
 
-    // The source is a constant field, so however it was cropped/resampled into erosion's input,
-    // averaging neighbours (erosion's own effect) should leave it unchanged.
-    assert!(tiles[0].iter().all(|&v| (v - 1.0).abs() < 1e-5));
+    // `source` encodes each texel's own local x position as its value. With this scale/position,
+    // world x in `[-2, 2)` maps to local x in `[-0.5, 0.25]` - landing exactly on 4 of `source`'s
+    // own 8 texels, so the integrated output should read back precisely their local-space values,
+    // not some other mapping.
+    let s = tiles[0].size();
+    assert_eq!(s, 4);
+    let row: Vec<f32> = (0..4).map(|x| tiles[0][x]).collect();
+    let expected = [-0.5, -0.25, 0.0, 0.25];
+    for (got, want) in row.iter().zip(expected.iter()) {
+        assert!((got - want).abs() < 1e-4, "got {:?}, expected {:?}", row, expected);
+    }
 }
 
-/// A `Global` node whose output encodes each texel's world-space x position, so a test can check
-/// that a *directly requested* chunk gets its own slice of the whole-terrain result rather than an
-/// identical crop repeated for every chunk.
+#[test]
+fn integrates_physical_size_is_independent_of_the_globals_native_resolution() {
+    // Regression test: `scale`/`position` alone should determine a global shape's world footprint
+    // - `native_resolution` should only pick how finely that same footprint is sampled, never how
+    // big it is. `FakeGlobalWorldXMarker`'s value is an exactly linear function of its own local
+    // position, and bilinear interpolation reproduces an exactly linear function everywhere
+    // between grid points regardless of how coarse or fine the grid is - so if two sources at
+    // different resolutions (same scale/position) disagree anywhere, resolution must be leaking
+    // into the physical footprint.
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0));
+    let low_res = graph.add_node(Box::new(FakeGlobalWorldXMarker { native_resolution: 4 }));
+    let high_res = graph.add_node(Box::new(FakeGlobalWorldXMarker { native_resolution: 64 }));
+    let integrate_low = graph.add_node(Box::new(NodeIntegrate { scale: 5.0, position: (0.0, 0.0) }));
+    let integrate_high = graph.add_node(Box::new(NodeIntegrate { scale: 5.0, position: (0.0, 0.0) }));
+    graph.connect(low_res, 0, integrate_low, 0).unwrap();
+    graph.connect(high_res, 0, integrate_high, 0).unwrap();
+
+    let low = match graph.process_chunk(integrate_low, ChunkCoord(0, 0)).unwrap() {
+        NodeGraphProcessResult::Processed(_, tiles) => tiles[0].clone(),
+        _ => panic!("expected the graph to finish processing")
+    };
+    let high = match graph.process_chunk(integrate_high, ChunkCoord(0, 0)).unwrap() {
+        NodeGraphProcessResult::Processed(_, tiles) => tiles[0].clone(),
+        _ => panic!("expected the graph to finish processing")
+    };
+
+    for i in 0..low.size() * low.size() {
+        assert!(
+            (low[i] - high[i]).abs() < 1e-4,
+            "texel {} differs between a 4-texel and a 64-texel global source at the same scale/position ({} vs {}) - \
+             native_resolution must be leaking into the physical footprint",
+            i, low[i], high[i]
+        );
+    }
+}
+
+/// A `Global` node whose output encodes each texel's own local-space x position, so a test can
+/// check exactly how it gets sampled (directly, or through an integration node).
 #[derive(Debug)]
 struct FakeGlobalWorldXMarker {
     native_resolution: usize
@@ -473,11 +522,10 @@ impl Node for FakeGlobalWorldXMarker {
 }
 
 #[test]
-fn a_directly_requested_global_node_returns_each_chunks_own_slice_not_the_same_crop_every_time() {
-    // Regression test: `process_chunk` on a `Global` node used to skip the integration step
-    // entirely and hand back the same whole-buffer result no matter which chunk asked for it -
-    // e.g. previewing a "Mountain" node directly would show the exact same crop on every chunk
-    // instead of that chunk's own piece of the shared shape.
+fn a_directly_requested_global_node_always_returns_its_own_bare_result_centered_at_zero() {
+    // A `Global` node never places itself on the terrain: previewing or exporting it directly
+    // shows its own bare, self-centered shape - the same regardless of which chunk asked for it.
+    // Mapping it onto the actual terrain is the explicit job of an integration node instead.
     let mut graph = NodeGraph::new(ChunkGrid::new(2, 1, 4, 1.0));
     let source = graph.add_node(Box::new(FakeGlobalWorldXMarker { native_resolution: 8 }));
 
@@ -490,15 +538,17 @@ fn a_directly_requested_global_node_returns_each_chunks_own_slice_not_the_same_c
         _ => panic!("expected the graph to finish processing")
     };
 
-    assert_ne!(
+    assert_eq!(
         chunk0.to_vec(),
         chunk1.to_vec(),
-        "each chunk should get its own slice of the global result, not an identical crop"
+        "which chunk asked for it shouldn't matter - a global node's bare result is the same either way"
     );
-    // Chunk 0 covers world x in [0, 4), chunk 1 covers world x in [4, 8) (world_scale = 1.0,
-    // tile_size = 4) - so every texel of chunk 1's slice should read a strictly larger world x
-    // than chunk 0's, matching where it actually sits in the terrain.
-    assert!(chunk1[0] > chunk0[chunk0.size() - 1]);
+
+    // Its own local space is centered at 0: the middle texel of an 8-wide buffer (index 4) sits
+    // right at local x = 0.
+    let s = chunk0.size();
+    assert_eq!(s, 8);
+    assert!(chunk0[4].abs() < 1e-6, "the center of a global node's bare result should sit at local (0, 0)");
 }
 
 #[test]

@@ -9,6 +9,7 @@ fn every_expected_node_type_is_registered() {
         "Perlin Generator",
         "Load Heightmap",
         "Mountain",
+        "Integrate",
         "Save Heightmap"
     ] {
         assert!(

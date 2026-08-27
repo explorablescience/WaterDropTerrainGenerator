@@ -10,21 +10,30 @@ use crate::core::chunk_grid::ChunkCoord;
 #[derive(Debug, Clone, Copy)]
 pub struct TileContext {
     /// The chunk being computed. `None` during the single whole-terrain pass used to evaluate a
-    /// `Global` node (see `NodeLocality`) - there is no single chunk in that case, the tile being
-    /// produced covers the entire terrain.
+    /// `Global` node (see `NodeLocality`) - a `Global` node computes its own bare, self-contained
+    /// result (see [`TileContext::for_global`]), not any one chunk of the terrain.
     pub chunk: Option<ChunkCoord>,
-    pub chunks_x: u32,
-    pub chunks_y: u32,
     /// World-space position of this tile's (0, 0) texel. For a chunk, already offset to account
     /// for the margin ring around its core region.
     pub world_origin: (f32, f32),
     /// World units covered by one texel, per axis.
     pub world_step: (f32, f32),
-    /// World-space size of the whole terrain, regardless of which chunk (if any) this context is
-    /// for - lets a node normalize a world position into `[0, 1]` across the full terrain.
+    /// World-space size of the tile being produced, per axis.
     pub world_extent: (f32, f32)
 }
 impl TileContext {
+    /// Constructs a `TileContext` for a `Global` node, which is evaluated once for the whole
+    /// terrain at its own `native_resolution` (see [`NodeLocality`]).
+    pub fn for_global(native_resolution: usize) -> TileContext {
+        let step = 1.0 / native_resolution as f32;
+        TileContext {
+            chunk: None,
+            world_origin: (-0.5, -0.5),
+            world_step: (step, step),
+            world_extent: (1.0, 1.0)
+        }
+    }
+
     /// World-space position of texel `(x, y)` of the tile being produced.
     pub fn world_pos(&self, x: usize, y: usize) -> (f32, f32) {
         (
@@ -33,14 +42,8 @@ impl TileContext {
         )
     }
 
-    /// Normalizes a world-space position into `[0, 1]` across the whole terrain's extent - handy
-    /// for a node (like a heightmap import) that maps a single image across the whole terrain.
+    /// Normalizes a world-space position into `[0, 1)` across this context's `world_extent`.
     pub fn normalize(&self, world: (f32, f32)) -> (f32, f32) {
-        (world.0 / self.world_extent.0, world.1 / self.world_extent.1)
-    }
-
-    /// Returns the world-space size of the whole terrain
-    pub fn world_size(&self) -> (f32, f32) {
-        self.world_extent
+        (world.0 / self.world_extent.0 + 0.5, world.1 / self.world_extent.1 + 0.5)
     }
 }

@@ -111,10 +111,8 @@ pub enum NodeLocality {
     /// Computed independently for each chunk, given just that chunk's (padded) tile and a
     /// world-space coordinate frame to sample consistently across chunk borders.
     Local,
-    /// Needs to see the whole terrain at once and can't be split into independent chunks (e.g. a
-    /// mountain range spanning many chunks). Evaluated exactly once, at its own working
-    /// resolution `native_resolution` - independent of the chunk grid. Downstream `Local` nodes
-    /// that consume its output get a cropped, resampled region of it per chunk.
+    /// Needs to see the whole terrain at once and can't be split into independent chunks.
+    /// Evaluated using the integration node, which thus converts it back to chunked terrain.
     Global { native_resolution: usize }
 }
 

@@ -7,6 +7,8 @@ use crate::{
     TerrainGraphHolder,
     core::{
         chunk_grid::{ChunkCoord, ChunkGrid},
+        graph::GraphNodeId,
+        node::NodeLocality,
         node_error::NodeError::InputNotConnected,
         tile_allocator::crop_center
     },
@@ -87,15 +89,53 @@ pub(crate) fn update_terrain_preview(
         Some(node_id) => node_id,
         None => return // No node selected
     };
+    let locality = match terrain_graph.read().graph().node(selected_node) {
+        Ok(node) => node.locality(),
+        Err(_) => return // Selected node no longer exists (e.g. it was just removed)
+    };
 
-    let chunk_grid = *terrain_graph.read().graph().chunk_grid();
-    let tile_size = chunk_grid.tile_size();
     let force = terrain_graph.write().note_selection(selected_node);
 
     let material_handle = match &terrain_preview.material_handle {
         Some(handle) => handle.clone(),
         None => return // Material not created yet
     };
+
+    match locality {
+        NodeLocality::Global { native_resolution } => update_global_preview(
+            &mut meshes,
+            &mut terrain_preview,
+            &mut terrain_preview_meshes,
+            &terrain_graph,
+            material_handle,
+            selected_node,
+            native_resolution,
+            force
+        ),
+        NodeLocality::Local => update_local_preview(
+            &mut meshes,
+            &mut terrain_preview,
+            &mut terrain_preview_meshes,
+            &terrain_graph,
+            material_handle,
+            selected_node,
+            force
+        )
+    }
+}
+
+/// Renders `selected_node`'s output tiled across every chunk of the terrain's [`ChunkGrid`].
+fn update_local_preview(
+    meshes: &mut Assets<Mesh>,
+    terrain_preview: &mut TerrainPreview,
+    terrain_preview_meshes: &mut TerrainPreviewMeshes,
+    terrain_graph: &TerrainGraphHolder,
+    material_handle: Handle<PbrMaterial>,
+    selected_node: GraphNodeId,
+    force: bool
+) {
+    let chunk_grid = *terrain_graph.read().graph().chunk_grid();
+    let tile_size = chunk_grid.tile_size();
 
     // Pass 1
     let mut live_chunks = HashSet::new();
@@ -108,7 +148,7 @@ pub(crate) fn update_terrain_preview(
                 let Some(heightmap) = tiles.first() else { continue };
                 let internal_size = heightmap.size();
                 let data = crop_center(heightmap, internal_size, tile_size);
-                set_chunk_data(&mut terrain_preview, chunk, data, false);
+                set_chunk_data(terrain_preview, chunk, data, false);
                 changed_chunks.insert(chunk);
             }
             Ok(None) => {} // No new output tiles for this chunk
@@ -128,7 +168,7 @@ pub(crate) fn update_terrain_preview(
                 // whatever was last rendered on screen.
                 let already_flat = terrain_preview.chunks.get(&chunk).is_some_and(|c| c.is_flat);
                 if !already_flat {
-                    set_chunk_data(&mut terrain_preview, chunk, vec![0.0; tile_size * tile_size], true);
+                    set_chunk_data(terrain_preview, chunk, vec![0.0; tile_size * tile_size], true);
                     changed_chunks.insert(chunk);
                 }
             }
@@ -140,13 +180,80 @@ pub(crate) fn update_terrain_preview(
         let padded = padded_heightmap(*chunk, tile_size, &terrain_preview.chunks);
         let world_offset = chunk_origin(*chunk, &chunk_grid);
         let mesh = heightmap_to_mesh(&format!("terrain-preview-{}-{}", chunk.0, chunk.1), &padded, tile_size, world_offset);
-        upsert_chunk_mesh(&mut meshes, &mut terrain_preview, *chunk, mesh);
+        upsert_chunk_mesh(meshes, terrain_preview, *chunk, mesh);
     }
 
     // Drop any chunks that are no longer in the grid
     terrain_preview.chunks.retain(|chunk, _| live_chunks.contains(chunk));
 
-    // Publish this frame's chunk meshes to our terrain-preview render subpass.
+    publish_preview_meshes(terrain_preview, terrain_preview_meshes, material_handle);
+}
+
+/// Renders `selected_node`'s own bare, self-centered result (see `TileContext::for_global`) as one
+/// single mesh sized to `native_resolution`, centered at the world origin.
+#[allow(clippy::too_many_arguments)]
+fn update_global_preview(
+    meshes: &mut Assets<Mesh>,
+    terrain_preview: &mut TerrainPreview,
+    terrain_preview_meshes: &mut TerrainPreviewMeshes,
+    terrain_graph: &TerrainGraphHolder,
+    material_handle: Handle<PbrMaterial>,
+    selected_node: GraphNodeId,
+    native_resolution: usize,
+    force: bool
+) {
+    let chunk = ChunkCoord(0, 0);
+
+    // Drop every other per-chunk entry *before* touching the padding/stitching machinery below
+    terrain_preview.chunks.retain(|c, _| *c == chunk);
+
+    let mut changed = false;
+
+    match terrain_graph.write().process_chunk(selected_node, chunk, force) {
+        Ok(Some((_, tiles))) => {
+            if let Some(heightmap) = tiles.first() {
+                let internal_size = heightmap.size();
+                let data = crop_center(heightmap, internal_size, native_resolution);
+                set_chunk_data(terrain_preview, chunk, data, false);
+                changed = true;
+            }
+        }
+        Ok(None) => {} // No new output tiles
+        Err(e) => {
+            match e {
+                InputNotConnected { node, socket, .. } => {
+                    trace!(
+                        "Cannot generate global preview: Input not connected for node '{}' at socket {}",
+                        node, socket
+                    );
+                }
+                _ => error!("Error while processing terrain graph for the global preview: {:?}", e)
+            }
+            let already_flat = terrain_preview.chunks.get(&chunk).is_some_and(|c| c.is_flat);
+            if !already_flat {
+                set_chunk_data(terrain_preview, chunk, vec![0.0; native_resolution * native_resolution], true);
+                changed = true;
+            }
+        }
+    }
+
+    if changed {
+        let padded = padded_heightmap(chunk, native_resolution, &terrain_preview.chunks);
+        let extent = native_resolution as f32 * CELL_SIZE;
+        let world_offset = Vec3::new(-extent * 0.5, 0.0, -extent * 0.5);
+        let mesh = heightmap_to_mesh("terrain-preview-global", &padded, native_resolution, world_offset);
+        upsert_chunk_mesh(meshes, terrain_preview, chunk, mesh);
+    }
+
+    publish_preview_meshes(terrain_preview, terrain_preview_meshes, material_handle);
+}
+
+/// Publishes every mesh currently held in `terrain_preview` to the terrain-preview render subpass.
+fn publish_preview_meshes(
+    terrain_preview: &TerrainPreview,
+    terrain_preview_meshes: &mut TerrainPreviewMeshes,
+    material_handle: Handle<PbrMaterial>
+) {
     terrain_preview_meshes.meshes = terrain_preview
         .chunks
         .values()
