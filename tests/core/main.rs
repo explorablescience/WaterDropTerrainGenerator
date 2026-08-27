@@ -10,3 +10,4 @@ mod node_registry;
 mod project;
 mod terrain_export;
 mod tile_allocator;
+mod tile_context;

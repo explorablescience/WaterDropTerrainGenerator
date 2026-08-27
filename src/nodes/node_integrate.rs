@@ -106,22 +106,17 @@ impl Node for NodeIntegrate {
         let input = &inputs[0];
         let input_size = input.size();
         // The physical footprint is `scale` alone - not `input_size` (native_resolution), which
-        // only picks how many texels sample that same footprint, not how large it is.
-        let world_footprint = self.scale;
+        // only picks how many texels sample that same footprint, not how large it is. `input`'s
+        // own coordinate frame is the same fixed one every `Global` node computes in.
+        let input_ctx = TileContext::for_global(input_size);
 
         let mut output = pool.allocate();
         let s = output.size();
         for y in 0..s {
             for x in 0..s {
                 let world = ctx.world_pos(x, y);
-                // World position -> the input's own local `[-0.5, 0.5)` domain, via this node's
-                // scale/position -> the input tile's own texel coordinates.
-                let local = (
-                    (world.0 - self.position.0) / world_footprint,
-                    (world.1 - self.position.1) / world_footprint
-                );
-                let sx = (local.0 + 0.5) * input_size as f32;
-                let sy = (local.1 + 0.5) * input_size as f32;
+                let local = TileContext::to_local(world, self.position, self.scale);
+                let (sx, sy) = input_ctx.to_texel(local);
                 output[y * s + x] = bilinear_sample(input, input_size, sx, sy);
             }
         }

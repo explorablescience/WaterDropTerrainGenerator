@@ -42,8 +42,36 @@ impl TileContext {
         )
     }
 
+    /// Alias of [`Self::world_pos`] for use inside a `Global` node's own `process()`: there, this
+    /// context's frame *is* the node's bare local space (see [`Self::for_global`]), so a call site
+    /// reads truer to what it actually means as `local_pos` than as `world_pos`.
+    pub fn local_pos(&self, x: usize, y: usize) -> (f32, f32) {
+        self.world_pos(x, y)
+    }
+
+    /// A position already expressed in this context's own frame -> fractional texel indices into
+    /// the tile it describes. The inverse of [`Self::world_pos`]/[`Self::local_pos`] - e.g. an
+    /// integration node uses this to turn a `Global` input's own local position (from
+    /// [`Self::to_local`]) into texel coordinates it can bilinearly sample that input at.
+    pub fn to_texel(&self, pos: (f32, f32)) -> (f32, f32) {
+        (
+            (pos.0 - self.world_origin.0) / self.world_step.0,
+            (pos.1 - self.world_origin.1) / self.world_step.1
+        )
+    }
+
     /// Normalizes a world-space position into `[0, 1)` across this context's `world_extent`.
     pub fn normalize(&self, world: (f32, f32)) -> (f32, f32) {
         (world.0 / self.world_extent.0 + 0.5, world.1 / self.world_extent.1 + 0.5)
+    }
+
+    /// Maps a world-space position into an arbitrarily placed frame's own local space, given that
+    /// frame's `position` (world-space location of its local origin) and `scale` (world units its
+    /// local unit spans). This is what an integration node applies to go from the terrain's world
+    /// position to wherever its `Global` input's own bare, self-centered result (see
+    /// [`Self::for_global`]) should be read from - the counterpart to [`Self::to_texel`], which
+    /// then turns that local position into actual texel coordinates.
+    pub fn to_local(world: (f32, f32), position: (f32, f32), scale: f32) -> (f32, f32) {
+        ((world.0 - position.0) / scale, (world.1 - position.1) / scale)
     }
 }

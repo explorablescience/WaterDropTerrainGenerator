@@ -120,7 +120,7 @@ impl Node for NodeMountain {
         let s = output.size();
         for y in 0..s {
             for x in 0..s {
-                let local = ctx.world_pos(x, y);
+                let local = ctx.local_pos(x, y);
                 output[y * s + x] = self.dome(local, (0.0, 0.0));
             }
         }
