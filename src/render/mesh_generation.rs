@@ -1,10 +1,18 @@
 use bevy::prelude::*;
 use wde::prelude::*;
 
-use crate::render::{CELL_SIZE, HEIGHT_SCALE};
+use crate::render::HEIGHT_SCALE;
 
-/// Builds a grid [`Mesh`] of `size x size` quads - `(size + 1) x (size + 1)` vertices
-pub fn heightmap_to_mesh(label: &str, heightmap: &[f32], size: usize, world_offset: Vec3) -> Mesh {
+/// Builds a grid [`Mesh`] of `size x size` quads - `(size + 1) x (size + 1)` vertices, spaced
+/// `cell_size` world units apart so a tile's world-space footprint is `size * cell_size`
+/// regardless of how many texels (`size`) it's subdivided into.
+pub fn heightmap_to_mesh(
+    label: &str,
+    heightmap: &[f32],
+    size: usize,
+    cell_size: f32,
+    world_offset: Vec3
+) -> Mesh {
     let padded = size + 3;
     let sample = |x: isize, z: isize| -> f32 {
         let x = (x + 1).clamp(0, padded as isize - 1) as usize;
@@ -20,14 +28,14 @@ pub fn heightmap_to_mesh(label: &str, heightmap: &[f32], size: usize, world_offs
         for x in 0..verts {
             let height = sample(x as isize, z as isize) * HEIGHT_SCALE;
             let position =
-                world_offset + Vec3::new(x as f32 * CELL_SIZE, height, z as f32 * CELL_SIZE);
+                world_offset + Vec3::new(x as f32 * cell_size, height, z as f32 * cell_size);
 
             // Central-difference slope estimate, used as a smooth per-vertex normal.
             let dx = (sample(x as isize + 1, z as isize) - sample(x as isize - 1, z as isize))
                 * HEIGHT_SCALE;
             let dz = (sample(x as isize, z as isize + 1) - sample(x as isize, z as isize - 1))
                 * HEIGHT_SCALE;
-            let normal = Vec3::new(-dx, 2.0 * CELL_SIZE, -dz).normalize();
+            let normal = Vec3::new(-dx, 2.0 * cell_size, -dz).normalize();
 
             min = min.min(position);
             max = max.max(position);

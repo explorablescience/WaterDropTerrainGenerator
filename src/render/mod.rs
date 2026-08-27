@@ -22,8 +22,8 @@ mod mesh_generation;
 mod terrain_preview_pipeline;
 mod terrain_preview_subpass;
 
-/// World-space distance between adjacent heightmap samples.
-const CELL_SIZE: f32 = 0.1;
+/// World-space distance between adjacent heightmap samples
+const GLOBAL_CELL_SIZE: f32 = 0.1;
 /// World-space height gained per unit of heightmap value.
 const HEIGHT_SCALE: f32 = 1.0;
 
@@ -229,6 +229,7 @@ fn update_local_preview(
             &format!("terrain-preview-{}-{}", chunk.0, chunk.1),
             &padded,
             tile_size,
+            chunk_grid.world_scale(),
             world_offset
         );
         upsert_chunk_mesh(meshes, terrain_preview, *chunk, mesh);
@@ -306,12 +307,13 @@ fn update_global_preview(
 
     if changed {
         let padded = padded_heightmap(chunk, native_resolution, &terrain_preview.chunks);
-        let extent = native_resolution as f32 * CELL_SIZE;
+        let extent = native_resolution as f32 * GLOBAL_CELL_SIZE;
         let world_offset = Vec3::new(-extent * 0.5, 0.0, -extent * 0.5);
         let mesh = heightmap_to_mesh(
             "terrain-preview-global",
             &padded,
             native_resolution,
+            GLOBAL_CELL_SIZE,
             world_offset
         );
         upsert_chunk_mesh(meshes, terrain_preview, chunk, mesh);
@@ -360,7 +362,7 @@ fn set_chunk_data(
 
 /// World-space position of `chunk`'s local `(0, 0)` texel
 fn chunk_origin(chunk: ChunkCoord, grid: &ChunkGrid) -> Vec3 {
-    let step = grid.tile_size() as f32 * CELL_SIZE;
+    let step = grid.tile_size() as f32 * grid.world_scale();
     let extent_x = grid.chunks_x() as f32 * step;
     let extent_y = grid.chunks_y() as f32 * step;
     Vec3::new(

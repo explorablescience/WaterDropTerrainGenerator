@@ -13,12 +13,18 @@ use crate::{
     ui::{theme, widgets}
 };
 
+/// Engine tile resolution is picked from this fixed set of power-of-two texel sizes (up to the engine's 4096 cap) rather than typed freely.
+const TILE_RESOLUTIONS: &[usize] = &[64, 128, 256, 512, 1024, 2048, 4096];
+
+/// The "World Scale" slider shows a small, easy-to-drag conversion factor.
+const WORLD_SCALE_DISPLAY_TO_INTERNAL: f32 = 5.0;
+
 /// Values are (re)synced from the graph's actual chunk grid each time the window transitions from closed to open, so editing here doesn't fight with e.g. a project load changing the grid while it's sitting open.
 pub(super) struct TerrainSettingsState {
     was_open: bool,
     chunks_x: f32,
     chunks_y: f32,
-    tile_size: f32,
+    tile_size: String,
     world_scale: f32,
     export_path: String
 }
@@ -26,10 +32,10 @@ impl Default for TerrainSettingsState {
     fn default() -> Self {
         Self {
             was_open: false,
-            chunks_x: 5.0,
-            chunks_y: 5.0,
-            tile_size: 128.0,
-            world_scale: 1.0 / 128.0 * 2.0 * 5.0,
+            chunks_x: 1.0,
+            chunks_y: 1.0,
+            tile_size: 128.to_string(),
+            world_scale: 1.0,
             export_path: String::new()
         }
     }
@@ -44,6 +50,10 @@ fn int_field(key: &'static str, label: &'static str, min: i32, max: i32) -> NPar
         default: NParamValue::Int(min),
         constraints: Some(NParamConstraints::IntRange { min, max })
     }
+}
+
+fn tile_resolution_options() -> Vec<String> {
+    TILE_RESOLUTIONS.iter().map(usize::to_string).collect()
 }
 
 pub fn draw_terrain_settings(
@@ -61,8 +71,8 @@ pub fn draw_terrain_settings(
         let grid = *terrain_graph.read().graph().chunk_grid();
         state.chunks_x = grid.chunks_x() as f32;
         state.chunks_y = grid.chunks_y() as f32;
-        state.tile_size = grid.tile_size() as f32;
-        state.world_scale = grid.world_scale();
+        state.tile_size = grid.tile_size().to_string();
+        state.world_scale = grid.world_scale() / WORLD_SCALE_DISPLAY_TO_INTERNAL;
         state.was_open = true;
     }
 
@@ -85,12 +95,33 @@ pub fn draw_terrain_settings(
                 theme::palette::ACCENT,
                 &mut state.chunks_y
             );
-            widgets::slider(
-                ui,
-                &int_field("tile_size", "Tile Size (texels)", 4, 1024),
-                theme::palette::ACCENT,
-                &mut state.tile_size
-            );
+            // Re-picking the texel resolution changes how many texels make up a tile, but not the
+            // tile's physical world-space footprint - so world_scale (world units per texel) is
+            // rescaled inversely to keep `tile_size * world_scale` constant.
+            let prev_tile_size = state.tile_size.parse::<usize>().unwrap_or(TILE_RESOLUTIONS[0]);
+            let tile_size_changed = egui::Grid::new("terrain-settings-tile-size")
+                .num_columns(2)
+                .spacing([10.0, 8.0])
+                .striped(false)
+                .show(ui, |ui| {
+                    let response = widgets::enum_selector(
+                        ui,
+                        "tile_size",
+                        "Tile Size (texels)",
+                        theme::palette::ACCENT,
+                        &tile_resolution_options(),
+                        &mut state.tile_size
+                    );
+                    ui.end_row();
+                    response.changed()
+                })
+                .inner;
+            if tile_size_changed
+                && let Ok(new_tile_size) = state.tile_size.parse::<usize>()
+                && new_tile_size > 0
+            {
+                state.world_scale *= prev_tile_size as f32 / new_tile_size as f32;
+            }
             widgets::slider(
                 ui,
                 &NParamDesc {
@@ -99,8 +130,8 @@ pub fn draw_terrain_settings(
                     category: "Chunk Grid",
                     default: NParamValue::Float(state.world_scale),
                     constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.001,
-                        max: 100.0
+                        min: 0.00001,
+                        max: 1.0
                     })
                 },
                 theme::palette::ACCENT,
@@ -111,14 +142,14 @@ pub fn draw_terrain_settings(
             let (chunks_x, chunks_y, tile_size, world_scale) = (
                 state.chunks_x,
                 state.chunks_y,
-                state.tile_size,
-                state.world_scale
+                state.tile_size.parse::<usize>().unwrap_or(TILE_RESOLUTIONS[0]),
+                state.world_scale * WORLD_SCALE_DISPLAY_TO_INTERNAL
             );
             widgets::button(ui, "Apply", theme::palette::ACCENT, || {
                 let grid = ChunkGrid::new(
                     chunks_x.round() as u32,
                     chunks_y.round() as u32,
-                    tile_size.round() as usize,
+                    tile_size,
                     world_scale
                 );
                 terrain_graph.write().graph_mut().set_chunk_grid(grid);
