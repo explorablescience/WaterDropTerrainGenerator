@@ -1,12 +1,16 @@
 //! Assembles a chunked graph's per-chunk output into one full-terrain buffer - the stitching step behind whole-terrain export.
 
+use bevy::tasks::ComputeTaskPool;
+
 use crate::core::{
     graph::{GraphNodeId, NodeGraph, NodeGraphProcessResult},
     node::NodeError,
-    tiling::crop_center
+    tiling::{ChunkCoord, crop_center}
 };
 
-/// Blits each chunk's cropped core region into one full-terrain buffer, in row-major order. Returns the data plus its width/height in texels (`chunks_x * tile_size` by `chunks_y * tile_size`).
+/// Blits each chunk's cropped core region into one full-terrain buffer, in row-major order.
+/// Returns the data plus its width/height in texels (`chunks_x * tile_size` by
+/// `chunks_y * tile_size`). Chunks are evaluated concurrently on the compute task pool.
 pub fn assemble_terrain(
     graph: &mut NodeGraph,
     node_id: GraphNodeId
@@ -17,21 +21,33 @@ pub fn assemble_terrain(
     let height = chunk_grid.chunks_y() as usize * tile_size;
     let mut assembled = vec![0.0f32; width * height];
 
-    for chunk in chunk_grid.coords() {
-        let tiles = match graph.process_chunk(node_id, chunk)? {
-            NodeGraphProcessResult::Processed(_, tiles) => tiles,
-            // Evaluation is synchronous and always resolves within one call; `Processing` here means the graph was left mid-cycle, an internal bug.
-            NodeGraphProcessResult::Processing => return Err(NodeError::NodeNotEvaluated(node_id))
-        };
-        let Some(heightmap) = tiles.first() else {
-            return Err(NodeError::OutputNotAvailable {
-                node: graph.node(node_id)?.label().to_string()
-            });
-        };
+    graph.prepare_for_parallel_eval(node_id)?;
+    let label = graph.node(node_id)?.label().to_string();
+    let graph: &NodeGraph = graph; // shared reborrow: chunk tasks below only need `&self`
 
-        let internal_size = heightmap.size();
-        let cropped = crop_center(heightmap, internal_size, tile_size);
+    let results: Vec<Result<(ChunkCoord, Vec<f32>), NodeError>> =
+        ComputeTaskPool::get().scope(|scope| {
+            for chunk in chunk_grid.coords() {
+                let label = label.clone();
+                scope.spawn(async move {
+                    let tiles = match graph.process_chunk_shared(node_id, chunk)? {
+                        NodeGraphProcessResult::Processed(_, tiles) => tiles,
+                        NodeGraphProcessResult::Processing => {
+                            return Err(NodeError::NodeNotEvaluated(node_id));
+                        }
+                    };
+                    let Some(heightmap) = tiles.first() else {
+                        return Err(NodeError::OutputNotAvailable { node: label });
+                    };
 
+                    let internal_size = heightmap.size();
+                    Ok((chunk, crop_center(heightmap, internal_size, tile_size)))
+                });
+            }
+        });
+
+    for result in results {
+        let (chunk, cropped) = result?;
         let origin_x = chunk.0 as usize * tile_size;
         let origin_y = chunk.1 as usize * tile_size;
         for y in 0..tile_size {

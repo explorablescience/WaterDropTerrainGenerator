@@ -1,11 +1,15 @@
 //! The recursive scheduler behind [`NodeGraph::process`]/[`NodeGraph::process_chunk`]: walks a
 //! node's inputs depth-first, evaluating and caching each one per [`EvalScope`], and evicts
 //! chunk-scoped inputs once their last consumer has read them.
+//!
+//! `process_scoped` takes `&self` so different chunks can be evaluated concurrently from
+//! background tasks (see [`NodeGraph::process_chunk_shared`]); [`NodeGraph::prepare_for_parallel_eval`]
+//! handles the two things that wouldn't be safe left to those concurrent callers (pool resize,
+//! `Global`-node warming).
 
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use std::time::Instant;
 
 use crate::core::graph::state::{CacheKey, EvalScope, NodeState, cache_key_of};
 use crate::core::graph::topology::GraphNodeId;
@@ -30,7 +34,7 @@ impl NodeGraph {
     }
 
     /// No-op for `Global` scope: its result is reused across every chunk, so it stays cached until explicitly invalidated rather than evicted per-consumer.
-    fn try_evict(&mut self, id: GraphNodeId, scope: EvalScope) {
+    fn try_evict(&self, id: GraphNodeId, scope: EvalScope) {
         if matches!(scope, EvalScope::Global) || self.refcount(id, scope) > 0 {
             return;
         }
@@ -79,8 +83,72 @@ impl NodeGraph {
         Ok(self.chunk_grid.tile_size() + 2 * padding)
     }
 
+    /// Must complete (under the session's write lock) before any parallel chunk task for
+    /// `node_id` is spawned via [`Self::process_chunk_shared`]: resizes the shared pool if
+    /// `node_id`'s padding requirement changed, and warms every `Global` ancestor to `Cached` so
+    /// concurrent chunk tasks never race to resize the pool or recompute a shared `Global` entry.
+    pub fn prepare_for_parallel_eval(&mut self, node_id: GraphNodeId) -> Result<(), NodeError> {
+        if let NodeLocality::Global { .. } = self.topology.node(node_id)?.locality() {
+            return Ok(()); // process_chunk_shared handles this directly, no fan-out involved
+        }
+
+        let internal_tile_size = self.required_internal_tile_size(node_id)?;
+        if internal_tile_size != self.pool.tile_length() {
+            // Cached tiles were allocated for the previous tile size; can't mix with the new pool.
+            self.pool = TilePool::new(internal_tile_size);
+            self.cache.clear_chunk_states();
+        }
+
+        for &ancestor in &self.collect_ancestors(node_id)? {
+            if let NodeLocality::Global { native_resolution } =
+                self.topology.node(ancestor)?.locality()
+            {
+                let global_pool = TilePool::new(native_resolution);
+                let global_ctx = TileContext::for_global(native_resolution);
+                self.process_scoped(ancestor, EvalScope::Global, &global_pool, &global_ctx)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Read-only check for whether [`Self::prepare_for_parallel_eval`] has anything to do. Lets a
+    /// caller avoid taking a write lock every frame (which would block on chunk tasks still in
+    /// flight from the previous frame) when nothing actually changed.
+    pub fn needs_parallel_prepare(&self, node_id: GraphNodeId) -> Result<bool, NodeError> {
+        if let NodeLocality::Global { .. } = self.topology.node(node_id)?.locality() {
+            return Ok(false); // handled directly by process_chunk_shared, no fan-out involved
+        }
+        if self.required_internal_tile_size(node_id)? != self.pool.tile_length() {
+            return Ok(true);
+        }
+        for &ancestor in &self.collect_ancestors(node_id)? {
+            if matches!(
+                self.topology.node(ancestor)?.locality(),
+                NodeLocality::Global { .. }
+            ) && !matches!(self.cache.state(ancestor, EvalScope::Global), NodeState::Cached(_))
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Convenience wrapper for synchronous, single-shot callers: prepares the graph then evaluates
+    /// `chunk` inline. Parallel callers should call [`Self::prepare_for_parallel_eval`] once, then
+    /// fan out to [`Self::process_chunk_shared`].
     pub fn process_chunk(
         &mut self,
+        node_id: GraphNodeId,
+        chunk: ChunkCoord
+    ) -> Result<NodeGraphProcessResult, NodeError> {
+        self.prepare_for_parallel_eval(node_id)?;
+        self.process_chunk_shared(node_id, chunk)
+    }
+
+    /// `&self` counterpart of [`Self::process_chunk`] for concurrent chunk tasks - requires
+    /// [`Self::prepare_for_parallel_eval`] to have already run for `node_id`.
+    pub fn process_chunk_shared(
+        &self,
         node_id: GraphNodeId,
         chunk: ChunkCoord
     ) -> Result<NodeGraphProcessResult, NodeError> {
@@ -92,11 +160,6 @@ impl NodeGraph {
         }
 
         let internal_tile_size = self.required_internal_tile_size(node_id)?;
-        if internal_tile_size != self.pool.tile_length() {
-            // Cached tiles were allocated for the previous tile size; can't mix with the new pool.
-            self.pool = TilePool::new(internal_tile_size);
-            self.cache.clear_chunk_states();
-        }
         let margin = (internal_tile_size - self.chunk_grid.tile_size()) / 2;
         let ctx = self.chunk_grid.chunk_context(chunk, margin);
         let pool = self.pool.clone();
@@ -109,7 +172,7 @@ impl NodeGraph {
     }
 
     fn process_scoped(
-        &mut self,
+        &self,
         node_id: GraphNodeId,
         scope: EvalScope,
         pool: &Arc<TilePool>,
@@ -117,13 +180,12 @@ impl NodeGraph {
     ) -> Result<NodeGraphProcessResult, NodeError> {
         match self.cache.state(node_id, scope) {
             NodeState::Cached((_, tiles)) => {
-                return Ok(NodeGraphProcessResult::Processed(
-                    self.generation,
-                    tiles.clone()
-                ));
+                return Ok(NodeGraphProcessResult::Processed(self.generation(), tiles));
             }
             NodeState::Baked(_) => todo!("load baked tiles from disk"),
-            // Re-entering a node still on the call stack means the dependency graph has a cycle.
+            // Re-entering a node still on the call stack means a cycle - concurrent chunk tasks
+            // never share a `(node, scope)` key, and `Global` ancestors are pre-warmed, so this
+            // can't be mistaken for cross-task contention.
             NodeState::Processing => return Err(NodeError::CyclicGraph),
             NodeState::Dirty => {}
         }
@@ -139,7 +201,7 @@ impl NodeGraph {
     }
 
     fn process_scoped_body(
-        &mut self,
+        &self,
         node_id: GraphNodeId,
         scope: EvalScope,
         pool: &Arc<TilePool>,
@@ -195,18 +257,18 @@ impl NodeGraph {
                     }
                 };
             input_tiles.push(tile);
-            input_keys.push(cache_key_of(self.cache.state(*from_node, child_scope)));
+            input_keys.push(cache_key_of(&self.cache.state(*from_node, child_scope)));
             consumed.push((*from_node, child_scope));
         }
 
         let node = self.topology.node(node_id)?;
         let key = compute_cache_key(node, node_id, &input_keys);
         let output = node.process(pool, &input_tiles, ctx)?;
-        self.last_activity = Some(Instant::now());
+        self.touch_activity();
 
         self.cache
             .set(node_id, scope, NodeState::Cached((key, output.clone())));
-        self.generation += 1;
+        let generation = self.bump_generation();
 
         for (from_node, from_scope) in consumed {
             if matches!(from_scope, EvalScope::Chunk(_)) {
@@ -214,7 +276,7 @@ impl NodeGraph {
             }
         }
 
-        Ok(NodeGraphProcessResult::Processed(self.generation, output))
+        Ok(NodeGraphProcessResult::Processed(generation, output))
     }
 }
 

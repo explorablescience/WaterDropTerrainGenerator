@@ -5,7 +5,8 @@
 
 use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::core::node::{Node, NodeError};
@@ -32,9 +33,8 @@ pub struct NodeGraph {
     chunk_grid: ChunkGrid,
     topology: Topology,
     cache: EvalCache,
-    generation: u32,
-    /// Last actual recompute (not cache hit); drives the UI's "Processing" indicator. `None` until first computation.
-    last_activity: Option<Instant>
+    generation: AtomicU32,
+    last_activity: Mutex<Option<Instant>>
 }
 
 impl NodeGraph {
@@ -47,8 +47,8 @@ impl NodeGraph {
             chunk_grid,
             topology: Topology::default(),
             cache: EvalCache::default(),
-            generation: 0,
-            last_activity: None
+            generation: AtomicU32::new(0),
+            last_activity: Mutex::new(None)
         }
     }
 
@@ -79,7 +79,24 @@ impl NodeGraph {
 
     pub fn is_processing(&self) -> bool {
         self.last_activity
+            .lock()
+            .unwrap()
             .is_some_and(|t| t.elapsed() < Self::PROCESSING_INDICATOR_HOLD)
+    }
+
+    /// Current generation counter, without bumping it - see [`Self::bump_generation`].
+    pub(super) fn generation(&self) -> u32 {
+        self.generation.load(Ordering::Relaxed)
+    }
+
+    /// Bumps and returns the new generation counter. Called once per actual node recompute.
+    pub(super) fn bump_generation(&self) -> u32 {
+        self.generation.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    /// Records that a node was just actually recomputed (as opposed to served from cache).
+    pub(super) fn touch_activity(&self) {
+        *self.last_activity.lock().unwrap() = Some(Instant::now());
     }
 
     pub fn add_node(&mut self, node: Box<dyn Node>) -> GraphNodeId {

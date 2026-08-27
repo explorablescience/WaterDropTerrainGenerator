@@ -14,9 +14,11 @@ use crate::core::{
 };
 
 mod export;
+mod jobs;
 mod project;
 
 pub use export::assemble_terrain;
+pub use jobs::ChunkJobs;
 pub use project::{BuiltGraph, load_project, save_project};
 
 #[derive(Resource, Default, Clone)]
@@ -45,7 +47,7 @@ pub struct TerrainSession {
 impl Default for TerrainSession {
     fn default() -> Self {
         Self {
-            graph: NodeGraph::new(ChunkGrid::new(4, 4, 128, 1.0 / 128.0)),
+            graph: NodeGraph::new(ChunkGrid::new(1, 1, 128, 1.0 / 128.0)),
             generations: HashMap::new(),
             chunk_generations: HashMap::new(),
             displayed_node: None,
@@ -86,8 +88,8 @@ impl TerrainSession {
         // Reselecting an already-cached, unchanged node must still redisplay it, or the previous selection's mesh would stay on screen.
         let just_selected = self.displayed_node != Some(node_id);
         let generation = self.generations.get(&node_id).copied().unwrap_or(0);
-        match self.graph.process(node_id) {
-            Ok(NodeGraphProcessResult::Processed(new_generation, output_tiles)) => {
+        match self.graph.process(node_id)? {
+            NodeGraphProcessResult::Processed(new_generation, output_tiles) => {
                 if !just_selected && new_generation <= generation {
                     return Ok(None);
                 }
@@ -96,8 +98,7 @@ impl TerrainSession {
                 self.displayed_node = Some(node_id);
                 Ok(Some((new_generation, output_tiles)))
             }
-            Ok(NodeGraphProcessResult::Processing) => Ok(None),
-            Err(e) => Err(e)
+            NodeGraphProcessResult::Processing => Ok(None)
         }
     }
 
@@ -115,10 +116,24 @@ impl TerrainSession {
         chunk: ChunkCoord,
         force: bool
     ) -> Result<Option<(u32, Vec<TileHandle>)>, NodeError> {
+        let result = self.graph.process_chunk(node_id, chunk);
+        self.apply_chunk_result(node_id, chunk, force, result)
+    }
+
+    /// Applies an already-computed chunk `result` to the "is this new" bookkeeping - the
+    /// counterpart of [`Self::process_chunk`] for callers that computed the result themselves
+    /// (e.g. [`ChunkJobs::poll_or_spawn`]).
+    pub fn apply_chunk_result(
+        &mut self,
+        node_id: GraphNodeId,
+        chunk: ChunkCoord,
+        force: bool,
+        result: Result<NodeGraphProcessResult, NodeError>
+    ) -> Result<Option<(u32, Vec<TileHandle>)>, NodeError> {
         let key = (node_id, chunk);
         let generation = self.chunk_generations.get(&key).copied().unwrap_or(0);
-        match self.graph.process_chunk(node_id, chunk) {
-            Ok(NodeGraphProcessResult::Processed(new_generation, output_tiles)) => {
+        match result? {
+            NodeGraphProcessResult::Processed(new_generation, output_tiles) => {
                 if !force && new_generation <= generation {
                     return Ok(None);
                 }
@@ -126,8 +141,7 @@ impl TerrainSession {
                 self.chunk_generations.insert(key, new_generation);
                 Ok(Some((new_generation, output_tiles)))
             }
-            Ok(NodeGraphProcessResult::Processing) => Ok(None),
-            Err(e) => Err(e)
+            NodeGraphProcessResult::Processing => Ok(None)
         }
     }
 

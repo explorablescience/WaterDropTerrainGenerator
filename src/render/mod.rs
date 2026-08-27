@@ -8,6 +8,7 @@ use crate::{
     core::{
         graph::GraphNodeId,
         node::{NodeError::InputNotConnected, NodeLocality},
+        session::ChunkJobs,
         tiling::{ChunkCoord, ChunkGrid, crop_center}
     },
     render::{
@@ -30,6 +31,7 @@ pub struct RenderPlugin;
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TerrainPreview>()
+            .init_resource::<ChunkJobs>()
             .add_systems(Startup, create_material)
             .add_systems(Update, update_terrain_preview);
 
@@ -79,6 +81,7 @@ pub(crate) fn update_terrain_preview(
     mut meshes: ResMut<Assets<Mesh>>,
     mut terrain_preview: ResMut<TerrainPreview>,
     mut terrain_preview_meshes: ResMut<TerrainPreviewMeshes>,
+    mut chunk_jobs: ResMut<ChunkJobs>,
     terrain_graph: Res<TerrainSessionHolder>
 ) {
     let selected_node = match terrain_graph.read().selected_node {
@@ -91,6 +94,12 @@ pub(crate) fn update_terrain_preview(
     };
 
     let force = terrain_graph.write().note_selection(selected_node);
+    if force {
+        // A previous selection's jobs are no longer relevant - drop them so a late result
+        // computed for that node is never mistaken for this one's (they'd collide on the same
+        // `ChunkCoord` keys).
+        chunk_jobs.clear();
+    }
 
     let material_handle = match &terrain_preview.material_handle {
         Some(handle) => handle.clone(),
@@ -112,6 +121,7 @@ pub(crate) fn update_terrain_preview(
             &mut meshes,
             &mut terrain_preview,
             &mut terrain_preview_meshes,
+            &mut chunk_jobs,
             &terrain_graph,
             material_handle,
             selected_node,
@@ -121,10 +131,14 @@ pub(crate) fn update_terrain_preview(
 }
 
 /// Renders `selected_node`'s output tiled across every chunk of the terrain's [`ChunkGrid`].
+/// Each chunk is evaluated on the compute task pool (see [`ChunkJobs`]) rather than inline, so a
+/// frame only picks up whichever chunks have finished since the last one.
+#[allow(clippy::too_many_arguments)]
 fn update_local_preview(
     meshes: &mut Assets<Mesh>,
     terrain_preview: &mut TerrainPreview,
     terrain_preview_meshes: &mut TerrainPreviewMeshes,
+    chunk_jobs: &mut ChunkJobs,
     terrain_graph: &TerrainSessionHolder,
     material_handle: Handle<PbrMaterial>,
     selected_node: GraphNodeId,
@@ -133,14 +147,37 @@ fn update_local_preview(
     let chunk_grid = *terrain_graph.read().graph().chunk_grid();
     let tile_size = chunk_grid.tile_size();
 
+    // Only take a write lock on the rare frame something actually needs preparing.
+    match terrain_graph.read().graph().needs_parallel_prepare(selected_node) {
+        Ok(true) => {
+            if let Err(e) = terrain_graph
+                .write()
+                .graph_mut()
+                .prepare_for_parallel_eval(selected_node)
+            {
+                error!("Failed to prepare terrain graph for evaluation: {:?}", e);
+                return;
+            }
+        }
+        Ok(false) => {}
+        Err(e) => {
+            error!("Failed to check terrain graph preparation: {:?}", e);
+            return;
+        }
+    }
+
     let mut live_chunks = HashSet::new();
     let mut changed_chunks = HashSet::new();
     for chunk in chunk_grid.coords() {
         live_chunks.insert(chunk);
 
+        let Some(result) = chunk_jobs.poll_or_spawn(terrain_graph, selected_node, chunk) else {
+            continue; // job still running, or was just spawned
+        };
+
         match terrain_graph
             .write()
-            .process_chunk(selected_node, chunk, force)
+            .apply_chunk_result(selected_node, chunk, force, result)
         {
             Ok(Some((_, tiles))) => {
                 let Some(heightmap) = tiles.first() else {
@@ -197,10 +234,11 @@ fn update_local_preview(
         upsert_chunk_mesh(meshes, terrain_preview, *chunk, mesh);
     }
 
-    // Drop any chunks that are no longer in the grid
+    // Drop any chunks (and their in-flight jobs) that are no longer in the grid
     terrain_preview
         .chunks
         .retain(|chunk, _| live_chunks.contains(chunk));
+    chunk_jobs.retain_live(&live_chunks);
 
     publish_preview_meshes(terrain_preview, terrain_preview_meshes, material_handle);
 }
