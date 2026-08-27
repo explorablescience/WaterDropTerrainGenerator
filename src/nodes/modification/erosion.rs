@@ -1,5 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
+use rayon::prelude::*;
+
 use crate::core::node::{
     NParamConstraints, NParamDesc, NParamValue, Node, NodeCategory, NodeDescriptor, NodeError,
     NodeIcon, NodePortType, NodeSocket
@@ -39,7 +41,7 @@ impl Erosion {
     fn process_tile(&self, pool: &Arc<TilePool>, input: &TileHandle) -> TileHandle {
         let mut output = pool.allocate();
         let s = output.size();
-        for y in 0..s {
+        output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
             for x in 0..s {
                 let mut sum = 0.0;
                 let mut count = 0;
@@ -53,9 +55,9 @@ impl Erosion {
                 }
                 let average = sum / count as f32;
                 let current = input[y * s + x];
-                output[y * s + x] = current + self.strength * (average - current);
+                row[x] = current + self.strength * (average - current);
             }
-        }
+        });
         Arc::new(output)
     }
 }

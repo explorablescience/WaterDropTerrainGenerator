@@ -33,6 +33,9 @@ impl TerrainSessionHolder {
     }
 }
 
+/// Engine tile resolution is picked from this fixed set of power-of-two texel sizes (up to the engine's 4096 cap) rather than typed freely.
+pub const TILE_RESOLUTIONS: &[usize] = &[64, 128, 256, 512, 1024, 2048, 4096];
+
 pub struct TerrainSession {
     graph: NodeGraph,
     generations: HashMap<GraphNodeId, u32>,
@@ -47,7 +50,7 @@ pub struct TerrainSession {
 impl Default for TerrainSession {
     fn default() -> Self {
         Self {
-            graph: NodeGraph::new(ChunkGrid::new(1, 1, 128, 1.0 / 128.0)),
+            graph: NodeGraph::new(ChunkGrid::new(2, 2, TILE_RESOLUTIONS[2], 0.1)),
             generations: HashMap::new(),
             chunk_generations: HashMap::new(),
             displayed_node: None,

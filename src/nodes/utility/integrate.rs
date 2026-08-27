@@ -1,5 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
+use rayon::prelude::*;
+
 use crate::core::node::{
     NParamConstraints, NParamDesc, NParamValue, Node, NodeCategory, NodeDescriptor, NodeError,
     NodeIcon, NodePortType, NodeSocket
@@ -115,14 +117,14 @@ impl Node for Integrate {
 
         let mut output = pool.allocate();
         let s = output.size();
-        for y in 0..s {
-            for x in 0..s {
+        output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
+            for (x, texel) in row.iter_mut().enumerate() {
                 let world = ctx.world_pos(x, y);
                 let local = TileContext::to_local(world, self.position, self.scale);
                 let (sx, sy) = input_ctx.to_texel(local);
-                output[y * s + x] = bilinear_sample(input, input_size, sx, sy);
+                *texel = bilinear_sample(input, input_size, sx, sy);
             }
-        }
+        });
         Ok(vec![Arc::new(output)])
     }
 }

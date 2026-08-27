@@ -1,5 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
+use rayon::prelude::*;
 use rfd::FileDialog;
 
 use crate::core::node::{
@@ -180,12 +181,12 @@ impl Node for LoadFile {
         // The loaded image covers the whole terrain, so each chunk samples its own footprint of it.
         let mut output = pool.allocate();
         let s = output.size();
-        for y in 0..s {
-            for x in 0..s {
+        output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
+            for (x, texel) in row.iter_mut().enumerate() {
                 let (u, v) = ctx.normalize(ctx.world_pos(x, y));
-                output[y * s + x] = Self::sample(image, u, v);
+                *texel = Self::sample(image, u, v);
             }
-        }
+        });
         Ok(vec![Arc::new(output)])
     }
 }

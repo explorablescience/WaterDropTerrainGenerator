@@ -45,6 +45,14 @@ impl Plugin for CustomWdePlugins {
 }
 
 fn main() {
+    // Bevy's `ComputeTaskPool` (see `CustomBevyPlugins`) already claims most cores for per-chunk
+    // parallelism; cap rayon's separate global pool (used for per-node texel-loop parallelism)
+    // so the two don't oversubscribe cores when both are active at once.
+    let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads((cores / 2).max(1))
+        .build_global();
+
     let mut app = App::new();
     app.add_plugins((CustomBevyPlugins, CustomWdePlugins));
     app.run();

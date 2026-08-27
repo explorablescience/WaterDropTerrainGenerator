@@ -5,21 +5,15 @@ use rfd::FileDialog;
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainSessionHolder,
-    core::{
-        node::{NParamConstraints, NParamDesc, NParamValue},
-        tiling::ChunkGrid
-    },
-    ui::{theme, widgets}
+    TerrainSessionHolder, core::{
+        node::{NParamConstraints, NParamDesc, NParamValue}, session::TILE_RESOLUTIONS, tiling::ChunkGrid
+    }, ui::{theme, widgets}
 };
 
-/// Engine tile resolution is picked from this fixed set of power-of-two texel sizes (up to the engine's 4096 cap) rather than typed freely.
-const TILE_RESOLUTIONS: &[usize] = &[64, 128, 256, 512, 1024, 2048, 4096];
-
-/// The "World Scale" slider shows a small, easy-to-drag conversion factor.
-const WORLD_SCALE_DISPLAY_TO_INTERNAL: f32 = 5.0;
 
 /// Values are (re)synced from the graph's actual chunk grid each time the window transitions from closed to open, so editing here doesn't fight with e.g. a project load changing the grid while it's sitting open.
+/// The default values are set by the `ChunkGrid` constructor.
+#[derive(Default)]
 pub(super) struct TerrainSettingsState {
     was_open: bool,
     chunks_x: f32,
@@ -27,18 +21,6 @@ pub(super) struct TerrainSettingsState {
     tile_size: String,
     world_scale: f32,
     export_path: String
-}
-impl Default for TerrainSettingsState {
-    fn default() -> Self {
-        Self {
-            was_open: false,
-            chunks_x: 1.0,
-            chunks_y: 1.0,
-            tile_size: 128.to_string(),
-            world_scale: 1.0,
-            export_path: String::new()
-        }
-    }
 }
 
 /// Built fresh each frame just to drive [`widgets::slider`]'s display - not a real node parameter.
@@ -72,7 +54,7 @@ pub fn draw_terrain_settings(
         state.chunks_x = grid.chunks_x() as f32;
         state.chunks_y = grid.chunks_y() as f32;
         state.tile_size = grid.tile_size().to_string();
-        state.world_scale = grid.world_scale() / WORLD_SCALE_DISPLAY_TO_INTERNAL;
+        state.world_scale = grid.world_scale();
         state.was_open = true;
     }
 
@@ -85,19 +67,16 @@ pub fn draw_terrain_settings(
 
             widgets::slider(
                 ui,
-                &int_field("chunks_x", "Chunks X", 1, 64),
+                &int_field("chunks_x", "Chunks X", 1, 12),
                 theme::palette::ACCENT,
                 &mut state.chunks_x
             );
             widgets::slider(
                 ui,
-                &int_field("chunks_y", "Chunks Y", 1, 64),
+                &int_field("chunks_y", "Chunks Y", 1, 12),
                 theme::palette::ACCENT,
                 &mut state.chunks_y
             );
-            // Re-picking the texel resolution changes how many texels make up a tile, but not the
-            // tile's physical world-space footprint - so world_scale (world units per texel) is
-            // rescaled inversely to keep `tile_size * world_scale` constant.
             let prev_tile_size = state.tile_size.parse::<usize>().unwrap_or(TILE_RESOLUTIONS[0]);
             let tile_size_changed = egui::Grid::new("terrain-settings-tile-size")
                 .num_columns(2)
@@ -130,7 +109,7 @@ pub fn draw_terrain_settings(
                     category: "Chunk Grid",
                     default: NParamValue::Float(state.world_scale),
                     constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.00001,
+                        min: 0.001,
                         max: 1.0
                     })
                 },
@@ -143,7 +122,7 @@ pub fn draw_terrain_settings(
                 state.chunks_x,
                 state.chunks_y,
                 state.tile_size.parse::<usize>().unwrap_or(TILE_RESOLUTIONS[0]),
-                state.world_scale * WORLD_SCALE_DISPLAY_TO_INTERNAL
+                state.world_scale
             );
             widgets::button(ui, "Apply", theme::palette::ACCENT, || {
                 let grid = ChunkGrid::new(

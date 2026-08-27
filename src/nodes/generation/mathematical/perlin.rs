@@ -1,5 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
+use rayon::prelude::*;
+
 use crate::core::node::{
     NParamConstraints, NParamDesc, NParamValue, Node, NodeCategory, NodeDescriptor, NodeError,
     NodeIcon, NodePortType, NodeSocket
@@ -97,8 +99,8 @@ impl Perlin {
     fn process_tile(&self, pool: &Arc<TilePool>, ctx: &TileContext) -> TileHandle {
         let mut output = pool.allocate();
         let s = output.size();
-        for y in 0..s {
-            for x in 0..s {
+        output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
+            for (x, texel) in row.iter_mut().enumerate() {
                 let (nx, ny) = ctx.world_pos(x, y);
                 let mut noise_value = 0.0;
                 let mut frequency = self.frequency;
@@ -108,9 +110,9 @@ impl Perlin {
                     frequency *= 2.0;
                     amplitude *= 0.5;
                 }
-                output[y * s + x] = noise_value;
+                *texel = noise_value;
             }
-        }
+        });
         Arc::new(output)
     }
 }

@@ -1,5 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
+use rayon::prelude::*;
+
 use crate::core::node::{
     NParamConstraints, NParamDesc, NParamValue, Node, NodeCategory, NodeDescriptor, NodeError,
     NodeIcon, NodeLocality, NodePortType, NodeSocket
@@ -128,12 +130,12 @@ impl Node for Mountain {
     ) -> Result<Vec<TileHandle>, NodeError> {
         let mut output = pool.allocate();
         let s = output.size();
-        for y in 0..s {
-            for x in 0..s {
+        output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
+            for (x, texel) in row.iter_mut().enumerate() {
                 let local = ctx.local_pos(x, y);
-                output[y * s + x] = self.dome(local, (0.0, 0.0));
+                *texel = self.dome(local, (0.0, 0.0));
             }
-        }
+        });
         Ok(vec![Arc::new(output)])
     }
 }
