@@ -95,17 +95,12 @@ fn distribution_ggx(n: vec3<f32>, h: vec3<f32>, roughness: f32) -> f32 {
     return a2 / denom;
 }
 
-/// Schlick-GGX geometry sub-term.
-fn geometry_schlick_ggx(n_dot_v: f32, roughness: f32) -> f32 {
-    let r = roughness + 1.0;
-    let k = (r * r) / 8.0;
-    return n_dot_v / (n_dot_v * (1.0 - k) + k);
-}
-
-/// Smith's geometry term combining obstruction and shadowing (G term).
-fn geometry_smith(n_dot_v: f32, n_dot_l: f32, roughness: f32) -> f32 {
-    return geometry_schlick_ggx(n_dot_l, roughness)
-         * geometry_schlick_ggx(n_dot_v, roughness);
+/// Smith's method for correlated visibility (G term).
+fn visibility_smith_ggx_correlated(n_dot_v: f32, n_dot_l: f32, roughness: f32) -> f32 {
+    let a2 = roughness * roughness * roughness * roughness;
+    let lambda_v = n_dot_l * sqrt(n_dot_v * n_dot_v * (1.0 - a2) + a2);
+    let lambda_l = n_dot_v * sqrt(n_dot_l * n_dot_l * (1.0 - a2) + a2);
+    return 0.5 / max(lambda_v + lambda_l, 0.0001);
 }
 
 /// Fresnel-Schlick approximation (F term).
@@ -129,8 +124,8 @@ fn specular_cook_torrance(
     let h_dot_v = max(dot(h, v), 0.0);
     let d = distribution_ggx(n, h, roughness);
     let f = fresnel_schlick(h_dot_v, f0);
-    let g = geometry_smith(n_dot_v, n_dot_l, roughness);
-    let specular = (d * f * g) / (4.0 * n_dot_v * n_dot_l + 0.0001);
+    let vis = visibility_smith_ggx_correlated(n_dot_v, n_dot_l, roughness);
+    let specular = d * f * vis;
     return SpecularFresnel(specular, f);
 }
 
