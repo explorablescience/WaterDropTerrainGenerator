@@ -1,7 +1,7 @@
 //! Spatial context handed to a node's `process` call, letting it sample a coordinate frame that's
-//! consistent across chunk boundaries (see [`crate::core::chunk_grid::ChunkGrid`]).
+//! consistent across chunk boundaries (see [`crate::core::tiling::ChunkGrid`]).
 
-use crate::core::chunk_grid::ChunkCoord;
+use crate::core::tiling::grid::ChunkCoord;
 
 /// Position-aware nodes (noise generators, world-space masks) use this to sample consistently across chunk borders; kernel-only nodes can ignore it entirely.
 #[derive(Debug, Clone, Copy)]

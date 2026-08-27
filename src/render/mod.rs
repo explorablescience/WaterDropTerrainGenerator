@@ -4,13 +4,11 @@ use bevy::prelude::*;
 use wde::prelude::*;
 
 use crate::{
-    TerrainGraphHolder,
+    TerrainSessionHolder,
     core::{
-        chunk_grid::{ChunkCoord, ChunkGrid},
         graph::GraphNodeId,
-        node::NodeLocality,
-        node_error::NodeError::InputNotConnected,
-        tile_allocator::crop_center
+        node::{NodeError::InputNotConnected, NodeLocality},
+        tiling::{ChunkCoord, ChunkGrid, crop_center}
     },
     render::{
         mesh_generation::heightmap_to_mesh,
@@ -81,7 +79,7 @@ pub(crate) fn update_terrain_preview(
     mut meshes: ResMut<Assets<Mesh>>,
     mut terrain_preview: ResMut<TerrainPreview>,
     mut terrain_preview_meshes: ResMut<TerrainPreviewMeshes>,
-    terrain_graph: Res<TerrainGraphHolder>
+    terrain_graph: Res<TerrainSessionHolder>
 ) {
     let selected_node = match terrain_graph.read().selected_node {
         Some(node_id) => node_id,
@@ -127,7 +125,7 @@ fn update_local_preview(
     meshes: &mut Assets<Mesh>,
     terrain_preview: &mut TerrainPreview,
     terrain_preview_meshes: &mut TerrainPreviewMeshes,
-    terrain_graph: &TerrainGraphHolder,
+    terrain_graph: &TerrainSessionHolder,
     material_handle: Handle<PbrMaterial>,
     selected_node: GraphNodeId,
     force: bool
@@ -213,7 +211,7 @@ fn update_global_preview(
     meshes: &mut Assets<Mesh>,
     terrain_preview: &mut TerrainPreview,
     terrain_preview_meshes: &mut TerrainPreviewMeshes,
-    terrain_graph: &TerrainGraphHolder,
+    terrain_graph: &TerrainSessionHolder,
     material_handle: Handle<PbrMaterial>,
     selected_node: GraphNodeId,
     native_resolution: usize,

@@ -3,12 +3,11 @@ use std::sync::OnceLock;
 
 use rfd::FileDialog;
 
-use crate::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
-use crate::core::node_error::NodeError;
-use crate::core::node_parameters::{NParamDesc, NParamValue};
-use crate::core::node_registry::NodeDescriptor;
-use crate::core::tile_allocator::{TileHandle, TilePool, crop_center};
-use crate::core::tile_context::TileContext;
+use crate::core::node::{
+    NParamDesc, NParamValue, Node, NodeCategory, NodeDescriptor, NodeError, NodeIcon, NodePortType,
+    NodeSocket
+};
+use crate::core::tiling::{TileContext, TileHandle, TilePool, crop_center, save_heightmap_png};
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-save",
@@ -67,17 +66,8 @@ impl NodeSaveHeightmap {
 
         let mut path = PathBuf::from(&self.file_path);
         path.set_extension("png");
-        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
-            std::fs::create_dir_all(dir)
-                .map_err(|e| format!("Failed to create directory '{}': {}", dir.display(), e))?;
-        }
 
-        let mut img = image::GrayImage::new(output_size as u32, output_size as u32);
-        for (pixel, &value) in img.pixels_mut().zip(data.iter()) {
-            pixel.0 = [(value.clamp(0.0, 1.0) * 255.0).round() as u8];
-        }
-        img.save(&path)
-            .map_err(|e| format!("Failed to save '{}': {}", path.display(), e).into())
+        save_heightmap_png(&data, output_size, output_size, &path).map_err(NodeError::from)
     }
 }
 impl Node for NodeSaveHeightmap {

@@ -1,6 +1,5 @@
 use waterdrop_terrain_generator::core::graph::GraphNodeId;
-use waterdrop_terrain_generator::core::node_error::NodeError;
-use waterdrop_terrain_generator::core::node_message::NodeMessageSeverity;
+use waterdrop_terrain_generator::core::node::{NodeError, NodeMessageSeverity};
 
 #[test]
 fn input_not_connected_displays_the_node_and_socket_names() {

@@ -1,9 +1,5 @@
 use crate::{
-    core::{
-        node::NodeIcon,
-        node_message::NodeMessage,
-        node_parameters::{NParamConstraints, NParamDesc, NParamValue}
-    },
+    core::node::{NParamConstraints, NParamDesc, NParamValue, NodeIcon, NodeMessage},
     ui::theme::{
         self,
         palette::{self, BG_CARD}

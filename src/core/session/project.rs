@@ -6,10 +6,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::core::{
-    chunk_grid::ChunkGrid,
     graph::{GraphNodeId, NodeGraph},
-    node_parameters::NParamValue,
-    node_registry
+    node::{NParamValue, registered_nodes},
+    tiling::ChunkGrid
 };
 
 #[derive(Serialize, Deserialize)]
@@ -53,7 +52,7 @@ impl ChunkGridDto {
 struct ProjectNode {
     /// Id local to this file, used only to resolve `ProjectEdge` endpoints below.
     id: usize,
-    /// Matches `Node::label()`, which also doubles as the "Add Node" menu entry (see `node_registry`), so it works as a stable type identifier.
+    /// Matches `Node::label()`, which also doubles as the "Add Node" menu entry (see `node::registry`), so it works as a stable type identifier.
     node_type: String,
     position: [f32; 2],
     params: Vec<(String, ParamValueDto)>
@@ -185,7 +184,7 @@ pub fn load_project(path: &Path, tile_size: usize) -> Result<BuiltGraph, String>
     let mut id_map: HashMap<usize, GraphNodeId> = HashMap::new();
 
     for node in &file.nodes {
-        let descriptor = node_registry::registered_nodes()
+        let descriptor = registered_nodes()
             .find(|d| d.label == node.node_type)
             .ok_or_else(|| format!("Unknown node type '{}'", node.node_type))?;
 

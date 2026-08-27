@@ -1,11 +1,10 @@
 use std::sync::{Arc, OnceLock};
 
-use crate::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
-use crate::core::node_error::NodeError;
-use crate::core::node_parameters::{NParamConstraints, NParamDesc, NParamValue};
-use crate::core::node_registry::NodeDescriptor;
-use crate::core::tile_allocator::{TileHandle, TilePool};
-use crate::core::tile_context::TileContext;
+use crate::core::node::{
+    NParamConstraints, NParamDesc, NParamValue, Node, NodeCategory, NodeDescriptor, NodeError,
+    NodeIcon, NodePortType, NodeSocket
+};
+use crate::core::tiling::{TileContext, TileHandle, TilePool};
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-perlin",
@@ -59,7 +58,7 @@ impl Default for NodeGeneratorPerlin {
     }
 }
 impl NodeGeneratorPerlin {
-    fn params() -> &'static [crate::core::node_parameters::NParamDesc] {
+    fn params() -> &'static [NParamDesc] {
         static SPECS: OnceLock<Vec<NParamDesc>> = std::sync::OnceLock::new();
         SPECS.get_or_init(|| {
             vec![

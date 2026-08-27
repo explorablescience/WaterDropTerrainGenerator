@@ -5,8 +5,8 @@ use egui_snarl::{InPinId, NodeId, OutPinId};
 use wde::prelude::ui::egui;
 
 use crate::{
-    TerrainGraph, TerrainGraphHolder,
-    core::{graph::GraphNodeId, project},
+    TerrainSession, TerrainSessionHolder,
+    core::{graph::GraphNodeId, session as project},
     ui::panel_graph::{GraphInstance, GraphNode}
 };
 
@@ -14,7 +14,7 @@ use crate::{
 pub(super) fn save_project(
     path: &Path,
     graph_instance: &GraphInstance,
-    terrain_graph: &TerrainGraphHolder
+    terrain_graph: &TerrainSessionHolder
 ) -> Result<(), String> {
     let positions: HashMap<GraphNodeId, [f32; 2]> = graph_instance
         .nodes_pos_ids()
@@ -31,7 +31,7 @@ pub(super) fn save_project(
 pub(super) fn load_project(
     path: &Path,
     graph_instance: &mut GraphInstance,
-    terrain_graph: &TerrainGraphHolder
+    terrain_graph: &TerrainSessionHolder
 ) -> Result<(), String> {
     let tile_size = terrain_graph.read().graph().tile_size();
     let built = project::load_project(path, tile_size)?;
@@ -57,7 +57,7 @@ pub(super) fn load_project(
     }
 
     let mut terrain_graph = terrain_graph.write();
-    *terrain_graph = TerrainGraph::default();
+    *terrain_graph = TerrainSession::default();
     *terrain_graph.graph_mut() = built.graph;
     drop(terrain_graph);
     *graph_instance = new_graph_instance;

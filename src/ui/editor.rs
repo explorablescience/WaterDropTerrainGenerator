@@ -11,7 +11,7 @@ use rfd::FileDialog;
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainGraphHolder,
+    TerrainSessionHolder,
     ui::{
         editor_behavior, editor_behavior::EditorBehavior, footer::EditorFooterSet,
         panel_graph::GraphInstance, project_io
@@ -117,7 +117,7 @@ fn draw_editor(
     mut generation_id: Local<u64>,
     mut engine_rect: ResMut<EngineViewportRect>,
     mut graph_instance: Local<Option<GraphInstance>>,
-    terrain_graph: Res<TerrainGraphHolder>,
+    terrain_graph: Res<TerrainSessionHolder>,
     mut ui_menu: ResMut<UIMenu>,
     mut last_project_path: Local<Option<PathBuf>>
 ) {
@@ -163,7 +163,7 @@ fn draw_editor(
 fn handle_file_menu(
     ui_menu: &mut UIMenu,
     graph_instance: &mut GraphInstance,
-    terrain_graph: &TerrainGraphHolder,
+    terrain_graph: &TerrainSessionHolder,
     last_project_path: &mut Option<PathBuf>
 ) {
     if *ui_menu.clicked_mut("File/Save Project") {

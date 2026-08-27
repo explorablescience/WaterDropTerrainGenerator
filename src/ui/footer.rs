@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainGraphHolder,
+    TerrainSessionHolder,
     ui::theme::{self, palette}
 };
 
@@ -40,7 +40,7 @@ struct FpsDisplay {
 fn draw_footer(
     ctx: Res<UIContext>,
     diagnostics: Res<DiagnosticsStore>,
-    terrain_graph: Res<TerrainGraphHolder>,
+    terrain_graph: Res<TerrainSessionHolder>,
     mut fps_display: Local<FpsDisplay>
 ) {
     if fps_display

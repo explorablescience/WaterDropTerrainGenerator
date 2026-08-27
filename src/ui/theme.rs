@@ -3,7 +3,7 @@
 use wde::prelude::ui::egui;
 
 use crate::{
-    core::{node::NodeCategory, node_message::NodeMessageSeverity},
+    core::node::{NodeCategory, NodeMessageSeverity},
     ui::theme::palette::BG_PANEL
 };
 use egui::{CornerRadius, FontFamily, FontId, Stroke, TextStyle};

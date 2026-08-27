@@ -1,14 +1,11 @@
 use std::sync::Arc;
 
-use waterdrop_terrain_generator::core::chunk_grid::ChunkGrid;
 use waterdrop_terrain_generator::core::graph::NodeGraph;
 use waterdrop_terrain_generator::core::node::{
-    Node, NodeCategory, NodeIcon, NodePortType, NodeSocket
+    Node, NodeCategory, NodeError, NodeIcon, NodePortType, NodeSocket
 };
-use waterdrop_terrain_generator::core::node_error::NodeError;
-use waterdrop_terrain_generator::core::terrain_export::assemble_terrain;
-use waterdrop_terrain_generator::core::tile_allocator::{TileHandle, TilePool};
-use waterdrop_terrain_generator::core::tile_context::TileContext;
+use waterdrop_terrain_generator::core::session::assemble_terrain;
+use waterdrop_terrain_generator::core::tiling::{ChunkGrid, TileContext, TileHandle, TilePool};
 
 const TEST_ICON: NodeIcon = NodeIcon {
     id: "test-icon",

@@ -2,7 +2,7 @@ use egui_tiles::{Behavior, TabState, Tiles, UiResponse};
 use wde::prelude::ui::egui;
 
 use crate::{
-    TerrainGraphHolder,
+    TerrainSessionHolder,
     ui::{
         editor::EditorPanels,
         panel_graph::{self, GraphInstance},
@@ -14,7 +14,7 @@ pub struct EditorBehavior<'a> {
     pub graph_id: egui::Id,
     pub graph_instance: &'a mut GraphInstance,
 
-    pub terrain_graph: TerrainGraphHolder,
+    pub terrain_graph: TerrainSessionHolder,
 
     /// Used to tell a tile's outer edges (which get the full border inset) apart from edges shared with a neighboring tile (which get half of it).
     pub outer_rect: egui::Rect
@@ -103,7 +103,7 @@ impl<'a> EditorBehavior<'a> {
     pub fn new(
         generation_id: &u64,
         graph_instance: &'a mut GraphInstance,
-        terrain_graph: TerrainGraphHolder,
+        terrain_graph: TerrainSessionHolder,
         outer_rect: egui::Rect
     ) -> Self {
         EditorBehavior {

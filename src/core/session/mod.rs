@@ -1,30 +1,37 @@
+//! The live terrain project: a bevy `Resource` wrapping [`NodeGraph`] with the preview/generation
+//! bookkeeping, whole-terrain export, and persistence that turn the generic graph engine into
+//! *this app's* concept of a terrain project.
+
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use bevy::{platform::collections::HashMap, prelude::*};
 
 use crate::core::{
-    chunk_grid::{ChunkCoord, ChunkGrid},
     graph::{GraphNodeId, NodeGraph, NodeGraphProcessResult},
-    node_error::NodeError,
-    node_message::{MessageLifetime, NodeMessage, TimedNodeMessage},
-    terrain_export::assemble_terrain,
-    tile_allocator::TileHandle
+    node::{NodeError, NodeMessage, NodeMessageLog},
+    tiling::{ChunkCoord, ChunkGrid, TileHandle, save_heightmap_png}
 };
 
+mod export;
+mod project;
+
+pub use export::assemble_terrain;
+pub use project::{BuiltGraph, load_project, save_project};
+
 #[derive(Resource, Default, Clone)]
-pub struct TerrainGraphHolder(pub Arc<RwLock<TerrainGraph>>);
-impl TerrainGraphHolder {
-    pub fn read(&self) -> std::sync::RwLockReadGuard<'_, TerrainGraph> {
+pub struct TerrainSessionHolder(pub Arc<RwLock<TerrainSession>>);
+impl TerrainSessionHolder {
+    pub fn read(&self) -> std::sync::RwLockReadGuard<'_, TerrainSession> {
         self.0.read().unwrap()
     }
 
-    pub fn write(&self) -> std::sync::RwLockWriteGuard<'_, TerrainGraph> {
+    pub fn write(&self) -> std::sync::RwLockWriteGuard<'_, TerrainSession> {
         self.0.write().unwrap()
     }
 }
 
-pub struct TerrainGraph {
+pub struct TerrainSession {
     graph: NodeGraph,
     generations: HashMap<GraphNodeId, u32>,
     /// Like `generations`, but keyed per chunk for a chunked preview (see [`Self::process_chunk`]).
@@ -32,10 +39,10 @@ pub struct TerrainGraph {
     /// Forces a refresh when the selection changes even if the newly selected node's generation hasn't advanced.
     displayed_node: Option<GraphNodeId>,
     pub selected_node: Option<GraphNodeId>,
-    /// An error persists until the next `on_action`/`set_param` call on that node; a success confirmation fades out on its own.
-    action_messages: HashMap<GraphNodeId, TimedNodeMessage>
+    /// Feedback from the most recent `on_action`/`set_param` call on each node.
+    messages: NodeMessageLog
 }
-impl Default for TerrainGraph {
+impl Default for TerrainSession {
     fn default() -> Self {
         Self {
             graph: NodeGraph::new(ChunkGrid::new(4, 4, 128, 1.0 / 128.0)),
@@ -43,53 +50,32 @@ impl Default for TerrainGraph {
             chunk_generations: HashMap::new(),
             displayed_node: None,
             selected_node: None,
-            action_messages: HashMap::new()
+            messages: NodeMessageLog::default()
         }
     }
 }
-impl TerrainGraph {
-    /// How long a success confirmation from `on_action` stays visible before it fades out.
-    pub const ACTION_MESSAGE_DURATION: Duration = Duration::from_secs(3);
-
+impl TerrainSession {
     /// Replaces whatever feedback was shown before for `node_id`.
     pub fn set_action_result(&mut self, node_id: GraphNodeId, result: Result<String, NodeError>) {
-        let timed = match result {
-            Ok(text) => TimedNodeMessage::new(
-                NodeMessage::info(text),
-                MessageLifetime::Timed(Self::ACTION_MESSAGE_DURATION)
-            ),
-            Err(err) => TimedNodeMessage::new(
-                NodeMessage {
-                    severity: err.severity(),
-                    text: err.to_string()
-                },
-                MessageLifetime::Persistent
-            )
-        };
-        self.action_messages.insert(node_id, timed);
+        self.messages.set_result(node_id, result);
     }
 
     pub fn clear_action_message(&mut self, node_id: GraphNodeId) {
-        self.action_messages.remove(&node_id);
+        self.messages.clear(node_id);
     }
 
     /// Filters out feedback that has already expired.
     pub fn action_message(&self, node_id: GraphNodeId) -> Option<&NodeMessage> {
-        self.action_messages
-            .get(&node_id)
-            .filter(|m| !m.is_expired())
-            .map(|m| &m.message)
+        self.messages.get(node_id)
     }
 
     /// `None` unless the feedback is timed and still live.
     pub fn action_message_remaining(&self, node_id: GraphNodeId) -> Option<Duration> {
-        self.action_messages
-            .get(&node_id)
-            .and_then(TimedNodeMessage::remaining)
+        self.messages.remaining(node_id)
     }
 
     pub fn prune_expired_messages(&mut self) {
-        self.action_messages.retain(|_, m| !m.is_expired());
+        self.messages.prune_expired();
     }
 
     /// Returns the new output tiles if a new generation is available since the last call, `Ok(None)` if not (or still processing).
@@ -159,17 +145,6 @@ impl TerrainGraph {
         path: &std::path::Path
     ) -> Result<(), NodeError> {
         let (data, width, height) = assemble_terrain(&mut self.graph, node_id)?;
-
-        let mut img = image::GrayImage::new(width as u32, height as u32);
-        for (pixel, &value) in img.pixels_mut().zip(data.iter()) {
-            pixel.0 = [(value.clamp(0.0, 1.0) * 255.0).round() as u8];
-        }
-
-        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
-            std::fs::create_dir_all(dir)
-                .map_err(|e| format!("Failed to create directory '{}': {}", dir.display(), e))?;
-        }
-        img.save(path)
-            .map_err(|e| format!("Failed to save '{}': {}", path.display(), e).into())
+        save_heightmap_png(&data, width, height, path).map_err(NodeError::from)
     }
 }

@@ -1,4 +1,4 @@
-use crate::core::{node::Node, node_error::NodeError};
+use crate::core::node::{Node, NodeError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GraphNodeId(pub usize);

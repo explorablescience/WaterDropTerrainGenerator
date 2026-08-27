@@ -1,14 +1,24 @@
+//! What a node is: the `Node` trait itself, its socket/parameter/error/message types, and the
+//! registry that lets the graph editor discover every node type without knowing about them by name.
+
 use std::fmt::Debug;
 use std::hash::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use crate::core::node_error::NodeError;
-use crate::core::{
-    node_parameters::{NParamDesc, NParamValue},
-    tile_allocator::{TileHandle, TilePool},
-    tile_context::TileContext
+use crate::core::tiling::{TileContext, TileHandle, TilePool};
+
+mod error;
+mod message;
+mod parameters;
+mod registry;
+
+pub use error::NodeError;
+pub use message::{
+    MessageLifetime, NodeMessage, NodeMessageLog, NodeMessageSeverity, TimedNodeMessage
 };
+pub use parameters::{NParamConstraints, NParamDesc, NParamValidator, NParamValue};
+pub use registry::{NodeDescriptor, registered_nodes};
 
 pub trait Node: Debug + Send + Sync {
     fn label(&self) -> &str;

@@ -1,4 +1,4 @@
-use waterdrop_terrain_generator::core::node_parameters::{NParamConstraints, NParamValue};
+use waterdrop_terrain_generator::core::node::{NParamConstraints, NParamValue};
 
 #[test]
 fn int_range_accepts_values_inside_the_bounds() {

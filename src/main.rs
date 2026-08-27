@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use waterdrop_terrain_generator::{DEBUG_MODE, TerrainGraphHolder, render, ui};
+use waterdrop_terrain_generator::{DEBUG_MODE, TerrainSessionHolder, render, ui};
 use wde::{CustomBevyPlugins, prelude::*};
 
 #[derive(Default)]
@@ -38,7 +38,7 @@ impl Plugin for CustomWdePlugins {
             wde::wde_editor::EditorPlugin
         ));
 
-        app.init_resource::<TerrainGraphHolder>()
+        app.init_resource::<TerrainSessionHolder>()
             .add_plugins((render::RenderPlugin, ui::UIPlugin))
             .add_systems(Startup, default_scene);
     }

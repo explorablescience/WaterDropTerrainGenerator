@@ -1,8 +1,8 @@
-use waterdrop_terrain_generator::core::node_registry;
+use waterdrop_terrain_generator::core::node;
 
 #[test]
 fn every_expected_node_type_is_registered() {
-    let labels: Vec<&str> = node_registry::registered_nodes().map(|d| d.label).collect();
+    let labels: Vec<&str> = node::registered_nodes().map(|d| d.label).collect();
     for expected in [
         "Erosion",
         "Flat Generator",
@@ -23,13 +23,13 @@ fn every_expected_node_type_is_registered() {
 
 #[test]
 fn registered_labels_are_unique() {
-    let mut labels: Vec<&str> = node_registry::registered_nodes().map(|d| d.label).collect();
+    let mut labels: Vec<&str> = node::registered_nodes().map(|d| d.label).collect();
     let unique_count = {
         labels.sort_unstable();
         labels.dedup();
         labels.len()
     };
-    let total_count = node_registry::registered_nodes().count();
+    let total_count = node::registered_nodes().count();
     assert_eq!(
         unique_count, total_count,
         "two node types are registered under the same label"
@@ -38,7 +38,7 @@ fn registered_labels_are_unique() {
 
 #[test]
 fn every_descriptor_factory_builds_a_node_with_that_descriptors_category() {
-    for descriptor in node_registry::registered_nodes() {
+    for descriptor in node::registered_nodes() {
         let instance = (descriptor.factory)();
         assert_eq!(
             instance.category(),

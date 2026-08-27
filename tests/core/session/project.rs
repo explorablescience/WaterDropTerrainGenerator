@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use waterdrop_terrain_generator::core::chunk_grid::ChunkGrid;
 use waterdrop_terrain_generator::core::graph::NodeGraph;
-use waterdrop_terrain_generator::core::node_parameters::NParamValue;
-use waterdrop_terrain_generator::core::node_registry;
-use waterdrop_terrain_generator::core::project::{load_project, save_project};
+use waterdrop_terrain_generator::core::node::{self, NParamValue};
+use waterdrop_terrain_generator::core::session::{load_project, save_project};
+use waterdrop_terrain_generator::core::tiling::ChunkGrid;
 use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorPerlin};
 
 /// A path in the system temp dir unique to this test process/run, so parallel test runs never
@@ -18,7 +17,7 @@ fn temp_project_path(name: &str) -> PathBuf {
 fn round_trips_nodes_params_positions_and_edges() {
     let path = temp_project_path("round-trip");
 
-    let mut graph = NodeGraph::new(32);
+    let mut graph = NodeGraph::new(ChunkGrid::single(32));
     let source = graph.add_node(Box::new(NodeGeneratorPerlin::default()));
     let sink = graph.add_node(Box::new(NodeErosion::default()));
     graph
@@ -85,7 +84,7 @@ fn round_trips_nodes_params_positions_and_edges() {
 fn empty_graph_round_trips_to_no_nodes() {
     let path = temp_project_path("empty");
 
-    let graph = NodeGraph::new(32);
+    let graph = NodeGraph::new(ChunkGrid::single(32));
     save_project(&path, &graph, &HashMap::new()).expect("saving an empty graph should succeed");
     let built = load_project(&path, 32).expect("loading an empty project should succeed");
     std::fs::remove_file(&path).ok();
@@ -98,7 +97,7 @@ fn empty_graph_round_trips_to_no_nodes() {
 fn unsaved_node_position_defaults_to_origin() {
     let path = temp_project_path("missing-position");
 
-    let mut graph = NodeGraph::new(32);
+    let mut graph = NodeGraph::new(ChunkGrid::single(32));
     let node = graph.add_node(Box::new(NodeGeneratorPerlin::default()));
 
     // Deliberately omit `node`'s position, as if the caller's UI never had one for it.
@@ -187,13 +186,13 @@ fn chunk_grid_round_trips_through_save_and_load() {
 }
 
 /// Regression test for a bug where `NodeGeneratorFlat::label()` returned a different string than
-/// the label it was registered under in `node_registry`. `core::project` identifies a saved
-/// node's type by matching `Node::label()` against each `NodeDescriptor::label`, so any node type
-/// where the two diverge silently fails to round-trip ("Unknown node type '...'") even though it
-/// appears correctly in the "Add Node" menu.
+/// the label it was registered under in `node::registry`. `core::session::project` identifies a
+/// saved node's type by matching `Node::label()` against each `NodeDescriptor::label`, so any node
+/// type where the two diverge silently fails to round-trip ("Unknown node type '...'") even though
+/// it appears correctly in the "Add Node" menu.
 #[test]
 fn every_registered_node_labels_itself_consistently_with_its_registry_entry() {
-    let mismatched: Vec<String> = node_registry::registered_nodes()
+    let mismatched: Vec<String> = node::registered_nodes()
         .filter_map(|descriptor| {
             let instance = (descriptor.factory)();
             (instance.label() != descriptor.label).then(|| {

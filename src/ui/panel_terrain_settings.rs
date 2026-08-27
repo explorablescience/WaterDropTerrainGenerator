@@ -5,10 +5,10 @@ use rfd::FileDialog;
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainGraphHolder,
+    TerrainSessionHolder,
     core::{
-        chunk_grid::ChunkGrid,
-        node_parameters::{NParamConstraints, NParamDesc, NParamValue}
+        node::{NParamConstraints, NParamDesc, NParamValue},
+        tiling::ChunkGrid
     },
     ui::{theme, widgets}
 };
@@ -49,7 +49,7 @@ fn int_field(key: &'static str, label: &'static str, min: i32, max: i32) -> NPar
 pub fn draw_terrain_settings(
     ctx: Res<UIContext>,
     mut ui_menu: ResMut<UIMenu>,
-    terrain_graph: Res<TerrainGraphHolder>,
+    terrain_graph: Res<TerrainSessionHolder>,
     mut state: Local<TerrainSettingsState>
 ) {
     let open = ui_menu.clicked_mut("Terrain/Settings");

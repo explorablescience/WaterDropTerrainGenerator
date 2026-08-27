@@ -1,4 +1,4 @@
-use waterdrop_terrain_generator::core::tile_allocator::TilePool;
+use waterdrop_terrain_generator::core::tiling::TilePool;
 
 #[test]
 fn allocated_tile_is_zero_filled_and_sized_to_the_pool() {

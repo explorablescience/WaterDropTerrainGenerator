@@ -1,21 +1,30 @@
+//! Tests for `src/core/session/`: the live terrain project. `export` covers whole-terrain
+//! stitching, `project` covers save/load persistence, and `TerrainSession`/`TerrainSessionHolder`
+//! themselves - defined directly in `session/mod.rs`, not a nested file - are tested right here.
+
 use std::time::Duration;
 
-use waterdrop_terrain_generator::core::node_error::NodeError;
-use waterdrop_terrain_generator::core::node_message::NodeMessageSeverity;
-use waterdrop_terrain_generator::core::node_parameters::NParamValue;
+use waterdrop_terrain_generator::core::graph::NodeGraph;
+use waterdrop_terrain_generator::core::node::{
+    NParamValue, NodeError, NodeMessageLog, NodeMessageSeverity
+};
+use waterdrop_terrain_generator::core::tiling::ChunkGrid;
 use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorFlat};
-use waterdrop_terrain_generator::{TerrainGraph, TerrainGraphHolder};
+use waterdrop_terrain_generator::{TerrainSession, TerrainSessionHolder};
+
+mod export;
+mod project;
 
 #[test]
-fn default_terrain_graph_has_no_selection_and_no_messages() {
-    let terrain = TerrainGraph::default();
+fn default_terrain_session_has_no_selection_and_no_messages() {
+    let terrain = TerrainSession::default();
     assert_eq!(terrain.selected_node, None);
 }
 
 #[test]
 fn action_result_ok_shows_as_an_info_message_that_can_be_cleared() {
-    let mut terrain = TerrainGraph::default();
-    let mut graph = waterdrop_terrain_generator::core::graph::NodeGraph::new(4);
+    let mut terrain = TerrainSession::default();
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
 
     terrain.set_action_result(id, Ok("Saved!".to_string()));
@@ -31,8 +40,8 @@ fn action_result_ok_shows_as_an_info_message_that_can_be_cleared() {
 
 #[test]
 fn action_result_err_shows_with_the_errors_own_severity() {
-    let mut terrain = TerrainGraph::default();
-    let mut graph = waterdrop_terrain_generator::core::graph::NodeGraph::new(4);
+    let mut terrain = TerrainSession::default();
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
 
     terrain.set_action_result(
@@ -48,8 +57,8 @@ fn action_result_err_shows_with_the_errors_own_severity() {
 
 #[test]
 fn a_persistent_error_message_never_expires_on_its_own() {
-    let mut terrain = TerrainGraph::default();
-    let mut graph = waterdrop_terrain_generator::core::graph::NodeGraph::new(4);
+    let mut terrain = TerrainSession::default();
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
 
     terrain.set_action_result(id, Err(NodeError::ProcessingFailed("boom".to_string())));
@@ -63,8 +72,8 @@ fn a_persistent_error_message_never_expires_on_its_own() {
 
 #[test]
 fn setting_a_new_action_result_replaces_whatever_was_shown_before() {
-    let mut terrain = TerrainGraph::default();
-    let mut graph = waterdrop_terrain_generator::core::graph::NodeGraph::new(4);
+    let mut terrain = TerrainSession::default();
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
 
     terrain.set_action_result(
@@ -80,7 +89,7 @@ fn setting_a_new_action_result_replaces_whatever_was_shown_before() {
 
 #[test]
 fn process_returns_the_new_generation_only_the_first_time_its_seen() {
-    let mut terrain = TerrainGraph::default();
+    let mut terrain = TerrainSession::default();
     let source = terrain.graph_mut().add_node(Box::new(NodeGeneratorFlat));
     let sink = terrain
         .graph_mut()
@@ -99,7 +108,7 @@ fn process_returns_the_new_generation_only_the_first_time_its_seen() {
     assert!(first.0 > 0);
 
     // Nothing changed since: the underlying graph serves the same cached generation, so
-    // `TerrainGraph::process` should report that there's nothing new to show.
+    // `TerrainSession::process` should report that there's nothing new to show.
     let second = terrain.process(sink).expect("processing should succeed");
     assert!(
         second.is_none(),
@@ -109,7 +118,7 @@ fn process_returns_the_new_generation_only_the_first_time_its_seen() {
 
 #[test]
 fn process_reports_a_new_generation_again_after_a_parameter_changes() {
-    let mut terrain = TerrainGraph::default();
+    let mut terrain = TerrainSession::default();
     let source = terrain.graph_mut().add_node(Box::new(NodeGeneratorFlat));
     let sink = terrain
         .graph_mut()
@@ -137,7 +146,7 @@ fn process_reports_a_new_generation_again_after_a_parameter_changes() {
 
 #[test]
 fn process_propagates_errors_from_the_underlying_graph() {
-    let mut terrain = TerrainGraph::default();
+    let mut terrain = TerrainSession::default();
     let sink = terrain
         .graph_mut()
         .add_node(Box::new(NodeErosion::default()));
@@ -146,8 +155,8 @@ fn process_propagates_errors_from_the_underlying_graph() {
 }
 
 #[test]
-fn terrain_graph_holder_allows_shared_read_and_exclusive_write_access() {
-    let holder = TerrainGraphHolder::default();
+fn terrain_session_holder_allows_shared_read_and_exclusive_write_access() {
+    let holder = TerrainSessionHolder::default();
     let id = holder
         .write()
         .graph_mut()
@@ -157,17 +166,17 @@ fn terrain_graph_holder_allows_shared_read_and_exclusive_write_access() {
 
 #[test]
 fn timed_action_message_expires_and_is_pruned() {
-    let mut terrain = TerrainGraph::default();
-    let mut graph = waterdrop_terrain_generator::core::graph::NodeGraph::new(4);
+    let mut terrain = TerrainSession::default();
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
 
     terrain.set_action_result(id, Ok("Saved!".to_string()));
-    // `set_action_result`'s success path uses `ACTION_MESSAGE_DURATION`, which is several
-    // seconds long, so we can't wait it out here - instead just verify the message reports a
-    // bounded remaining time rather than "forever" like a persistent error would.
+    // `set_action_result`'s success path uses `NodeMessageLog::ACTION_MESSAGE_DURATION`, which is
+    // several seconds long, so we can't wait it out here - instead just verify the message
+    // reports a bounded remaining time rather than "forever" like a persistent error would.
     let remaining = terrain
         .action_message_remaining(id)
         .expect("a timed message should report remaining time");
-    assert!(remaining <= TerrainGraph::ACTION_MESSAGE_DURATION);
+    assert!(remaining <= NodeMessageLog::ACTION_MESSAGE_DURATION);
     assert!(remaining > Duration::from_secs(0));
 }

@@ -8,12 +8,10 @@ use egui_snarl::{
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainGraphHolder,
+    TerrainSessionHolder,
     core::{
         graph::GraphNodeId,
-        node::{Node, NodeCategory, NodeIcon},
-        node_error::NodeError,
-        node_registry
+        node::{self, Node, NodeCategory, NodeError, NodeIcon}
     },
     ui::{
         theme::{self, palette::BG_GRAPH},
@@ -35,7 +33,7 @@ pub struct SelectedNode {
 
 struct GraphViewer {
     selected: Option<SelectedNode>,
-    terrain_graph: TerrainGraphHolder
+    terrain_graph: TerrainSessionHolder
 }
 impl SnarlViewer<GraphNode> for GraphViewer {
     fn title(&mut self, node: &GraphNode) -> String {
@@ -201,7 +199,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
 
         // Every node type registers itself with `inventory::submit!` (see `node_registry`).
         for category in NodeCategory::ALL {
-            let nodes: Vec<_> = node_registry::registered_nodes()
+            let nodes: Vec<_> = node::registered_nodes()
                 .filter(|descriptor| descriptor.category == category)
                 .collect();
             if nodes.is_empty() {
@@ -372,7 +370,7 @@ pub fn show_graph(
     id: egui::Id,
     ui: &mut egui::Ui,
     graph_instance: &mut GraphInstance,
-    terrain_graph: TerrainGraphHolder
+    terrain_graph: TerrainSessionHolder
 ) -> Option<SelectedNode> {
     let style = SnarlStyle {
         node_layout: Some(

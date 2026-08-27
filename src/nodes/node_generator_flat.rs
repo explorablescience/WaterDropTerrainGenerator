@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
-use crate::core::node::{Node, NodeCategory, NodeIcon, NodePortType, NodeSocket};
-use crate::core::node_error::NodeError;
-use crate::core::node_registry::NodeDescriptor;
-use crate::core::tile_allocator::{TileHandle, TilePool};
-use crate::core::tile_context::TileContext;
+use crate::core::node::{
+    Node, NodeCategory, NodeDescriptor, NodeError, NodeIcon, NodePortType, NodeSocket
+};
+use crate::core::tiling::{TileContext, TileHandle, TilePool};
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-flat",

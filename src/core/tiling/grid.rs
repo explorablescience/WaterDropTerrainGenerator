@@ -1,11 +1,15 @@
 //! Describes how the terrain is partitioned into a grid of chunks, each evaluated independently.
 
-use crate::core::tile_context::TileContext;
+use crate::core::tiling::context::TileContext;
 
+/// Identifies one chunk in a [`ChunkGrid`] by its integer grid position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkCoord(pub i32, pub i32);
 
-/// Also defines how texel indices map to a shared world-space frame so position-aware nodes (e.g. noise generators) sample consistently across chunk boundaries.
+/// The terrain-level layout that chunked evaluation is parameterized by: how many chunks make up
+/// the terrain, how many texels each chunk covers, and how texel indices map to a shared
+/// world-space coordinate frame so position-aware nodes (e.g. noise generators) sample
+/// consistently across chunk boundaries.
 #[derive(Debug, Clone, Copy)]
 pub struct ChunkGrid {
     chunks_x: u32,
@@ -73,7 +77,9 @@ impl ChunkGrid {
         )
     }
 
-    /// `margin` texels of padding on every side so kernel-based nodes can sample past the chunk's own edge without seams.
+    /// Context for computing `chunk`, whose tile carries `margin` texels of padding on every side
+    /// (see `NodeGraph::required_internal_tile_size`) so kernel-based nodes can sample past the
+    /// chunk's own edge without seams.
     pub fn chunk_context(&self, chunk: ChunkCoord, margin: usize) -> TileContext {
         let (ox, oy) = self.chunk_world_origin(chunk);
         let step = self.world_scale;
@@ -83,12 +89,5 @@ impl ChunkGrid {
             world_step: (step, step),
             world_extent: self.world_extent()
         }
-    }
-}
-
-/// Lets `NodeGraph::new` keep accepting a bare tile size while also accepting a fully-specified `ChunkGrid`.
-impl From<usize> for ChunkGrid {
-    fn from(tile_size: usize) -> Self {
-        ChunkGrid::single(tile_size)
     }
 }

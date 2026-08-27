@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use waterdrop_terrain_generator::core::node_message::{
+use waterdrop_terrain_generator::core::node::{
     MessageLifetime, NodeMessage, NodeMessageSeverity, TimedNodeMessage
 };
 

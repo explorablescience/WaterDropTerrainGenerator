@@ -1,19 +1,17 @@
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainGraphHolder,
+    TerrainSessionHolder,
     core::{
         graph::{GraphNodeId, NodeGraphProcessResult},
-        node_error::NodeError,
-        node_message::NodeMessage,
-        node_parameters::{NParamConstraints, NParamValue}
+        node::{NParamConstraints, NParamValue, NodeError, NodeMessage}
     },
     ui::{theme, widgets}
 };
 
 pub fn draw_properties(
     ui: &mut egui::Ui,
-    terrain_graph: &TerrainGraphHolder,
+    terrain_graph: &TerrainSessionHolder,
     selected_node: Option<GraphNodeId>
 ) {
     egui::Frame::NONE
@@ -83,14 +81,14 @@ pub fn draw_properties(
 
 fn collect_node_messages(
     ui: &egui::Ui,
-    terrain_graph: &TerrainGraphHolder,
+    terrain_graph: &TerrainSessionHolder,
     graph_id: GraphNodeId
 ) -> Vec<NodeMessage> {
     let mut terrain_graph = terrain_graph.write();
     terrain_graph.prune_expired_messages();
 
     let mut messages = Vec::new();
-    // Uses `NodeGraph::process` rather than `TerrainGraph::process`: the latter's generation bookkeeping is reserved for `update_terrain_preview` alone.
+    // Uses `NodeGraph::process` rather than `TerrainSession::process`: the latter's generation bookkeeping is reserved for `update_terrain_preview` alone.
     if let Err(err) = terrain_graph.graph_mut().process(graph_id) {
         let text = match &err {
             NodeError::InputNotConnected {
@@ -141,7 +139,11 @@ struct ParamSpec {
 }
 
 /// Draws the UI for editing the parameters of a node, grouped into cards by [`NParamDesc::category`].
-fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph_id: GraphNodeId) {
+fn show_node_params(
+    ui: &mut egui::Ui,
+    terrain_graph: &TerrainSessionHolder,
+    graph_id: GraphNodeId
+) {
     let param_specs: Vec<ParamSpec> = {
         let terrain_graph_read = terrain_graph.read();
         let node = terrain_graph_read.graph().node(graph_id).unwrap();
@@ -258,7 +260,7 @@ fn show_node_params(ui: &mut egui::Ui, terrain_graph: &TerrainGraphHolder, graph
 /// If the control was edited, writes the new value back into the graph.
 fn show_param_row(
     ui: &mut egui::Ui,
-    terrain_graph: &TerrainGraphHolder,
+    terrain_graph: &TerrainSessionHolder,
     graph_id: GraphNodeId,
     spec: &ParamSpec
 ) {
@@ -414,7 +416,7 @@ fn show_param_row(
 
 /// Records the result in the terrain graph so it can be displayed in the UI.
 fn run_node_action(
-    terrain_graph: &TerrainGraphHolder,
+    terrain_graph: &TerrainSessionHolder,
     graph_id: GraphNodeId,
     key: &str,
     action_label: &str,

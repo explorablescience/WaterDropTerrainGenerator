@@ -2,8 +2,8 @@
 
 use crate::core::{
     graph::{GraphNodeId, NodeGraph, NodeGraphProcessResult},
-    node_error::NodeError,
-    tile_allocator::crop_center
+    node::NodeError,
+    tiling::crop_center
 };
 
 /// Blits each chunk's cropped core region into one full-terrain buffer, in row-major order. Returns the data plus its width/height in texels (`chunks_x * tile_size` by `chunks_y * tile_size`).

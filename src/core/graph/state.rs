@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::core::{
-    chunk_grid::ChunkCoord, graph::topology::GraphNodeId, tile_allocator::TileHandle
+    graph::topology::GraphNodeId,
+    tiling::{ChunkCoord, TileHandle}
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

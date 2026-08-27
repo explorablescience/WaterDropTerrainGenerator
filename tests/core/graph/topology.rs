@@ -2,11 +2,9 @@ use std::sync::Arc;
 
 use waterdrop_terrain_generator::core::graph::{NodeGraph, NodeGraphProcessResult};
 use waterdrop_terrain_generator::core::node::{
-    Node, NodeCategory, NodeIcon, NodePortType, NodeSocket
+    Node, NodeCategory, NodeError, NodeIcon, NodePortType, NodeSocket
 };
-use waterdrop_terrain_generator::core::node_error::NodeError;
-use waterdrop_terrain_generator::core::tile_allocator::{TileHandle, TilePool};
-use waterdrop_terrain_generator::core::tile_context::TileContext;
+use waterdrop_terrain_generator::core::tiling::{ChunkGrid, TileContext, TileHandle, TilePool};
 use waterdrop_terrain_generator::nodes::{NodeErosion, NodeGeneratorFlat, NodeGeneratorPerlin};
 
 const TEST_ICON: NodeIcon = NodeIcon {
@@ -108,7 +106,7 @@ impl Node for FakeOptionalSink {
 
 #[test]
 fn connecting_mismatched_socket_types_fails() {
-    let mut graph = NodeGraph::new(4);
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let source = graph.add_node(Box::new(FakeHeightSource));
     let sink = graph.add_node(Box::new(FakeMaskSink));
 
@@ -118,7 +116,7 @@ fn connecting_mismatched_socket_types_fails() {
 
 #[test]
 fn connecting_to_an_out_of_range_output_socket_fails() {
-    let mut graph = NodeGraph::new(4);
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let source = graph.add_node(Box::new(FakeHeightSource));
     let sink = graph.add_node(Box::new(NodeErosion::default()));
 
@@ -131,7 +129,7 @@ fn connecting_to_an_out_of_range_output_socket_fails() {
 
 #[test]
 fn connecting_to_an_out_of_range_input_socket_fails() {
-    let mut graph = NodeGraph::new(4);
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let source = graph.add_node(Box::new(FakeHeightSource));
     let sink = graph.add_node(Box::new(NodeErosion::default()));
 
@@ -141,7 +139,7 @@ fn connecting_to_an_out_of_range_input_socket_fails() {
 
 #[test]
 fn optional_unconnected_input_is_fed_a_neutral_zero_tile() {
-    let mut graph = NodeGraph::new(4);
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let sink = graph.add_node(Box::new(FakeOptionalSink));
 
     let result = graph
@@ -155,7 +153,7 @@ fn optional_unconnected_input_is_fed_a_neutral_zero_tile() {
 
 #[test]
 fn connecting_a_second_source_to_an_occupied_input_replaces_the_first() {
-    let mut graph = NodeGraph::new(4);
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let a = graph.add_node(Box::new(NodeGeneratorFlat));
     let b = graph.add_node(Box::new(NodeGeneratorPerlin::default()));
     let sink = graph.add_node(Box::new(NodeErosion::default()));
@@ -177,7 +175,7 @@ fn connecting_a_second_source_to_an_occupied_input_replaces_the_first() {
 
 #[test]
 fn disconnect_removes_the_edge_and_leaves_the_input_socket_empty() {
-    let mut graph = NodeGraph::new(4);
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let source = graph.add_node(Box::new(NodeGeneratorFlat));
     let sink = graph.add_node(Box::new(NodeErosion::default()));
     graph.connect(source, 0, sink, 0).unwrap();
@@ -193,7 +191,7 @@ fn disconnect_removes_the_edge_and_leaves_the_input_socket_empty() {
 
 #[test]
 fn disconnecting_an_edge_that_does_not_exist_fails() {
-    let mut graph = NodeGraph::new(4);
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let source = graph.add_node(Box::new(NodeGeneratorFlat));
     let sink = graph.add_node(Box::new(NodeErosion::default()));
 
@@ -203,7 +201,7 @@ fn disconnecting_an_edge_that_does_not_exist_fails() {
 
 #[test]
 fn node_ids_skips_removed_nodes_but_keeps_surviving_ids_stable() {
-    let mut graph = NodeGraph::new(4);
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let a = graph.add_node(Box::new(NodeGeneratorFlat));
     let b = graph.add_node(Box::new(NodeGeneratorFlat));
     let c = graph.add_node(Box::new(NodeGeneratorFlat));
@@ -215,7 +213,7 @@ fn node_ids_skips_removed_nodes_but_keeps_surviving_ids_stable() {
 
 #[test]
 fn processing_an_unknown_node_id_fails() {
-    let mut graph = NodeGraph::new(4);
+    let mut graph = NodeGraph::new(ChunkGrid::single(4));
     let id = graph.add_node(Box::new(NodeGeneratorFlat));
     graph.remove_node(id).unwrap();
     assert!(graph.process(id).is_err());

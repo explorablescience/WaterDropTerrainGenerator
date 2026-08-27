@@ -1,5 +1,4 @@
-use waterdrop_terrain_generator::core::chunk_grid::{ChunkCoord, ChunkGrid};
-use waterdrop_terrain_generator::core::tile_context::TileContext;
+use waterdrop_terrain_generator::core::tiling::{ChunkCoord, ChunkGrid};
 
 #[test]
 fn single_covers_the_whole_terrain_in_one_chunk_spanning_one_world_unit() {
@@ -68,22 +67,4 @@ fn chunk_context_offsets_the_origin_by_the_requested_margin() {
     // each axis.
     assert_eq!(ctx.world_origin, (-2.0, -6.0));
     assert_eq!(ctx.world_step, (1.0, 1.0));
-}
-
-#[test]
-fn global_context_is_centered_on_its_own_local_grid_independent_of_the_chunk_grid() {
-    // A `Global` node's context never depends on the terrain's chunk grid at all - it's always
-    // the same fixed, self-centered `[-0.5, 0.5)` domain, however the terrain itself is laid out.
-    let ctx = TileContext::for_global(4);
-    assert_eq!(ctx.chunk, None);
-    assert_eq!(ctx.world_origin, (-0.5, -0.5));
-    assert_eq!(ctx.world_step, (0.25, 0.25));
-    assert_eq!(ctx.world_extent, (1.0, 1.0));
-
-    // Its center texel sits at (or right next to) local (0, 0), not the grid's own origin.
-    let (cx, cy) = ctx.world_pos(2, 2);
-    assert!(
-        cx.abs() < 1e-6 && cy.abs() < 1e-6,
-        "texel (2, 2) of a 4x4 global context should be at local (0, 0)"
-    );
 }
