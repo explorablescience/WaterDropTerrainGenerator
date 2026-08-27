@@ -93,6 +93,12 @@ pub(crate) fn update_terrain_preview(
         Err(_) => return // Selected node no longer exists (e.g. it was just removed)
     };
 
+    if terrain_graph.read().graph().is_cooling_down() {
+        // Debounce: a param still changing every frame (e.g. a slider being dragged) keeps
+        // re-arming this, so reprocessing only fires once edits stop landing for a moment.
+        return;
+    }
+
     let force = terrain_graph.write().note_selection(selected_node);
     if force {
         // A previous selection's jobs are no longer relevant - drop them so a late result

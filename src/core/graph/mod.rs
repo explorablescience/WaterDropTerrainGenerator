@@ -34,12 +34,15 @@ pub struct NodeGraph {
     topology: Topology,
     cache: EvalCache,
     generation: AtomicU32,
-    last_activity: Mutex<Option<Instant>>
+    last_activity: Mutex<Option<Instant>>,
+    last_dirty: Mutex<Option<Instant>>
 }
 
 impl NodeGraph {
     /// Evaluation is synchronous and finishes within the frame it starts, so this is purely a UI hold time.
     const PROCESSING_INDICATOR_HOLD: Duration = Duration::from_millis(400);
+
+    const REPROCESS_COOLDOWN: Duration = Duration::from_millis(150);
 
     pub fn new(chunk_grid: ChunkGrid) -> Self {
         Self {
@@ -48,7 +51,8 @@ impl NodeGraph {
             topology: Topology::default(),
             cache: EvalCache::default(),
             generation: AtomicU32::new(0),
-            last_activity: Mutex::new(None)
+            last_activity: Mutex::new(None),
+            last_dirty: Mutex::new(None)
         }
     }
 
@@ -82,6 +86,15 @@ impl NodeGraph {
             .lock()
             .unwrap()
             .is_some_and(|t| t.elapsed() < Self::PROCESSING_INDICATOR_HOLD)
+    }
+
+    /// `true` while still within the debounce window of a param edit - callers should hold off
+    /// reprocessing until this clears (see [`Self::REPROCESS_COOLDOWN`]).
+    pub fn is_cooling_down(&self) -> bool {
+        self.last_dirty
+            .lock()
+            .unwrap()
+            .is_some_and(|t| t.elapsed() < Self::REPROCESS_COOLDOWN)
     }
 
     /// Current generation counter, without bumping it - see [`Self::bump_generation`].
@@ -161,6 +174,7 @@ impl NodeGraph {
 
     /// Propagates downstream, stopping at baked nodes.
     fn mark_dirty(&mut self, id: GraphNodeId) {
+        *self.last_dirty.lock().unwrap() = Some(Instant::now());
         let mut stack = vec![id];
         let mut visited = HashSet::new();
         while let Some(n) = stack.pop() {
