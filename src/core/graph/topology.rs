@@ -152,6 +152,13 @@ impl Topology {
         Ok(&self.entry(id)?.outputs)
     }
 
+    /// Every edge currently in the graph, as `(from_node, from_socket, to_node, to_socket)`.
+    pub fn edges(&self) -> impl Iterator<Item = (GraphNodeId, usize, GraphNodeId, usize)> + '_ {
+        self.edges
+            .iter()
+            .map(|e| (e.from_node, e.from_socket, e.to_node, e.to_socket))
+    }
+
     /// Falls back to the numeric index if the node or socket no longer exists.
     fn output_socket_label(&self, node_id: GraphNodeId, socket: usize) -> String {
         self.entry(node_id)

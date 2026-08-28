@@ -117,6 +117,10 @@ impl NodeGraph {
     pub fn node(&self, id: GraphNodeId) -> Result<&dyn Node, NodeError> {
         self.topology.node(id)
     }
+    /// Every edge currently in the graph, as `(from_node, from_socket, to_node, to_socket)`.
+    pub fn edges(&self) -> impl Iterator<Item = (GraphNodeId, usize, GraphNodeId, usize)> + '_ {
+        self.topology.edges()
+    }
     pub fn node_mut(&mut self, id: GraphNodeId) -> Result<NodeMutGuard<'_>, NodeError> {
         self.topology.node(id)?;
         Ok(NodeMutGuard { graph: self, id })

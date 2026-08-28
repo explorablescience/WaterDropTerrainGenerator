@@ -11,6 +11,7 @@ mod footer;
 mod panel_graph;
 mod panel_properties;
 mod panel_terrain_settings;
+mod project_io;
 pub mod theme;
 pub mod widgets;
 

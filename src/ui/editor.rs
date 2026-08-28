@@ -10,20 +10,28 @@ use wde::prelude::{ui::egui, *};
 
 use crate::{
     TerrainSessionHolder,
-    ui::{editor_behavior, editor_behavior::EditorBehavior, footer::EditorFooterSet, panel_graph::GraphInstance}
+    ui::{
+        editor_behavior, editor_behavior::EditorBehavior, footer::EditorFooterSet,
+        panel_graph::GraphEditorState, project_io
+    }
 };
 
 pub struct EditorPanelsPlugin;
 impl Plugin for EditorPanelsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EngineViewportRect>()
+            .init_resource::<GraphEditorState>()
             .add_systems(
                 PreUpdate,
                 block_camera_input_outside_engine.after(ui::EguiInputSet)
             )
             .add_systems(
                 Update,
-                draw_editor.after(EditorMenuBarSet).after(EditorFooterSet)
+                (
+                    project_io::draw_project_menu.after(EditorMenuBarSet),
+                    draw_editor.after(EditorMenuBarSet).after(EditorFooterSet)
+                )
+                    .chain()
             );
     }
 }
@@ -106,7 +114,7 @@ fn draw_editor(
     mut window_resized: MessageReader<WindowResized>,
     mut generation_id: Local<u64>,
     mut engine_rect: ResMut<EngineViewportRect>,
-    mut graph_instance: Local<Option<GraphInstance>>,
+    mut graph_instance: ResMut<GraphEditorState>,
     terrain_graph: Res<TerrainSessionHolder>
 ) {
     // Avoid weird resizing issues, so reset the graph generation on window resize
@@ -125,7 +133,7 @@ fn draw_editor(
             outer_rect = ui.max_rect();
             let mut behavior = EditorBehavior::new(
                 &generation_id,
-                graph_instance.get_or_insert_default(),
+                &mut graph_instance.0,
                 terrain_graph.clone(),
                 outer_rect
             );

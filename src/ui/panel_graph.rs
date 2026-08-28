@@ -1,3 +1,4 @@
+use bevy::prelude::Resource;
 use egui_snarl::{
     InPin, NodeId, OutPin, Snarl,
     ui::{
@@ -22,6 +23,21 @@ use crate::{
 pub type GraphInstance = Snarl<GraphNode>;
 pub enum GraphNode {
     Main(GraphNodeId)
+}
+
+/// Holds the `egui-snarl` graph UI state (node layout positions, wires) as a resource so it can be
+/// replaced wholesale by project load, not just mutated in place by the graph editor system.
+#[derive(Resource, Default)]
+pub struct GraphEditorState(pub GraphInstance);
+
+fn selection_id() -> egui::Id {
+    egui::Id::new("panel-graph-selected-node")
+}
+
+/// Clears the persisted graph-editor selection - used after a project load replaces every node id,
+/// so a stale selection left over from before the load can't be looked up against the new graph.
+pub fn clear_selection(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.remove::<SelectedNode>(selection_id()));
 }
 
 /// Identifies a node both in the `egui-snarl` UI graph and in the underlying `NodeGraph`.
@@ -430,7 +446,7 @@ pub fn show_graph(
         ..SnarlStyle::default()
     };
 
-    let selected_node_id = egui::Id::new("panel-graph-selected-node");
+    let selected_node_id = selection_id();
     let mut viewer = GraphViewer {
         selected: ui
             .ctx()

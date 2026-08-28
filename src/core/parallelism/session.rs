@@ -111,4 +111,14 @@ impl TerrainSession {
     pub fn graph_mut(&mut self) -> &mut NodeGraph {
         &mut self.graph
     }
+
+    /// Replaces the whole graph (e.g. after loading a project), discarding all per-chunk
+    /// generation bookkeeping, selection and messages tied to the previous graph's node ids.
+    pub fn reset_graph(&mut self, graph: NodeGraph) {
+        self.graph = graph;
+        self.chunk_generations.clear();
+        self.displayed_node = None;
+        self.selected_node = None;
+        self.messages = NodeMessageLog::default();
+    }
 }

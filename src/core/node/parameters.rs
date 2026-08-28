@@ -1,7 +1,9 @@
 use std::hash::Hash;
 
+use serde::{Deserialize, Serialize};
+
 /// Represents the value of a node parameter, which can be of various types.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NParamValue {
     Int(i32),
     Float(f32),
