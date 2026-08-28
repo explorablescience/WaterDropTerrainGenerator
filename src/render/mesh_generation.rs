@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 use wde::prelude::*;
 
-use crate::render::HEIGHT_SCALE;
+/// World-space height gained per unit of heightmap value.
+const HEIGHT_SCALE: f32 = 1.0;
 
 /// Builds a grid [`Mesh`] of `size x size` quads - `(size + 1) x (size + 1)` vertices, spaced
 /// `cell_size` world units apart so a tile's world-space footprint is `size * cell_size`
