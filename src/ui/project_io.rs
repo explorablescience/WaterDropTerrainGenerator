@@ -89,6 +89,7 @@ pub fn draw_project_menu(
             match load_project(&terrain_graph, &mut graph_instance.0, &path) {
                 Ok(()) => {
                     panel_graph::clear_selection(&ctx.0);
+                    panel_graph::clear_pins(&ctx.0);
                     info!("Loaded project from {}", path.display());
                 }
                 Err(e) => error!("Failed to load project: {e}")

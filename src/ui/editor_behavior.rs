@@ -58,21 +58,26 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
             match pane {
                 EditorPanels::Engine => {}
                 EditorPanels::Graph => {
-                    let selected_node = panel_graph::show_graph(
+                    let (selected_node, pinned_node) = panel_graph::show_graph(
                         self.graph_id,
                         ui,
                         self.graph_instance,
                         self.terrain_graph.clone()
                     );
                     let old_selected_node = self.terrain_graph.read().selected_node;
-                    if old_selected_node != selected_node.map(|node| node.graph_id) {
+                        let render_node = pinned_node.or(selected_node);
+                        if old_selected_node != render_node.map(|node| node.graph_id) {
                         self.terrain_graph.write().selected_node =
-                            selected_node.map(|node| node.graph_id);
+                            render_node.map(|node| node.graph_id);
                     }
                 }
                 EditorPanels::Properties => {
-                    let selected_node = self.terrain_graph.read().selected_node; // Watch out for deadlocks
-                    panel_properties::draw_properties(ui, &self.terrain_graph, selected_node);
+                    let selected_node = panel_graph::selected_node(ui.ctx());
+                    panel_properties::draw_properties(
+                        ui,
+                        &self.terrain_graph,
+                        selected_node.map(|node| node.graph_id)
+                    );
                 }
             }
         });

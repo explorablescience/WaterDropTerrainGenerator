@@ -34,11 +34,23 @@ fn selection_id() -> egui::Id {
     egui::Id::new("panel-graph-selected-node")
 }
 
+fn pinned_nodes_id() -> egui::Id {
+        egui::Id::new("panel-graph-pinned-nodes")
+    }
+
 /// Clears the persisted graph-editor selection - used after a project load replaces every node id,
 /// so a stale selection left over from before the load can't be looked up against the new graph.
 pub fn clear_selection(ctx: &egui::Context) {
     ctx.data_mut(|d| d.remove::<SelectedNode>(selection_id()));
 }
+
+pub fn selected_node(ctx: &egui::Context) -> Option<SelectedNode> {
+    ctx.data(|d| d.get_temp::<SelectedNode>(selection_id()))
+}
+
+pub fn clear_pins(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.remove::<GraphNodeId>(pinned_nodes_id()));
+    }
 
 /// Identifies a node both in the `egui-snarl` UI graph and in the underlying `NodeGraph`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +61,7 @@ pub struct SelectedNode {
 
 struct GraphViewer {
     selected: Option<SelectedNode>,
+    pinned: Option<GraphNodeId>,
     terrain_graph: TerrainSessionHolder
 }
 impl SnarlViewer<GraphNode> for GraphViewer {
@@ -149,6 +162,15 @@ impl SnarlViewer<GraphNode> for GraphViewer {
                     .color(color)
                     .font(theme::heading_font(theme::fonts::FONT_SIZE_NODE_TITLE))
             );
+
+            let pinned = self.is_pinned(node, instance);
+            let (pin_rect, pin_response) =
+                ui.allocate_exact_size(egui::Vec2::splat(12.0), egui::Sense::click());
+            if pin_response.clicked() {
+                self.toggle_pin(node, instance);
+            }
+            pin_response.on_hover_text(if pinned { "Unpin node" } else { "Pin node" });
+            paint_pin_icon(ui, pin_rect, color, pinned);
         });
     }
     fn show_input(
@@ -295,6 +317,9 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         ui: &mut egui::Ui,
         snarl: &mut Snarl<GraphNode>
     ) {
+        let GraphNode::Main(graph_id) = snarl[node];
+        self.draw_pinned_frame(node, rect, ui, snarl);
+
         let to_global = ui
             .ctx()
             .layer_transform_to_global(ui.layer_id())
@@ -309,15 +334,50 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         });
 
         if clicked_inside {
-            let GraphNode::Main(graph_id) = &snarl[node];
             self.selected = Some(SelectedNode {
                 snarl_id: node,
-                graph_id: *graph_id
+                graph_id
             });
         }
     }
 }
 impl GraphViewer {
+    fn is_pinned(&self, node: NodeId, snarl: &GraphInstance) -> bool {
+        let GraphNode::Main(graph_id) = &snarl[node];
+        self.pinned == Some(*graph_id)
+    }
+
+    fn toggle_pin(&mut self, node: NodeId, snarl: &GraphInstance) {
+        let GraphNode::Main(graph_id) = &snarl[node];
+        if self.pinned == Some(*graph_id) {
+            self.pinned = None;
+        } else if snarl.get_node_info(node).is_some() {
+            self.pinned = Some(*graph_id);
+        }
+    }
+
+    fn draw_pinned_frame(
+        &self,
+        node: NodeId,
+        rect: egui::Rect,
+        ui: &egui::Ui,
+        snarl: &GraphInstance
+    ) {
+        if !self.is_pinned(node, snarl) {
+            return;
+        }
+
+        let GraphNode::Main(graph_id) = snarl[node];
+        let color = self
+            .terrain_graph
+            .read()
+            .graph()
+            .node(graph_id)
+            .map(|node| theme::category_color(node.category()))
+            .unwrap_or(theme::palette::TEXT_MUTED);
+        draw_dashed_rect(ui, rect.expand(1.5), color, 1.5, 5.0, 3.0);
+    }
+
     /// Applies the selection highlight stroke only when `node` is selected.
     fn selection_frame(
         &self,
@@ -372,6 +432,9 @@ impl GraphViewer {
             .remove_node(*graph_id)
             .is_ok()
         {
+            if self.pinned == Some(*graph_id) {
+                self.pinned = None;
+            }
             snarl.remove_node(node);
             if self
                 .selected
@@ -403,12 +466,72 @@ fn show_pin_label(ui: &mut egui::Ui, name: &str, connected: bool) {
     );
 }
 
+fn paint_pin_icon(ui: &egui::Ui, rect: egui::Rect, color: egui::Color32, pinned: bool) {
+    let color = if pinned {
+        color.gamma_multiply(1.4)
+    } else {
+        theme::palette::TEXT_DISABLED
+    };
+    let center = rect.center();
+    let painter = ui.painter();
+    painter.line_segment(
+        [center + egui::vec2(-2.5, -3.0), center + egui::vec2(2.5, -3.0)],
+        egui::Stroke::new(1.2, color)
+    );
+    painter.line_segment(
+        [center + egui::vec2(-2.0, -3.0), center + egui::vec2(-2.0, 0.0)],
+        egui::Stroke::new(1.2, color)
+    );
+    painter.line_segment(
+        [center + egui::vec2(2.0, -3.0), center + egui::vec2(2.0, 0.0)],
+        egui::Stroke::new(1.2, color)
+    );
+    painter.line_segment(
+        [center + egui::vec2(-3.0, 0.0), center + egui::vec2(3.0, 0.0)],
+        egui::Stroke::new(1.2, color)
+    );
+    painter.line_segment(
+        [center + egui::vec2(0.0, 0.0), center + egui::vec2(0.0, 3.5)],
+        egui::Stroke::new(1.2, color)
+    );
+}
+
+fn draw_dashed_rect(
+    ui: &egui::Ui,
+    rect: egui::Rect,
+    color: egui::Color32,
+    width: f32,
+    dash: f32,
+    gap: f32
+) {
+    let painter = ui.painter();
+    for (start, end) in [
+        (rect.left_top(), rect.right_top()),
+        (rect.right_top(), rect.right_bottom()),
+        (rect.right_bottom(), rect.left_bottom()),
+        (rect.left_bottom(), rect.left_top())
+    ] {
+        let direction = end - start;
+        let length = direction.length();
+        let direction = direction / length.max(f32::EPSILON);
+        let mut offset = 0.0;
+        while offset < length {
+            let dash_end = (offset + dash).min(length);
+            painter.line_segment(
+                [start + direction * offset, start + direction * dash_end],
+                egui::Stroke::new(width, color)
+            );
+            offset += dash + gap;
+        }
+    }
+}
+
 pub fn show_graph(
     id: egui::Id,
     ui: &mut egui::Ui,
     graph_instance: &mut GraphInstance,
     terrain_graph: TerrainSessionHolder
-) -> Option<SelectedNode> {
+) -> (Option<SelectedNode>, Option<SelectedNode>) {
     let style = SnarlStyle {
         node_layout: Some(
             NodeLayout::coil()
@@ -451,6 +574,7 @@ pub fn show_graph(
         selected: ui
             .ctx()
             .data(|d| d.get_temp::<SelectedNode>(selected_node_id)),
+        pinned: ui.ctx().data(|d| d.get_temp::<GraphNodeId>(pinned_nodes_id())),
         terrain_graph
     };
     if viewer.selected.is_none()
@@ -480,5 +604,18 @@ pub fn show_graph(
             .ctx()
             .data_mut(|d| d.remove::<SelectedNode>(selected_node_id))
     }
-    viewer.selected
+    ui.ctx().data_mut(|d| match viewer.pinned {
+        Some(graph_id) => d.insert_temp(pinned_nodes_id(), graph_id),
+        None => d.remove::<GraphNodeId>(pinned_nodes_id())
+    });
+
+    let pinned_node = viewer.pinned.and_then(|graph_id| {
+        graph_instance
+            .nodes_pos_ids()
+            .find_map(|(snarl_id, _, node)| match node {
+                GraphNode::Main(id) if *id == graph_id => Some(SelectedNode { snarl_id, graph_id }),
+                _ => None
+            })
+    });
+    (viewer.selected, pinned_node)
 }
