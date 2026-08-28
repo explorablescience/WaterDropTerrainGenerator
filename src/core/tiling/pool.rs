@@ -73,12 +73,4 @@ impl TilePool {
     pub fn tile_length(&self) -> usize {
         self.tile_length
     }
-
-    /// Total bytes currently reserved on the heap for this pool's tiles (free or in use).
-    pub fn allocated_bytes(&self) -> usize {
-        self.allocated_tiles.load(Ordering::Relaxed)
-            * self.tile_length
-            * self.tile_length
-            * std::mem::size_of::<f32>()
-    }
 }

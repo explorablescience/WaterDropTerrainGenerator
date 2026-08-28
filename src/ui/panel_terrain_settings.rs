@@ -1,12 +1,12 @@
-//! "Terrain / Settings" window: chunk-grid parameters and a one-shot whole-terrain export - both scoped to the whole project, so they live here instead of `panel_properties`.
+//! "Terrain / Settings" window: chunk-grid parameters, scoped to the whole project so they live
+//! here instead of `panel_properties`.
 
 use bevy::prelude::*;
-use rfd::FileDialog;
 use wde::prelude::{ui::egui, *};
 
 use crate::{
     TerrainSessionHolder, core::{
-        node::{NParamConstraints, NParamDesc, NParamValue}, session::TILE_RESOLUTIONS, tiling::ChunkGrid
+        node::{NParamConstraints, NParamDesc, NParamValue}, parallelism::TILE_RESOLUTIONS, tiling::ChunkGrid
     }, ui::{theme, widgets}
 };
 
@@ -19,8 +19,7 @@ pub(super) struct TerrainSettingsState {
     chunks_x: f32,
     chunks_y: f32,
     tile_size: String,
-    world_scale: f32,
-    export_path: String
+    world_scale: f32
 }
 
 /// Built fresh each frame just to drive [`widgets::slider`]'s display - not a real node parameter.
@@ -133,56 +132,6 @@ pub fn draw_terrain_settings(
                 );
                 terrain_graph.write().graph_mut().set_chunk_grid(grid);
             });
-
-            ui.add_space(10.0);
-            section_label(ui, "Export Whole Terrain");
-
-            widgets::text_field(
-                ui,
-                "File Path",
-                theme::palette::ACCENT,
-                &mut state.export_path,
-                None
-            );
-            widgets::button(ui, "Browse...", theme::palette::ACCENT, || {
-                let mut dialog = FileDialog::new().add_filter("PNG heightmap", &["png"]);
-                if let Some(dir) = std::path::Path::new(&state.export_path).parent()
-                    && !dir.as_os_str().is_empty()
-                {
-                    dialog = dialog.set_directory(dir);
-                }
-                if let Some(file) = dialog.save_file() {
-                    state.export_path = file.display().to_string();
-                }
-            });
-
-            let selected = terrain_graph.read().selected_node;
-            match selected {
-                Some(node_id) if !state.export_path.trim().is_empty() => {
-                    let export_path = state.export_path.clone();
-                    widgets::button(ui, "Export", theme::palette::ACCENT, || {
-                        let mut path = std::path::PathBuf::from(&export_path);
-                        path.set_extension("png");
-                        match terrain_graph.write().export_stitched_png(node_id, &path) {
-                            Ok(()) => info!("Exported whole terrain to '{}'", path.display()),
-                            Err(e) => error!(
-                                "Failed to export whole terrain to '{}': {}",
-                                path.display(),
-                                e
-                            )
-                        }
-                    });
-                }
-                _ => {
-                    ui.label(
-                        egui::RichText::new(
-                            "Select a node in the graph and set a file path to export."
-                        )
-                        .font(theme::body_font(theme::fonts::FONT_SIZE_SMALL))
-                        .color(theme::palette::TEXT_DISABLED)
-                    );
-                }
-            }
         });
 }
 

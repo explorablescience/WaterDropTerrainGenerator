@@ -32,8 +32,6 @@ pub struct EvalCache {
     states: Mutex<HashMap<(GraphNodeId, EvalScope), NodeState>>
 }
 impl EvalCache {
-    /// Returns an owned clone rather than a reference, since a reference into the map couldn't
-    /// outlive the lock guard.
     pub fn state(&self, id: GraphNodeId, scope: EvalScope) -> NodeState {
         self.states
             .lock()

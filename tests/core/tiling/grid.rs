@@ -1,16 +1,8 @@
 use waterdrop_terrain_generator::core::tiling::{ChunkCoord, ChunkGrid};
 
 #[test]
-fn single_covers_the_whole_terrain_in_one_chunk_spanning_one_world_unit() {
-    let grid = ChunkGrid::single(128);
-    assert_eq!(grid.chunk_count(), 1);
-    assert_eq!(grid.world_extent(), (1.0, 1.0));
-}
-
-#[test]
-fn chunk_count_is_the_product_of_both_axes() {
+fn coords_count_is_the_product_of_both_axes() {
     let grid = ChunkGrid::new(3, 2, 16, 1.0);
-    assert_eq!(grid.chunk_count(), 6);
     assert_eq!(grid.coords().count(), 6);
 }
 

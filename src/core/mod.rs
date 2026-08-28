@@ -2,5 +2,5 @@
 
 pub mod graph;
 pub mod node;
-pub mod session;
+pub mod parallelism;
 pub mod tiling;

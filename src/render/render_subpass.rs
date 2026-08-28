@@ -4,26 +4,16 @@ use bevy::{
 };
 use wde::prelude::*;
 
-use crate::render::terrain_preview_pipeline::TerrainPreviewRenderPipeline;
+use crate::render::render_pipeline::TerrainPreviewRenderPipeline;
 
-/// What [`update_terrain_preview`](super::update_terrain_preview) wants drawn through [`SubRenderPassTerrainPreview`] this frame
-#[derive(Resource, Default, Clone)]
+/// Stores the meshes and material to be rendered.
+#[derive(Resource, Default, Clone, ExtractResource)]
 pub(crate) struct TerrainPreviewMeshes {
     pub meshes: Vec<Handle<Mesh>>,
     pub material: Option<Handle<PbrMaterial>>
 }
 
 pub(crate) struct SubRenderPassTerrainPreview;
-impl SubRenderPassTerrainPreview {
-    pub fn extract(
-        main: ExtractWorld<Res<TerrainPreviewMeshes>>,
-        mut render: ResMut<TerrainPreviewMeshes>
-    ) {
-        render.meshes = main.meshes.clone();
-        render.material = main.material.clone();
-    }
-}
-
 impl RenderSubPass for SubRenderPassTerrainPreview {
     type Params = (
         SRes<TerrainPreviewMeshes>,

@@ -48,14 +48,6 @@ impl TileContext {
         )
     }
 
-    /// Normalizes a world-space position into `[0, 1)` across this context's `world_extent`.
-    pub fn normalize(&self, world: (f32, f32)) -> (f32, f32) {
-        (
-            world.0 / self.world_extent.0 + 0.5,
-            world.1 / self.world_extent.1 + 0.5
-        )
-    }
-
     /// Maps world-space into an arbitrarily placed frame's local space, given that frame's `position` (world origin) and `scale` (world units per local unit). Counterpart to [`Self::to_texel`].
     pub fn to_local(world: (f32, f32), position: (f32, f32), scale: f32) -> (f32, f32) {
         (

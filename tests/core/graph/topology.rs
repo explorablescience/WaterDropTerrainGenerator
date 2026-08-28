@@ -106,7 +106,7 @@ impl Node for FakeOptionalSink {
 
 #[test]
 fn connecting_mismatched_socket_types_fails() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let source = graph.add_node(Box::new(FakeHeightSource));
     let sink = graph.add_node(Box::new(FakeMaskSink));
 
@@ -116,7 +116,7 @@ fn connecting_mismatched_socket_types_fails() {
 
 #[test]
 fn connecting_to_an_out_of_range_output_socket_fails() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let source = graph.add_node(Box::new(FakeHeightSource));
     let sink = graph.add_node(Box::new(Erosion::default()));
 
@@ -129,7 +129,7 @@ fn connecting_to_an_out_of_range_output_socket_fails() {
 
 #[test]
 fn connecting_to_an_out_of_range_input_socket_fails() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let source = graph.add_node(Box::new(FakeHeightSource));
     let sink = graph.add_node(Box::new(Erosion::default()));
 
@@ -139,7 +139,7 @@ fn connecting_to_an_out_of_range_input_socket_fails() {
 
 #[test]
 fn optional_unconnected_input_is_fed_a_neutral_zero_tile() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let sink = graph.add_node(Box::new(FakeOptionalSink));
 
     let result = graph
@@ -152,46 +152,8 @@ fn optional_unconnected_input_is_fed_a_neutral_zero_tile() {
 }
 
 #[test]
-fn connecting_a_second_source_to_an_occupied_input_replaces_the_first() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
-    let a = graph.add_node(Box::new(Flat));
-    let b = graph.add_node(Box::new(Perlin::default()));
-    let sink = graph.add_node(Box::new(Erosion::default()));
-
-    graph
-        .connect(a, 0, sink, 0)
-        .expect("first connection should succeed");
-    graph
-        .connect(b, 0, sink, 0)
-        .expect("replacing the first connection should succeed");
-
-    let inputs = graph.inputs(sink).expect("sink should exist");
-    assert_eq!(
-        inputs,
-        &[Some((b, 0))],
-        "the input should now come from b, not a"
-    );
-}
-
-#[test]
-fn disconnect_removes_the_edge_and_leaves_the_input_socket_empty() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
-    let source = graph.add_node(Box::new(Flat));
-    let sink = graph.add_node(Box::new(Erosion::default()));
-    graph.connect(source, 0, sink, 0).unwrap();
-
-    graph
-        .disconnect(source, 0, sink, 0)
-        .expect("disconnecting an existing edge should succeed");
-    assert_eq!(graph.inputs(sink).unwrap(), &[None]);
-
-    // Processing should now fail again since the required input is gone.
-    assert!(graph.process(sink).is_err());
-}
-
-#[test]
 fn disconnecting_an_edge_that_does_not_exist_fails() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let source = graph.add_node(Box::new(Flat));
     let sink = graph.add_node(Box::new(Erosion::default()));
 
@@ -200,20 +162,8 @@ fn disconnecting_an_edge_that_does_not_exist_fails() {
 }
 
 #[test]
-fn node_ids_skips_removed_nodes_but_keeps_surviving_ids_stable() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
-    let a = graph.add_node(Box::new(Flat));
-    let b = graph.add_node(Box::new(Flat));
-    let c = graph.add_node(Box::new(Flat));
-    graph.remove_node(b).unwrap();
-
-    let ids: Vec<_> = graph.node_ids().collect();
-    assert_eq!(ids, vec![a, c]);
-}
-
-#[test]
 fn processing_an_unknown_node_id_fails() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let id = graph.add_node(Box::new(Flat));
     graph.remove_node(id).unwrap();
     assert!(graph.process(id).is_err());

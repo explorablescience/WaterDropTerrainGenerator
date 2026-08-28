@@ -79,11 +79,3 @@ fn to_local_and_to_texel_compose_into_the_manual_integration_formula() {
     assert!((sx - expected_sx).abs() < 1e-5);
     assert!((sy - expected_sy).abs() < 1e-5);
 }
-
-#[test]
-fn normalize_maps_the_extents_edges_to_zero_and_one() {
-    let ctx = TileContext::for_global(4);
-    assert_eq!(ctx.normalize((-0.5, -0.5)), (0.0, 0.0));
-    assert_eq!(ctx.normalize((0.5, 0.5)), (1.0, 1.0));
-    assert_eq!(ctx.normalize((0.0, 0.0)), (0.5, 0.5));
-}

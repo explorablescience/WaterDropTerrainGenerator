@@ -3,5 +3,5 @@
 
 mod graph;
 mod node;
-mod session;
+mod parallelism;
 mod tiling;

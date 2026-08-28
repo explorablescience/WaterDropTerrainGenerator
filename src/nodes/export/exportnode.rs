@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use rfd::FileDialog;
@@ -7,14 +6,14 @@ use crate::core::node::{
     NParamDesc, NParamValue, Node, NodeCategory, NodeDescriptor, NodeError, NodeIcon, NodePortType,
     NodeSocket
 };
-use crate::core::tiling::{TileContext, TileHandle, TilePool, crop_center, save_heightmap_png};
+use crate::core::tiling::{TileContext, TileHandle, TilePool};
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-save",
     png_bytes: include_bytes!("../../../assets/icons/node_save.png")
 };
 
-/// Saves the heightmap to disk as a PNG file.
+/// Exports the whole, stitched-together terrain to disk as a PNG heightmap.
 #[derive(Debug, Default)]
 pub struct ExportFile {
     file_path: String
@@ -42,7 +41,7 @@ impl ExportFile {
                 },
                 NParamDesc {
                     key: "save",
-                    label: "Save Heightmap",
+                    label: "Export Terrain",
                     category: "Export",
                     default: NParamValue::Action {
                         show_success_message: true
@@ -51,23 +50,6 @@ impl ExportFile {
                 },
             ]
         })
-    }
-
-    fn save_to_disk(&self, output: &[TileHandle], output_size: usize) -> Result<(), NodeError> {
-        let Some(heightmap) = output.first() else {
-            return Err("No heightmap available to save".into());
-        };
-        if self.file_path.trim().is_empty() {
-            return Err("File path is empty".into());
-        }
-
-        let internal_size = heightmap.size();
-        let data = crop_center(heightmap, internal_size, output_size);
-
-        let mut path = PathBuf::from(&self.file_path);
-        path.set_extension("png");
-
-        save_heightmap_png(&data, output_size, output_size, &path).map_err(NodeError::from)
     }
 }
 impl Node for ExportFile {
@@ -116,17 +98,17 @@ impl Node for ExportFile {
     fn process(
         &self,
         _pool: &std::sync::Arc<TilePool>,
-        inputs: &[TileHandle],
+        _inputs: &[TileHandle],
         _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
-        Ok(inputs.to_vec())
+        todo!()
     }
 
     fn on_action(
         &mut self,
         key: &str,
-        output: &[TileHandle],
-        output_size: usize
+        _output: &[TileHandle],
+        _output_size: usize
     ) -> Result<(), NodeError> {
         match key {
             "browse" => {
@@ -141,8 +123,7 @@ impl Node for ExportFile {
                 }
                 Ok(())
             }
-            "save" => self.save_to_disk(output, output_size),
-            _ => Err(format!("Unknown action '{}'", key).into())
+            _ => unreachable!("Unknown action key {}", key)
         }
     }
 }

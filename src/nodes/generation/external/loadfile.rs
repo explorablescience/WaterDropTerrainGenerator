@@ -1,6 +1,5 @@
 use std::sync::{Arc, OnceLock};
 
-use rayon::prelude::*;
 use rfd::FileDialog;
 
 use crate::core::node::{
@@ -14,19 +13,10 @@ const ICON: NodeIcon = NodeIcon {
     png_bytes: include_bytes!("../../../../assets/icons/node_load.png")
 };
 
-/// Kept in memory so `process` can resample it at whatever resolution the graph requests without touching the filesystem again.
-#[derive(Debug, Clone)]
-struct LoadedImage {
-    data: Vec<f32>,
-    width: u32,
-    height: u32
-}
-
 /// Loads a heightmap from disk as a PNG file and outputs it as a single tile
 #[derive(Debug, Default)]
 pub struct LoadFile {
-    file_path: String,
-    loaded: Option<LoadedImage>
+    file_path: String
 }
 impl LoadFile {
     fn params() -> &'static [NParamDesc] {
@@ -60,43 +50,6 @@ impl LoadFile {
                 },
             ]
         })
-    }
-
-    fn load_from_disk(&mut self) -> Result<(), NodeError> {
-        if self.file_path.trim().is_empty() {
-            return Err("File path is empty".into());
-        }
-
-        let image = image::open(&self.file_path)
-            .map_err(|e| format!("Failed to load '{}': {}", self.file_path, e))?
-            .into_luma8();
-        let (width, height) = image.dimensions();
-        let data = image.into_raw().iter().map(|&v| v as f32 / 255.0).collect();
-
-        self.loaded = Some(LoadedImage {
-            data,
-            width,
-            height
-        });
-        Ok(())
-    }
-
-    /// Bilinearly samples the loaded image at normalized coordinates `u, v` in `[0, 1]`.
-    fn sample(image: &LoadedImage, u: f32, v: f32) -> f32 {
-        let px = |x: u32, y: u32| image.data[(y * image.width + x) as usize];
-
-        let fx = (u * image.width as f32 - 0.5).clamp(0.0, (image.width - 1) as f32);
-        let fy = (v * image.height as f32 - 0.5).clamp(0.0, (image.height - 1) as f32);
-        let x0 = fx as u32;
-        let y0 = fy as u32;
-        let x1 = (x0 + 1).min(image.width - 1);
-        let y1 = (y0 + 1).min(image.height - 1);
-        let tx = fx - x0 as f32;
-        let ty = fy - y0 as f32;
-
-        let top = px(x0, y0) * (1.0 - tx) + px(x1, y0) * tx;
-        let bottom = px(x0, y1) * (1.0 - tx) + px(x1, y1) * tx;
-        top * (1.0 - ty) + bottom * ty
     }
 }
 impl Node for LoadFile {
@@ -161,33 +114,18 @@ impl Node for LoadFile {
                 }
                 Ok(())
             }
-            "load" => self.load_from_disk(),
+            "load" => todo!(),
             _ => Err(format!("Unknown action '{}'", key).into())
         }
     }
 
     fn process(
         &self,
-        pool: &Arc<TilePool>,
+        _pool: &Arc<TilePool>,
         _inputs: &[TileHandle],
-        ctx: &TileContext
+        _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
-        let Some(image) = &self.loaded else {
-            return Err(NodeError::ProcessingFailed(
-                "No heightmap loaded - browse to a PNG file and click 'Load Heightmap'".to_string()
-            ));
-        };
-
-        // The loaded image covers the whole terrain, so each chunk samples its own footprint of it.
-        let mut output = pool.allocate();
-        let s = output.size();
-        output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
-            for (x, texel) in row.iter_mut().enumerate() {
-                let (u, v) = ctx.normalize(ctx.world_pos(x, y));
-                *texel = Self::sample(image, u, v);
-            }
-        });
-        Ok(vec![Arc::new(output)])
+        todo!()
     }
 }
 

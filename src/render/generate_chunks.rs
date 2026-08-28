@@ -5,11 +5,11 @@ use wde::prelude::*;
 
 use crate::{
     TerrainSessionHolder,
-    core::{node::NodeLocality, session::ChunkJobs, tiling::ChunkCoord},
+    core::{node::NodeLocality, parallelism::ChunkJobs, tiling::ChunkCoord},
     render::{
-        terrain_preview_global::update_global_preview,
-        terrain_preview_local::update_local_preview,
-        terrain_preview_subpass::TerrainPreviewMeshes
+        generate_chunks_global::update_render_chunks_global,
+        generate_chunks_local::update_render_chunks_local,
+        render_subpass::TerrainPreviewMeshes
     }
 };
 
@@ -26,6 +26,7 @@ pub struct TerrainPreview {
     material_handle: Option<Handle<PbrMaterial>>
 }
 
+/// Creates the material used for rendering the terrain preview meshes.
 pub(crate) fn create_material(
     asset_server: Res<AssetServer>,
     mut terrain_preview: ResMut<TerrainPreview>
@@ -37,7 +38,8 @@ pub(crate) fn create_material(
     }));
 }
 
-pub(crate) fn update_terrain_preview(
+/// Updates the terrain preview meshes based on the currently selected node in the terrain graph.
+pub(crate) fn update_render_chunks(
     mut meshes: ResMut<Assets<Mesh>>,
     mut terrain_preview: ResMut<TerrainPreview>,
     mut terrain_preview_meshes: ResMut<TerrainPreviewMeshes>,
@@ -48,22 +50,17 @@ pub(crate) fn update_terrain_preview(
         Some(node_id) => node_id,
         None => return
     };
-    let locality = match terrain_graph.read().graph().node(selected_node) {
+    let node_locality = match terrain_graph.read().graph().node(selected_node) {
         Ok(node) => node.locality(),
-        Err(_) => return // Selected node no longer exists (e.g. it was just removed)
+        Err(_) => return // Selected node no longer exists
     };
-
-    if terrain_graph.read().graph().is_cooling_down() {
-        // Debounce: a param still changing every frame (e.g. a slider being dragged) keeps
-        // re-arming this, so reprocessing only fires once edits stop landing for a moment.
+    if !terrain_graph.read().graph().should_reprocess() {
         return;
     }
 
-    let force = terrain_graph.write().note_selection(selected_node);
+    // If the selected node has changed, clear all previous chunk jobs
+    let force = terrain_graph.write().node_just_selected(selected_node);
     if force {
-        // A previous selection's jobs are no longer relevant - drop them so a late result
-        // computed for that node is never mistaken for this one's (they'd collide on the same
-        // `ChunkCoord` keys).
         chunk_jobs.clear();
     }
 
@@ -71,9 +68,8 @@ pub(crate) fn update_terrain_preview(
         Some(handle) => handle.clone(),
         None => return // Material not created yet
     };
-
-    match locality {
-        NodeLocality::Global { native_resolution } => update_global_preview(
+    match node_locality {
+        NodeLocality::Global { native_resolution } => update_render_chunks_global(
             &mut meshes,
             &mut terrain_preview,
             &mut terrain_preview_meshes,
@@ -83,7 +79,7 @@ pub(crate) fn update_terrain_preview(
             native_resolution,
             force
         ),
-        NodeLocality::Local => update_local_preview(
+        NodeLocality::Local => update_render_chunks_local(
             &mut meshes,
             &mut terrain_preview,
             &mut terrain_preview_meshes,
@@ -151,11 +147,12 @@ pub(super) fn upsert_chunk_mesh(
 }
 
 /// Publishes every chunk's current mesh into the render-world-facing resource so [`SubRenderPassTerrainPreview`](super::terrain_preview_subpass::SubRenderPassTerrainPreview) draws them next extract.
-pub(super) fn publish_preview_meshes(
+pub(super) fn set_preview_meshes(
     terrain_preview: &TerrainPreview,
     terrain_preview_meshes: &mut TerrainPreviewMeshes,
     material_handle: Handle<PbrMaterial>
 ) {
+    let _span = debug_span!("set_preview_meshes").entered();
     terrain_preview_meshes.meshes = terrain_preview
         .chunks
         .values()

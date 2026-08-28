@@ -6,10 +6,7 @@ use crate::core::tiling::context::TileContext;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkCoord(pub i32, pub i32);
 
-/// The terrain-level layout that chunked evaluation is parameterized by: how many chunks make up
-/// the terrain, how many texels each chunk covers, and how texel indices map to a shared
-/// world-space coordinate frame so position-aware nodes (e.g. noise generators) sample
-/// consistently across chunk boundaries.
+/// A grid of chunks, each with a square tile of texels, that together cover the whole terrain.
 #[derive(Debug, Clone, Copy)]
 pub struct ChunkGrid {
     chunks_x: u32,
@@ -23,7 +20,7 @@ impl ChunkGrid {
     pub fn new(chunks_x: u32, chunks_y: u32, tile_size: usize, world_scale: f32) -> Self {
         assert!(
             chunks_x > 0 && chunks_y > 0,
-            "a chunk grid needs at least one chunk"
+            "A chunk grid needs at least one chunk"
         );
         Self {
             chunks_x,
@@ -31,11 +28,6 @@ impl ChunkGrid {
             tile_size,
             world_scale
         }
-    }
-
-    /// A degenerate 1x1 grid spanning the whole terrain in a single chunk.
-    pub fn single(tile_size: usize) -> Self {
-        Self::new(1, 1, tile_size, 1.0 / tile_size as f32)
     }
 
     pub fn chunks_x(&self) -> u32 {
@@ -49,9 +41,6 @@ impl ChunkGrid {
     }
     pub fn world_scale(&self) -> f32 {
         self.world_scale
-    }
-    pub fn chunk_count(&self) -> u32 {
-        self.chunks_x * self.chunks_y
     }
 
     /// Every chunk coordinate in the grid, in row-major order.

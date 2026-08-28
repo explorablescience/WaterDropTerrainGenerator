@@ -1,19 +1,16 @@
-//! Tests for `src/core/session/`: the live terrain project. `export` covers whole-terrain
-//! stitching, `project` covers save/load persistence, and `TerrainSession`/`TerrainSessionHolder`
-//! themselves - defined directly in `session/mod.rs`, not a nested file - are tested right here.
+//! Tests for `src/core/parallelism/`: the live terrain session. `TerrainSession`/
+//! `TerrainSessionHolder` are defined directly in `session.rs`, not a nested file, and are tested
+//! right here.
 
 use std::time::Duration;
 
 use waterdrop_terrain_generator::core::graph::NodeGraph;
 use waterdrop_terrain_generator::core::node::{
-    NParamValue, NodeError, NodeMessageLog, NodeMessageSeverity
+    NodeError, NodeMessageLog, NodeMessageSeverity
 };
 use waterdrop_terrain_generator::core::tiling::ChunkGrid;
 use waterdrop_terrain_generator::nodes::*;
 use waterdrop_terrain_generator::{TerrainSession, TerrainSessionHolder};
-
-mod export;
-mod project;
 
 #[test]
 fn default_terrain_session_has_no_selection_and_no_messages() {
@@ -24,7 +21,7 @@ fn default_terrain_session_has_no_selection_and_no_messages() {
 #[test]
 fn action_result_ok_shows_as_an_info_message_that_can_be_cleared() {
     let mut terrain = TerrainSession::default();
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let id = graph.add_node(Box::new(Flat));
 
     terrain.set_action_result(id, Ok("Saved!".to_string()));
@@ -41,7 +38,7 @@ fn action_result_ok_shows_as_an_info_message_that_can_be_cleared() {
 #[test]
 fn action_result_err_shows_with_the_errors_own_severity() {
     let mut terrain = TerrainSession::default();
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let id = graph.add_node(Box::new(Flat));
 
     terrain.set_action_result(
@@ -58,7 +55,7 @@ fn action_result_err_shows_with_the_errors_own_severity() {
 #[test]
 fn a_persistent_error_message_never_expires_on_its_own() {
     let mut terrain = TerrainSession::default();
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let id = graph.add_node(Box::new(Flat));
 
     terrain.set_action_result(id, Err(NodeError::ProcessingFailed("boom".to_string())));
@@ -73,7 +70,7 @@ fn a_persistent_error_message_never_expires_on_its_own() {
 #[test]
 fn setting_a_new_action_result_replaces_whatever_was_shown_before() {
     let mut terrain = TerrainSession::default();
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let id = graph.add_node(Box::new(Flat));
 
     terrain.set_action_result(
@@ -85,73 +82,6 @@ fn setting_a_new_action_result_replaces_whatever_was_shown_before() {
     let msg = terrain.action_message(id).unwrap();
     assert_eq!(msg.severity, NodeMessageSeverity::Info);
     assert_eq!(msg.text, "now it works");
-}
-
-#[test]
-fn process_returns_the_new_generation_only_the_first_time_its_seen() {
-    let mut terrain = TerrainSession::default();
-    let source = terrain.graph_mut().add_node(Box::new(Flat));
-    let sink = terrain
-        .graph_mut()
-        .add_node(Box::new(Erosion::default()));
-    terrain
-        .graph_mut()
-        .connect(source, 0, sink, 0)
-        .expect("connection should succeed");
-
-    let first = terrain
-        .process(sink)
-        .expect("processing should succeed")
-        .expect("a fresh generation should be reported");
-    // The generation counter is global to the graph and advances once per node actually
-    // recomputed (here: both `source` and `sink`), so it isn't necessarily 1 on the first call.
-    assert!(first.0 > 0);
-
-    // Nothing changed since: the underlying graph serves the same cached generation, so
-    // `TerrainSession::process` should report that there's nothing new to show.
-    let second = terrain.process(sink).expect("processing should succeed");
-    assert!(
-        second.is_none(),
-        "an unchanged graph shouldn't report a new generation twice"
-    );
-}
-
-#[test]
-fn process_reports_a_new_generation_again_after_a_parameter_changes() {
-    let mut terrain = TerrainSession::default();
-    let source = terrain.graph_mut().add_node(Box::new(Flat));
-    let sink = terrain
-        .graph_mut()
-        .add_node(Box::new(Erosion::default()));
-    terrain.graph_mut().connect(source, 0, sink, 0).unwrap();
-
-    terrain
-        .process(sink)
-        .unwrap()
-        .expect("first process should report a generation");
-
-    terrain
-        .graph_mut()
-        .node_mut(sink)
-        .unwrap()
-        .set_param("strength", NParamValue::Float(0.9))
-        .unwrap();
-
-    let after_change = terrain.process(sink).expect("processing should succeed");
-    assert!(
-        after_change.is_some(),
-        "changing a parameter should surface a new generation"
-    );
-}
-
-#[test]
-fn process_propagates_errors_from_the_underlying_graph() {
-    let mut terrain = TerrainSession::default();
-    let sink = terrain
-        .graph_mut()
-        .add_node(Box::new(Erosion::default()));
-    // `sink`'s required input was never connected.
-    assert!(terrain.process(sink).is_err());
 }
 
 #[test]
@@ -167,7 +97,7 @@ fn terrain_session_holder_allows_shared_read_and_exclusive_write_access() {
 #[test]
 fn timed_action_message_expires_and_is_pruned() {
     let mut terrain = TerrainSession::default();
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let id = graph.add_node(Box::new(Flat));
 
     terrain.set_action_result(id, Ok("Saved!".to_string()));

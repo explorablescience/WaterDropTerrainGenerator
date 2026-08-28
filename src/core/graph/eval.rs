@@ -1,11 +1,5 @@
-//! The recursive scheduler behind [`NodeGraph::process`]/[`NodeGraph::process_chunk`]: walks a
-//! node's inputs depth-first, evaluating and caching each one per [`EvalScope`], and evicts
-//! chunk-scoped inputs once their last consumer has read them.
-//!
-//! `process_scoped` takes `&self` so different chunks can be evaluated concurrently from
-//! background tasks (see [`NodeGraph::process_chunk_shared`]); [`NodeGraph::prepare_for_parallel_eval`]
-//! handles the two things that wouldn't be safe left to those concurrent callers (pool resize,
-//! `Global`-node warming).
+//! This module contains the core evaluation logic for the node graph, including caching and parallel chunk processing.
+use wde::prelude::*;
 
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
@@ -18,31 +12,6 @@ use crate::core::node::{Node, NodeError, NodeLocality};
 use crate::core::tiling::{ChunkCoord, TileContext, TilePool};
 
 impl NodeGraph {
-    fn refcount(&self, id: GraphNodeId, scope: EvalScope) -> usize {
-        let Ok(outputs) = self.topology.outputs(id) else {
-            return 0;
-        };
-        outputs
-            .iter()
-            .filter(|o| {
-                matches!(
-                    self.cache.state(**o, scope),
-                    NodeState::Dirty | NodeState::Processing
-                )
-            })
-            .count()
-    }
-
-    /// No-op for `Global` scope: its result is reused across every chunk, so it stays cached until explicitly invalidated rather than evicted per-consumer.
-    fn try_evict(&self, id: GraphNodeId, scope: EvalScope) {
-        if matches!(scope, EvalScope::Global) || self.refcount(id, scope) > 0 {
-            return;
-        }
-        if matches!(self.cache.state(id, scope), NodeState::Cached(_)) {
-            self.cache.set(id, scope, NodeState::Dirty); // tiles freed via TileHandle's own drop
-        }
-    }
-
     /// Stops at a `Global` ancestor: its kernel padding is handled entirely within its own whole-terrain pass.
     fn collect_ancestors(&self, node_id: GraphNodeId) -> Result<HashSet<GraphNodeId>, NodeError> {
         self.topology.node(node_id)?;
@@ -74,7 +43,7 @@ impl NodeGraph {
                 let node = self.topology.node(id)?;
                 Ok::<usize, NodeError>(match node.locality() {
                     NodeLocality::Global { .. } => 0,
-                    NodeLocality::Local => node.size().div_ceil(2)
+                    NodeLocality::Local => node.size().div_ceil(2),
                 })
             })
             .collect::<Result<Vec<_>, _>>()?
@@ -83,11 +52,9 @@ impl NodeGraph {
         Ok(self.chunk_grid.tile_size() + 2 * padding)
     }
 
-    /// Must complete (under the session's write lock) before any parallel chunk task for
-    /// `node_id` is spawned via [`Self::process_chunk_shared`]: resizes the shared pool if
-    /// `node_id`'s padding requirement changed, and warms every `Global` ancestor to `Cached` so
-    /// concurrent chunk tasks never race to resize the pool or recompute a shared `Global` entry.
+    /// Prepares the graph for parallel evaluation of `node_id` across multiple chunks. This is a prerequisite for calling [`Self::process_chunk_shared`] concurrently from multiple threads.
     pub fn prepare_for_parallel_eval(&mut self, node_id: GraphNodeId) -> Result<(), NodeError> {
+        let _span = debug_span!("prepare_for_parallel_eval", node_id = ?node_id).entered();
         if let NodeLocality::Global { .. } = self.topology.node(node_id)?.locality() {
             return Ok(()); // process_chunk_shared handles this directly, no fan-out involved
         }
@@ -111,10 +78,9 @@ impl NodeGraph {
         Ok(())
     }
 
-    /// Read-only check for whether [`Self::prepare_for_parallel_eval`] has anything to do. Lets a
-    /// caller avoid taking a write lock every frame (which would block on chunk tasks still in
-    /// flight from the previous frame) when nothing actually changed.
+    /// Returns true if `node_id` requires a new internal tile size, or has any `Global` ancestors that are not yet cached. This is a prerequisite for calling [`Self::prepare_for_parallel_eval`] before fanning out to [`Self::process_chunk_shared`].
     pub fn needs_parallel_prepare(&self, node_id: GraphNodeId) -> Result<bool, NodeError> {
+        let _span = debug_span!("needs_parallel_prepare", node_id = ?node_id).entered();
         if let NodeLocality::Global { .. } = self.topology.node(node_id)?.locality() {
             return Ok(false); // handled directly by process_chunk_shared, no fan-out involved
         }
@@ -125,33 +91,34 @@ impl NodeGraph {
             if matches!(
                 self.topology.node(ancestor)?.locality(),
                 NodeLocality::Global { .. }
-            ) && !matches!(self.cache.state(ancestor, EvalScope::Global), NodeState::Cached(_))
-            {
+            ) && !matches!(
+                self.cache.state(ancestor, EvalScope::Global),
+                NodeState::Cached(_)
+            ) {
                 return Ok(true);
             }
         }
         Ok(false)
     }
 
-    /// Convenience wrapper for synchronous, single-shot callers: prepares the graph then evaluates
-    /// `chunk` inline. Parallel callers should call [`Self::prepare_for_parallel_eval`] once, then
-    /// fan out to [`Self::process_chunk_shared`].
+    /// Processes a single chunk of a node, returning the new generation and output tiles if the chunk was actually recomputed. If `force` is true, the chunk will be recomputed even if its generation hasn't advanced.
     pub fn process_chunk(
         &mut self,
         node_id: GraphNodeId,
-        chunk: ChunkCoord
+        chunk: ChunkCoord,
     ) -> Result<NodeGraphProcessResult, NodeError> {
         self.prepare_for_parallel_eval(node_id)?;
         self.process_chunk_shared(node_id, chunk)
     }
 
-    /// `&self` counterpart of [`Self::process_chunk`] for concurrent chunk tasks - requires
-    /// [`Self::prepare_for_parallel_eval`] to have already run for `node_id`.
+    /// Processes a single chunk of a node async
     pub fn process_chunk_shared(
         &self,
         node_id: GraphNodeId,
-        chunk: ChunkCoord
+        chunk: ChunkCoord,
     ) -> Result<NodeGraphProcessResult, NodeError> {
+        let _span =
+            debug_span!("process_chunk_shared", node_id = ?node_id, chunk = ?chunk).entered();
         if let NodeLocality::Global { native_resolution } = self.topology.node(node_id)?.locality()
         {
             let global_pool = TilePool::new(native_resolution);
@@ -176,7 +143,7 @@ impl NodeGraph {
         node_id: GraphNodeId,
         scope: EvalScope,
         pool: &Arc<TilePool>,
-        ctx: &TileContext
+        ctx: &TileContext,
     ) -> Result<NodeGraphProcessResult, NodeError> {
         match self.cache.state(node_id, scope) {
             NodeState::Cached((_, tiles)) => {
@@ -205,7 +172,7 @@ impl NodeGraph {
         node_id: GraphNodeId,
         scope: EvalScope,
         pool: &Arc<TilePool>,
-        ctx: &TileContext
+        ctx: &TileContext,
     ) -> Result<NodeGraphProcessResult, NodeError> {
         let inputs = self.topology.inputs(node_id)?.to_vec();
         let mut input_tiles = Vec::with_capacity(inputs.len());
@@ -223,7 +190,7 @@ impl NodeGraph {
                         node: node.label().to_string(),
                         socket: socket_desc
                             .map(|s| s.name.to_string())
-                            .unwrap_or_else(|| socket.to_string())
+                            .unwrap_or_else(|| socket.to_string()),
                     });
                 }
                 // Optional and unconnected: feed the node a neutral, zero-filled tile.
@@ -237,9 +204,9 @@ impl NodeGraph {
                 NodeLocality::Global { native_resolution } => (
                     EvalScope::Global,
                     TilePool::new(native_resolution),
-                    TileContext::for_global(native_resolution)
+                    TileContext::for_global(native_resolution),
                 ),
-                NodeLocality::Local => (scope, pool.clone(), *ctx)
+                NodeLocality::Local => (scope, pool.clone(), *ctx),
             };
 
             let tile =
@@ -248,7 +215,7 @@ impl NodeGraph {
                         Some(tile) => tile.clone(),
                         None => {
                             return Err(NodeError::OutputNotAvailable {
-                                node: self.topology.node(*from_node)?.label().to_string()
+                                node: self.topology.node(*from_node)?.label().to_string(),
                             });
                         }
                     },
@@ -264,15 +231,33 @@ impl NodeGraph {
         let node = self.topology.node(node_id)?;
         let key = compute_cache_key(node, node_id, &input_keys);
         let output = node.process(pool, &input_tiles, ctx)?;
-        self.touch_activity();
+        self.set_is_processing();
 
         self.cache
             .set(node_id, scope, NodeState::Cached((key, output.clone())));
-        let generation = self.bump_generation();
+        let generation = self.increment_generation();
 
+        // Evict any `Chunk`-scoped inputs that are no longer needed by this node, to free up memory for other chunks. 
         for (from_node, from_scope) in consumed {
-            if matches!(from_scope, EvalScope::Chunk(_)) {
-                self.try_evict(from_node, from_scope);
+            if !matches!(from_scope, EvalScope::Chunk(_)) {
+                continue;
+            }
+            
+            let ref_count = if let Ok(outputs) = self.topology.outputs(from_node) {
+                outputs
+                    .iter()
+                    .filter(|o| {
+                        matches!(
+                            self.cache.state(**o, scope),
+                            NodeState::Dirty | NodeState::Processing
+                        )
+                    })
+                    .count()
+            } else {
+                0
+            };
+            if !(matches!(scope, EvalScope::Global) || ref_count > 0) && matches!(self.cache.state(from_node, scope), NodeState::Cached(_)) {
+                self.cache.set(from_node, scope, NodeState::Dirty); // tiles freed via TileHandle's own drop
             }
         }
 
@@ -283,7 +268,7 @@ impl NodeGraph {
 fn compute_cache_key(
     node: &dyn Node,
     node_id: GraphNodeId,
-    input_keys: &[Option<CacheKey>]
+    input_keys: &[Option<CacheKey>],
 ) -> CacheKey {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     node_id.0.hash(&mut hasher);

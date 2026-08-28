@@ -19,7 +19,7 @@ pub fn bilinear_sample(data: &[f32], size: usize, x: f32, y: f32) -> f32 {
 }
 
 /// Crops off the kernel-padding margin around a node's requested output.
-pub fn crop_center(data: &[f32], full_size: usize, target_size: usize) -> Vec<f32> {
+pub fn crop_padding(data: &[f32], full_size: usize, target_size: usize) -> Vec<f32> {
     if full_size == target_size {
         return data.to_vec();
     }

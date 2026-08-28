@@ -100,12 +100,11 @@ pub enum NodePortType {
     Scalar, // Scalar value (f32) - used for parameters, not textures
 }
 
-/// Mirrors Gaea 2's distinction between tiled ("local") and whole-build ("global") nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeLocality {
     /// Given just that chunk's (padded) tile and a world-space coordinate frame to sample consistently across chunk borders.
     Local,
-    /// Evaluated using the integration node, which converts it back to chunked terrain.
+    /// Given the whole terrain's (padded) tile, so it can sample across the entire terrain at once. This is used for nodes that need to know about the global context.
     Global { native_resolution: usize },
 }
 
@@ -147,9 +146,7 @@ impl NodeCategory {
         }
     }
 
-    /// Every subcategory within this category, in the order they should be listed in the "Add
-    /// Node" menu. Mirrors the full node taxonomy, so subcategories with no registered nodes yet
-    /// are simply skipped by the menu rather than needing to be added here later.
+    /// Every subcategory within this category.
     pub fn subcategories(&self) -> &'static [&'static str] {
         match self {
             NodeCategory::Generation => &[

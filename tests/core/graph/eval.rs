@@ -12,7 +12,7 @@ use waterdrop_terrain_generator::nodes::*;
 
 #[test]
 fn test_node_graph_connections() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 32, 1.0 / 32 as f32));
     let (node_a, node_b) = (
         graph.add_node(Box::new(Perlin::default())),
         graph.add_node(Box::new(Erosion::default()))
@@ -32,7 +32,7 @@ fn test_node_graph_connections() {
 
 #[test]
 fn test_node_graph_validation() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 32, 1.0 / 32 as f32));
     let (node_a, node_b, node_c) = (
         graph.add_node(Box::new(Perlin::default())),
         graph.add_node(Box::new(Erosion::default())),
@@ -46,7 +46,7 @@ fn test_node_graph_validation() {
 
 #[test]
 fn test_node_graph_cycle_detection() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 32, 1.0 / 32 as f32));
     let (node_a, node_b) = (
         graph.add_node(Box::new(Erosion::default())),
         graph.add_node(Box::new(Erosion::default()))
@@ -63,7 +63,7 @@ fn test_node_graph_cycle_detection() {
 
 #[test]
 fn test_node_graph_remove_node_disconnects_edges() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 32, 1.0 / 32 as f32));
     let (source, erosion) = (
         graph.add_node(Box::new(Flat)),
         graph.add_node(Box::new(Erosion::default()))
@@ -92,7 +92,7 @@ fn test_node_graph_remove_node_disconnects_edges() {
 
 #[test]
 fn test_node_graph_remove_node_resets_cached_topo() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 32, 1.0 / 32 as f32));
     let (source, erosion) = (
         graph.add_node(Box::new(Flat)),
         graph.add_node(Box::new(Erosion::default()))
@@ -115,7 +115,7 @@ fn test_node_graph_remove_node_resets_cached_topo() {
 
 #[test]
 fn test_node_graph_remove_node_unknown_id_errors() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 32, 1.0 / 32 as f32));
     let node = graph.add_node(Box::new(Flat));
     graph
         .remove_node(node)
@@ -131,7 +131,7 @@ fn test_node_graph_remove_node_unknown_id_errors() {
 #[test]
 fn test_node_graph_process_grows_internal_tile_size_for_padding() {
     let tile_size = 8;
-    let mut graph = NodeGraph::new(ChunkGrid::single(8));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 8, 1.0 / 8 as f32));
     let (source, erosion) = (
         graph.add_node(Box::new(Flat)),
         graph.add_node(Box::new(Erosion::default())) // size() == 3 -> padding of 2
@@ -160,7 +160,7 @@ fn test_node_graph_process_grows_internal_tile_size_for_padding() {
 
 #[test]
 fn node_mut_lets_callers_mutate_a_node_in_place() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let id = graph.add_node(Box::new(Erosion::default()));
     graph
         .node_mut(id)
@@ -176,7 +176,7 @@ fn node_mut_lets_callers_mutate_a_node_in_place() {
 
 #[test]
 fn node_mut_on_an_unknown_id_fails_without_mutating_anything() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let id = graph.add_node(Box::new(Flat));
     graph.remove_node(id).unwrap();
     assert!(graph.node_mut(id).is_err());
@@ -184,7 +184,7 @@ fn node_mut_on_an_unknown_id_fails_without_mutating_anything() {
 
 #[test]
 fn mutating_a_node_invalidates_its_own_and_downstream_cached_output() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(8));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 8, 1.0 / 8 as f32));
     let source = graph.add_node(Box::new(Perlin::default()));
     let sink = graph.add_node(Box::new(Erosion::default()));
     graph.connect(source, 0, sink, 0).unwrap();
@@ -227,19 +227,19 @@ fn mutating_a_node_invalidates_its_own_and_downstream_cached_output() {
 
 #[test]
 fn tile_size_reports_the_size_the_graph_was_created_with() {
-    let graph = NodeGraph::new(ChunkGrid::single(16));
+    let graph = NodeGraph::new(ChunkGrid::new(1, 1, 16, 1.0 / 16 as f32));
     assert_eq!(graph.tile_size(), 16);
 }
 
 #[test]
 fn is_processing_is_false_before_anything_has_been_computed() {
-    let graph = NodeGraph::new(ChunkGrid::single(4));
+    let graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     assert!(!graph.is_processing());
 }
 
 #[test]
 fn is_processing_is_true_immediately_after_a_node_is_computed() {
-    let mut graph = NodeGraph::new(ChunkGrid::single(4));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
     let id = graph.add_node(Box::new(Flat));
     graph.process(id).expect("processing should succeed");
     assert!(graph.is_processing());

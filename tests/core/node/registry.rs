@@ -5,12 +5,12 @@ fn every_expected_node_type_is_registered() {
     let labels: Vec<&str> = node::registered_nodes().map(|d| d.label).collect();
     for expected in [
         "Erosion",
-        "Flat Generator",
-        "Perlin Generator",
-        "Load Heightmap",
+        "Flat",
+        "Perlin",
+        "Load File",
         "Mountain",
         "Integrate",
-        "Save Heightmap"
+        "Export"
     ] {
         assert!(
             labels.contains(&expected),

@@ -1,0 +1,61 @@
+//! Background jobs for evaluating chunks of the currently-previewed node in a [`TerrainSession`]. Each chunk is evaluated in a separate background task, and the result is cached in the session's graph. When the previewed node changes, all pending jobs are dropped to avoid applying stale results.
+
+use std::collections::HashMap;
+use wde::prelude::*;
+
+use bevy::prelude::Resource;
+use bevy::tasks::{ComputeTaskPool, Task, block_on, poll_once};
+
+use crate::core::{
+    graph::{GraphNodeId, NodeGraphProcessResult},
+    node::NodeError,
+    parallelism::TerrainSessionHolder,
+    tiling::ChunkCoord
+};
+
+/// A collection of background tasks for evaluating chunks of the currently-previewed node in a [`TerrainSession`].
+#[derive(Resource, Default)]
+pub struct ChunkJobs {
+    pending: HashMap<ChunkCoord, Task<Result<NodeGraphProcessResult, NodeError>>>
+}
+impl ChunkJobs {
+    /// Spawns a background task to evaluate `node_id` at `chunk`, or polls the existing one if it was already spawned. Returns `Some(result)` if the task has finished, or `None` if it is still in flight.
+    pub fn poll_or_spawn(
+        &mut self,
+        session: &TerrainSessionHolder,
+        node_id: GraphNodeId,
+        chunk: ChunkCoord
+    ) -> Option<Result<NodeGraphProcessResult, NodeError>> {
+        let _span = debug_span!("poll_or_spawn", node_id = ?node_id, chunk = ?chunk).entered();
+
+        // If a task is already in flight for this chunk, poll it and return the result if it's done
+        if let Some(task) = self.pending.get_mut(&chunk) {
+            if let Some(result) = block_on(poll_once(task)) {
+                self.pending.remove(&chunk);
+                return Some(result);
+            } else {
+                return None; // still in flight
+            }
+        }
+
+        // Otherwise, spawn a new task to evaluate the chunk
+        let session = session.clone();
+        let task = ComputeTaskPool::get()
+            .spawn(async move {
+                let _span = debug_span!("task_process_chunk_shared", node_id = ?node_id, chunk = ?chunk).entered();
+                session.read().graph().process_chunk_shared(node_id, chunk)
+            });
+        self.pending.insert(chunk, task);
+        None
+    }
+
+    /// Drops pending jobs for chunks no longer in `live_chunks` (e.g. after a grid resize).
+    pub fn retain_live(&mut self, live_chunks: &std::collections::HashSet<ChunkCoord>) {
+        self.pending.retain(|chunk, _| live_chunks.contains(chunk));
+    }
+
+    /// Call when the previewed node changes, so a stale result isn't mistaken for the new one's.
+    pub fn clear(&mut self) {
+        self.pending.clear();
+    }
+}

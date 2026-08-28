@@ -34,30 +34,8 @@ fn dropped_tiles_are_returned_to_the_pool_and_reused() {
         tile[0] = 42.0;
         // `tile` drops here, returning its buffer to the pool's free list.
     }
-    // A fresh allocation reuses the freed buffer rather than growing the pool, so the byte
-    // footprint should not have doubled.
-    let bytes_after_first_round_trip = pool.allocated_bytes();
+    // A fresh allocation reuses the freed buffer, keeping whatever was written to it before -
+    // callers are expected to overwrite it fully, not rely on it being zeroed again.
     let reused = pool.allocate();
-    assert_eq!(pool.allocated_bytes(), bytes_after_first_round_trip);
-    // The reused buffer keeps whatever was written to it before - callers are expected to
-    // overwrite it fully, not rely on it being zeroed again.
     assert_eq!(reused[0], 42.0);
-}
-
-#[test]
-fn allocated_bytes_grows_only_when_the_pool_actually_allocates_new_memory() {
-    let pool = TilePool::new(3);
-    assert_eq!(pool.allocated_bytes(), 0);
-
-    let a = pool.allocate();
-    let expected_tile_bytes = 3 * 3 * std::mem::size_of::<f32>();
-    assert_eq!(pool.allocated_bytes(), expected_tile_bytes);
-
-    let b = pool.allocate();
-    assert_eq!(pool.allocated_bytes(), 2 * expected_tile_bytes);
-
-    drop(a);
-    drop(b);
-    // Freeing tiles doesn't shrink the pool's reserved footprint.
-    assert_eq!(pool.allocated_bytes(), 2 * expected_tile_bytes);
 }

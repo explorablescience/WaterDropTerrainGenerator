@@ -11,10 +11,12 @@ mod footer;
 mod panel_graph;
 mod panel_properties;
 mod panel_terrain_settings;
-mod project_io;
 pub mod theme;
 pub mod widgets;
 
+/// Plugin that adds the UI to the app, including the editor panels and footer.
+/// It links the ui graph editor to the physical graph, and updates the selected node.
+/// It doesn't handle the actual terrain generation, which is done in the `render` plugin.
 pub struct UIPlugin;
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
@@ -24,7 +26,7 @@ impl Plugin for UIPlugin {
     }
 }
 
-/// Disables WaterDropEngine's own frame-data overlay in favor of the equivalent stats in the editor's own footer (see `ui::footer`).
+/// Replaces the default WDE theme with our custom theme, and installs image loaders for egui_extras.
 fn install_theme(
     ctx: Res<UIContext>,
     mut ui_menu: ResMut<UIMenu>,
