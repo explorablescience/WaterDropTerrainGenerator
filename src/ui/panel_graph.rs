@@ -453,6 +453,11 @@ pub fn show_graph(
             .data(|d| d.get_temp::<SelectedNode>(selected_node_id)),
         terrain_graph
     };
+    if viewer.selected.is_none()
+        && let Some((snarl_id, _, GraphNode::Main(graph_id))) = graph_instance.nodes_pos_ids().next()
+    {
+        viewer.selected = Some(SelectedNode { snarl_id, graph_id: *graph_id });
+    }
 
     SnarlWidget::new()
         .id(id)

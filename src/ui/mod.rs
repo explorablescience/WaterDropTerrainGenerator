@@ -1,8 +1,13 @@
 use bevy::prelude::*;
-use wde::prelude::*;
+use wde::prelude::{ui::egui, *};
 
-use crate::ui::{
-    editor::EditorPanelsPlugin, footer::FooterPlugin, panel_terrain_settings::draw_terrain_settings
+use crate::{
+    TerrainSessionHolder,
+    core::node,
+    ui::{
+        editor::EditorPanelsPlugin, footer::FooterPlugin, panel_graph::{GraphEditorState, GraphNode},
+        panel_terrain_settings::draw_terrain_settings
+    }
 };
 
 mod editor;
@@ -22,9 +27,25 @@ pub struct UIPlugin;
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((EditorPanelsPlugin, FooterPlugin))
-            .add_systems(Startup, install_theme)
+            .add_systems(Startup, (install_theme, initialize_default_graph))
             .add_systems(Update, draw_terrain_settings.after(EditorMenuBarSet));
     }
+}
+
+fn initialize_default_graph(
+    mut graph_instance: ResMut<GraphEditorState>,
+    terrain_graph: Res<TerrainSessionHolder>
+) {
+    let descriptor = node::registered_nodes()
+        .find(|descriptor| descriptor.label == "Perlin")
+        .expect("Perlin node should be registered");
+    let graph_id = terrain_graph
+        .write()
+        .graph_mut()
+        .add_node((descriptor.factory)());
+    graph_instance
+        .0
+        .insert_node(egui::pos2(0.0, 0.0), GraphNode::Main(graph_id));
 }
 
 /// Replaces the default WDE theme with our custom theme, and installs image loaders for egui_extras.
