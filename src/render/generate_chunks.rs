@@ -5,19 +5,19 @@ use wde::prelude::*;
 
 use crate::{
     TerrainSessionHolder,
-    core::{node::NodeLocality, parallelism::ChunkJobs, tiling::ChunkCoord},
+    core::{graph::GraphNodeId, node::NodeLocality, parallelism::ChunkJobs, tiling::ChunkCoord},
     render::{
         chunk_array::{ChunkInstance, TerrainPreviewSync},
         generate_chunks_global::update_render_chunks_global,
         generate_chunks_local::update_render_chunks_local,
-        utils::{build_shared_chunk_mesh, padded_heightmap}
-    }
+        utils::{build_shared_chunk_mesh, padded_heightmap},
+    },
 };
 
 pub(super) struct ChunkPreview {
     pub(super) core_data: Vec<f32>,
     /// Whether `core_data` is the flat fallback shown when this chunk's node can't be evaluated.
-    pub(super) is_flat: bool
+    pub(super) is_flat: bool,
 }
 
 #[derive(Resource, Default)]
@@ -31,14 +31,12 @@ pub struct TerrainPreview {
     /// `(padded texel size, layer count)` the current `heightmap_array` was built with.
     array_dims: Option<(u32, u32)>,
     pending_layer_writes: Vec<(u32, Vec<f32>)>,
-    /// Whether the most recently rendered node was `Global`.
-    last_selected_was_global: Option<bool>
 }
 
 /// Creates the material used for rendering the terrain preview meshes.
 pub(crate) fn create_material(
     asset_server: Res<AssetServer>,
-    mut terrain_preview: ResMut<TerrainPreview>
+    mut terrain_preview: ResMut<TerrainPreview>,
 ) {
     terrain_preview.material_handle = Some(asset_server.add(PbrMaterial {
         label: "terrain-white".to_string(),
@@ -53,35 +51,55 @@ pub(crate) fn update_render_chunks(
     mut terrain_preview: ResMut<TerrainPreview>,
     mut terrain_preview_sync: ResMut<TerrainPreviewSync>,
     mut chunk_jobs: ResMut<ChunkJobs>,
-    terrain_graph: Res<TerrainSessionHolder>
+    terrain_graph: Res<TerrainSessionHolder>,
+    mut old_selected_node: Local<Option<GraphNodeId>>,
+    mut old_selected_node_last_dirty: Local<Option<std::time::Instant>>,
 ) {
     let selected_node = match terrain_graph.read().selected_node {
         Some(node_id) => node_id,
-        None => return
+        None => return,
     };
-    let node_locality = match terrain_graph.read().graph().node(selected_node) {
-        Ok(node) => node.locality(),
-        Err(_) => return // Selected node no longer exists
-    };
-    if !terrain_graph.read().graph().should_reprocess() {
-        return;
+    if old_selected_node_last_dirty.is_none() {
+        *old_selected_node_last_dirty = Some(std::time::Instant::now());
     }
 
-    // If the selected node has changed, clear all previous chunk jobs
-    let force = terrain_graph.write().node_just_selected(selected_node);
-    if force {
+    // Clear all previous chunk jobs if the selected node has changed or is dirty
+    let reprocess = {
+        let is_new_node = old_selected_node.is_some_and(|id| id != selected_node);
+        let is_dirty = terrain_graph
+            .read()
+            .graph()
+            .is_or_ancestor_dirty(selected_node);
+        if is_new_node {
+            *old_selected_node_last_dirty = Some(std::time::Instant::now());
+        }
+        let time_elapsed = old_selected_node_last_dirty
+            .as_ref()
+            .map(|t| t.elapsed())
+            .unwrap_or_default();
+        if is_dirty {
+            old_selected_node_last_dirty.replace(std::time::Instant::now());
+        }
+        old_selected_node.replace(selected_node);
+        is_new_node || (is_dirty && time_elapsed.as_millis() > 20)
+    };
+    if reprocess {
         chunk_jobs.clear();
     }
 
-    let is_global = matches!(node_locality, NodeLocality::Global { .. });
-    if terrain_preview.last_selected_was_global != Some(is_global) {
-        terrain_preview.chunks.clear();
+    // Don't reprocess the graph if the cooldown hasn't elapsed yet
+    if !reprocess && terrain_graph.read().graph().should_reprocess_cooldown() {
+        return;
     }
-    terrain_preview.last_selected_was_global = Some(is_global);
 
+    // Call the appropriate update function based on the selected node's locality
     let material_handle = match &terrain_preview.material_handle {
         Some(handle) => handle.clone(),
-        None => return // Material not created yet
+        None => return, // Material not created yet
+    };
+    let node_locality = match terrain_graph.read().graph().node(selected_node) {
+        Ok(node) => node.locality(),
+        Err(_) => return, // Selected node no longer exists
     };
     match node_locality {
         NodeLocality::Global { native_resolution } => update_render_chunks_global(
@@ -92,7 +110,6 @@ pub(crate) fn update_render_chunks(
             material_handle,
             selected_node,
             native_resolution,
-            force
         ),
         NodeLocality::Local => update_render_chunks_local(
             &asset_server,
@@ -102,8 +119,7 @@ pub(crate) fn update_render_chunks(
             &terrain_graph,
             material_handle,
             selected_node,
-            force
-        )
+        ),
     }
 }
 
@@ -112,7 +128,7 @@ pub(super) fn set_chunk_data(
     terrain_preview: &mut TerrainPreview,
     chunk: ChunkCoord,
     data: Vec<f32>,
-    is_flat: bool
+    is_flat: bool,
 ) {
     match terrain_preview.chunks.get_mut(&chunk) {
         Some(preview) => {
@@ -124,8 +140,8 @@ pub(super) fn set_chunk_data(
                 chunk,
                 ChunkPreview {
                     core_data: data,
-                    is_flat
-                }
+                    is_flat,
+                },
             );
         }
     }
@@ -147,7 +163,7 @@ pub(super) fn sync_preview_state(
     material_handle: Handle<PbrMaterial>,
     size: usize,
     instances: Vec<ChunkInstance>,
-    layer_of: impl Fn(ChunkCoord) -> u32
+    layer_of: impl Fn(ChunkCoord) -> u32,
 ) {
     let _span = debug_span!(
         "sync_preview_state",

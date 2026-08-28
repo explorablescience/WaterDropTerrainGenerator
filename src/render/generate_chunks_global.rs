@@ -25,8 +25,7 @@ pub(super) fn update_render_chunks_global(
     terrain_graph: &TerrainSessionHolder,
     material_handle: Handle<PbrMaterial>,
     selected_node: GraphNodeId,
-    native_resolution: usize,
-    force: bool
+    native_resolution: usize
 ) {
     let (world_extent_x, world_extent_y) = terrain_graph.read().graph().chunk_grid().world_extent();
     let chunk = ChunkCoord(0, 0);
@@ -40,7 +39,7 @@ pub(super) fn update_render_chunks_global(
         let mut changed = false;
         match terrain_graph
             .write()
-            .process_sync(selected_node, chunk, force)
+            .process_sync(selected_node, chunk)
         {
             Ok(Some((_, tiles))) => {
                 if let Some(heightmap) = tiles.first() {

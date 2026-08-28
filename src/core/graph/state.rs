@@ -75,6 +75,13 @@ impl EvalCache {
             *state = NodeState::Dirty;
         }
     }
+    pub fn is_dirty(&self, id: GraphNodeId) -> bool {
+        self.states
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|((node_id, _), state)| *node_id == id && matches!(state, NodeState::Dirty))
+    }
 
     /// `Global`-scoped entries live in their own pools, unrelated to the chunk pool, so they're left untouched.
     pub fn clear_chunk_states(&self) {

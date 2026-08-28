@@ -28,8 +28,7 @@ pub(super) fn update_render_chunks_local(
     chunk_jobs: &mut ChunkJobs,
     terrain_graph: &TerrainSessionHolder,
     material_handle: Handle<PbrMaterial>,
-    selected_node: GraphNodeId,
-    force: bool,
+    selected_node: GraphNodeId
 ) {
     let _span = debug_span!("update_render_chunks_local", selected_node = ?selected_node).entered();
     let chunk_grid = *terrain_graph.read().graph().chunk_grid();
@@ -83,7 +82,7 @@ pub(super) fn update_render_chunks_local(
             // Apply the result to the graph and update cache
             match terrain_graph
                 .write()
-                .apply_chunk_result(selected_node, chunk, force, result)
+                .apply_chunk_result(selected_node, chunk, result)
             {
                 Ok(Some((_, tiles))) => {
                     // If the chunk was recomputed, update its data and mark it as changed
@@ -95,7 +94,12 @@ pub(super) fn update_render_chunks_local(
                     set_chunk_data(terrain_preview, chunk, data, false);
                     changed_chunks.insert(chunk);
                 }
-                Ok(None) => {}
+                Ok(None) => {
+                    error!(
+                        "Chunk job for {:?} returned None, but it should have been recomputed",
+                        chunk
+                    );
+                }
                 Err(e) => {
                     match e {
                         InputNotConnected { .. } => {} // Fine, just means the user hasn't connected the selected node's input yet

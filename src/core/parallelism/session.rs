@@ -7,7 +7,7 @@ use bevy::{platform::collections::HashMap, prelude::*};
 use crate::core::{
     graph::{GraphNodeId, NodeGraph, NodeGraphProcessResult},
     node::{NodeError, NodeMessage, NodeMessageLog},
-    tiling::{ChunkCoord, ChunkGrid, TileHandle}
+    tiling::{ChunkCoord, ChunkGrid, TileHandle},
 };
 
 /// A thread-safe wrapper around [`TerrainSession`] that can be stored as a Bevy resource.
@@ -32,7 +32,7 @@ pub struct TerrainSession {
     chunk_generations: HashMap<(GraphNodeId, ChunkCoord), u32>,
     displayed_node: Option<GraphNodeId>,
     pub selected_node: Option<GraphNodeId>,
-    messages: NodeMessageLog
+    messages: NodeMessageLog,
 }
 impl Default for TerrainSession {
     fn default() -> Self {
@@ -41,7 +41,7 @@ impl Default for TerrainSession {
             chunk_generations: HashMap::new(),
             displayed_node: None,
             selected_node: None,
-            messages: NodeMessageLog::default()
+            messages: NodeMessageLog::default(),
         }
     }
 }
@@ -63,45 +63,31 @@ impl TerrainSession {
         self.messages.prune_expired();
     }
 
-    /// Returns true if the selection changed, false if it was already selected.
-    pub fn node_just_selected(&mut self, node_id: GraphNodeId) -> bool {
-        let just_selected = self.displayed_node != Some(node_id);
-        self.displayed_node = Some(node_id);
-        just_selected
-    }
-
     /// Processes synchronously the output of `node_id` for `chunk`, returning the new generation and output tiles if the chunk was actually recomputed. If `force` is true, the chunk will be considered recomputed even if its generation hasn't advanced.
     pub fn process_sync(
         &mut self,
         node_id: GraphNodeId,
         chunk: ChunkCoord,
-        force: bool
     ) -> Result<Option<(u32, Vec<TileHandle>)>, NodeError> {
         let _span = debug_span!("process_chunk", node_id = ?node_id, chunk = ?chunk).entered();
         let result = self.graph.process_chunk(node_id, chunk);
-        self.apply_chunk_result(node_id, chunk, force, result)
+        self.apply_chunk_result(node_id, chunk, result)
     }
     /// Applies the result of a chunk processing operation, updating the internal state and returning the new generation and output tiles if the chunk was actually recomputed. If `force` is true, the chunk will be considered recomputed even if its generation hasn't advanced.
     pub fn apply_chunk_result(
         &mut self,
         node_id: GraphNodeId,
         chunk: ChunkCoord,
-        force: bool,
-        result: Result<NodeGraphProcessResult, NodeError>
+        result: Result<NodeGraphProcessResult, NodeError>,
     ) -> Result<Option<(u32, Vec<TileHandle>)>, NodeError> {
         let _span = debug_span!("apply_chunk_result", node_id = ?node_id, chunk = ?chunk).entered();
         let key = (node_id, chunk);
-        let generation = self.chunk_generations.get(&key).copied().unwrap_or(0);
         match result? {
             NodeGraphProcessResult::Processed(new_generation, output_tiles) => {
-                if !force && new_generation <= generation {
-                    return Ok(None);
-                }
-
                 self.chunk_generations.insert(key, new_generation);
                 Ok(Some((new_generation, output_tiles)))
             }
-            NodeGraphProcessResult::Processing => Ok(None)
+            NodeGraphProcessResult::Processing => Ok(None),
         }
     }
 

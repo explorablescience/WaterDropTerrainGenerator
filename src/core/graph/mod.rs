@@ -35,7 +35,7 @@ pub struct NodeGraph {
 }
 impl NodeGraph {
     const PROCESSING_INDICATOR_HOLD: Duration = Duration::from_millis(400);
-    const REPROCESS_COOLDOWN: Duration = Duration::from_millis(150);
+    const REPROCESS_COOLDOWN: Duration = Duration::from_millis(10);
 
     pub fn new(chunk_grid: ChunkGrid) -> Self {
         Self {
@@ -49,12 +49,12 @@ impl NodeGraph {
         }
     }
 
-    /// `true` if a node was too recently marked dirty to reprocess yet.
-    pub fn should_reprocess(&self) -> bool {
+    /// Returns whether the graph has been marked dirty since the last time it was processed, and is ready to be reprocessed.
+    pub fn should_reprocess_cooldown(&self) -> bool {
         self.last_dirty
             .lock()
             .unwrap()
-            .is_some_and(|t| t.elapsed() >= Self::REPROCESS_COOLDOWN)
+            .is_some_and(|t| t.elapsed() < Self::REPROCESS_COOLDOWN)
     }
 
     // Generation management
@@ -144,6 +144,25 @@ impl NodeGraph {
                 stack.extend(outputs.iter().copied());
             }
         }
+    }
+    fn is_dirty(&self, id: GraphNodeId) -> bool {
+        self.cache.is_dirty(id)
+    }
+    pub fn is_or_ancestor_dirty(&self, id: GraphNodeId) -> bool {
+        if self.is_dirty(id) {
+            return true;
+        }
+        if let Ok(inputs) = self.topology.inputs(id) {
+            for input in inputs {
+                if input.is_none() {
+                    continue;
+                }
+                if self.is_or_ancestor_dirty(input.unwrap().0) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     // Usefull for UI feedback
