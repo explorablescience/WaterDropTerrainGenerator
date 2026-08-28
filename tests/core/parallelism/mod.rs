@@ -21,7 +21,7 @@ fn default_terrain_session_has_no_selection_and_no_messages() {
 #[test]
 fn action_result_ok_shows_as_an_info_message_that_can_be_cleared() {
     let mut terrain = TerrainSession::default();
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
 
     terrain.set_action_result(id, Ok("Saved!".to_string()));
@@ -38,7 +38,7 @@ fn action_result_ok_shows_as_an_info_message_that_can_be_cleared() {
 #[test]
 fn action_result_err_shows_with_the_errors_own_severity() {
     let mut terrain = TerrainSession::default();
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
 
     terrain.set_action_result(
@@ -55,7 +55,7 @@ fn action_result_err_shows_with_the_errors_own_severity() {
 #[test]
 fn a_persistent_error_message_never_expires_on_its_own() {
     let mut terrain = TerrainSession::default();
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
 
     terrain.set_action_result(id, Err(NodeError::ProcessingFailed("boom".to_string())));
@@ -70,7 +70,7 @@ fn a_persistent_error_message_never_expires_on_its_own() {
 #[test]
 fn setting_a_new_action_result_replaces_whatever_was_shown_before() {
     let mut terrain = TerrainSession::default();
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
 
     terrain.set_action_result(
@@ -97,7 +97,7 @@ fn terrain_session_holder_allows_shared_read_and_exclusive_write_access() {
 #[test]
 fn timed_action_message_expires_and_is_pruned() {
     let mut terrain = TerrainSession::default();
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
 
     terrain.set_action_result(id, Ok("Saved!".to_string()));

@@ -138,7 +138,7 @@ impl Node for FakeGlobalHeightSource {
 fn connecting_a_global_node_directly_into_a_local_socket_succeeds() {
     // No manual placement node needed: the graph engine resamples a `Global` ancestor's
     // whole-terrain tile into whatever frame a `Local` consumer needs.
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let source = graph.add_node(Box::new(FakeGlobalHeightSource {
         native_resolution: 8
     }));
@@ -151,7 +151,7 @@ fn connecting_a_global_node_directly_into_a_local_socket_succeeds() {
 fn connecting_two_global_nodes_with_different_native_resolution_succeeds() {
     // Resampling handles resolution mismatches between two `Global` nodes just as it does between
     // a `Global` node and a `Local` one.
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let source = graph.add_node(Box::new(FakeGlobalHeightSource {
         native_resolution: 8
     }));
@@ -164,7 +164,7 @@ fn connecting_two_global_nodes_with_different_native_resolution_succeeds() {
 fn connecting_a_local_node_into_a_global_nodes_input_succeeds() {
     // The graph's normal "bake a local generator once at global scope" pattern: a `Global` node
     // pulling in a `Local` ancestor evaluates it once, in its own real-world-aligned frame.
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let source = graph.add_node(Box::new(Perlin::default()));
     let sink = graph.add_node(Box::new(HydraulicErosion::default()));
 
@@ -173,7 +173,7 @@ fn connecting_a_local_node_into_a_global_nodes_input_succeeds() {
 
 #[test]
 fn connecting_mismatched_socket_types_fails() {
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let source = graph.add_node(Box::new(FakeHeightSource));
     let sink = graph.add_node(Box::new(FakeMaskSink));
 
@@ -183,7 +183,7 @@ fn connecting_mismatched_socket_types_fails() {
 
 #[test]
 fn connecting_to_an_out_of_range_output_socket_fails() {
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let source = graph.add_node(Box::new(FakeHeightSource));
     let sink = graph.add_node(Box::new(Erosion::default()));
 
@@ -196,7 +196,7 @@ fn connecting_to_an_out_of_range_output_socket_fails() {
 
 #[test]
 fn connecting_to_an_out_of_range_input_socket_fails() {
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let source = graph.add_node(Box::new(FakeHeightSource));
     let sink = graph.add_node(Box::new(Erosion::default()));
 
@@ -206,7 +206,7 @@ fn connecting_to_an_out_of_range_input_socket_fails() {
 
 #[test]
 fn optional_unconnected_input_is_fed_a_neutral_zero_tile() {
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let sink = graph.add_node(Box::new(FakeOptionalSink));
 
     let result = graph
@@ -220,7 +220,7 @@ fn optional_unconnected_input_is_fed_a_neutral_zero_tile() {
 
 #[test]
 fn disconnecting_an_edge_that_does_not_exist_fails() {
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let source = graph.add_node(Box::new(Flat));
     let sink = graph.add_node(Box::new(Erosion::default()));
 
@@ -230,7 +230,7 @@ fn disconnecting_an_edge_that_does_not_exist_fails() {
 
 #[test]
 fn processing_an_unknown_node_id_fails() {
-    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
     graph.remove_node(id).unwrap();
     assert!(graph.process(id).is_err());
