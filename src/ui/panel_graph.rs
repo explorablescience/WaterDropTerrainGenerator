@@ -543,11 +543,12 @@ pub fn show_graph(
 
         collapsible: Some(false),
         header_drag_space: Some(egui::Vec2::ZERO),
-        pin_size: Some(14.0),
+        pin_size: Some(12.0),
         pin_fill: Some(theme::palette::PIN_DEFAULT),
         pin_stroke: Some(egui::Stroke::NONE),
         pin_shape: Some(PinShape::Circle),
         pin_placement: Some(PinPlacement::Inside),
+        pin_margin: Some(12.0),
 
         wire_width: Some(2.5),
         upscale_wire_frame: Some(true),

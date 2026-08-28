@@ -419,6 +419,13 @@ pub struct SnarlStyle {
     )]
     pub pin_placement: Option<PinPlacement>,
 
+    /// Margin between node frame and pins.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    pub pin_margin: Option<f32>,
+
     /// Width of wires.
     #[cfg_attr(feature = "egui-probe", egui_probe(range = 0.0..))]
     #[cfg_attr(
@@ -596,6 +603,10 @@ impl SnarlStyle {
         self.pin_placement.unwrap_or_default()
     }
 
+    fn get_pin_margin(&self) -> f32 {
+        self.pin_margin.unwrap_or(0.0)
+    }
+
     fn get_wire_width(&self, style: &Style) -> f32 {
         self.wire_width
             .unwrap_or_else(|| self.get_pin_size(style) * 0.1)
@@ -757,6 +768,7 @@ impl SnarlStyle {
             pin_stroke: None,
             pin_shape: None,
             pin_placement: None,
+            pin_margin: None,
             wire_width: None,
             wire_frame_size: None,
             downscale_wire_frame: None,
@@ -1920,6 +1932,9 @@ where
             viewer.apply_node_style(ui.style_mut(), node, &inputs, &outputs, snarl);
         }
 
+        // Get offset of pin from node frame
+        let dx = style.get_pin_margin();
+
         // Input pins' center side by X axis.
         let input_x = match pin_placement {
             PinPlacement::Inside => pin_size.mul_add(
@@ -1934,7 +1949,7 @@ where
 
         // Input pins' spacing required.
         let input_spacing = match pin_placement {
-            PinPlacement::Inside => Some(pin_size),
+            PinPlacement::Inside => Some(pin_size - dx),
             PinPlacement::Edge => Some(
                 pin_size
                     .mul_add(0.5, -node_frame.inner_margin.leftf())
@@ -1957,7 +1972,7 @@ where
 
         // Output pins' spacing required.
         let output_spacing = match pin_placement {
-            PinPlacement::Inside => Some(pin_size),
+            PinPlacement::Inside => Some(pin_size - dx),
             PinPlacement::Edge => Some(
                 pin_size
                     .mul_add(0.5, -node_frame.inner_margin.rightf())
