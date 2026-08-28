@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use wde::prelude::*;
 
 use bevy::prelude::Resource;
-use bevy::tasks::{ComputeTaskPool, Task, block_on, poll_once};
+use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, poll_once};
 
 use crate::core::{
     graph::{GraphNodeId, NodeGraphProcessResult},
@@ -40,7 +40,7 @@ impl ChunkJobs {
 
         // Otherwise, spawn a new task to evaluate the chunk
         let session = session.clone();
-        let task = ComputeTaskPool::get()
+        let task = AsyncComputeTaskPool::get()
             .spawn(async move {
                 let _span = debug_span!("task_process_chunk_shared", node_id = ?node_id, chunk = ?chunk).entered();
                 session.read().graph().process_chunk_shared(node_id, chunk)

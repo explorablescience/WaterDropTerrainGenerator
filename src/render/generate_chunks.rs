@@ -124,6 +124,7 @@ pub(super) fn upsert_chunk_mesh(
     chunk: ChunkCoord,
     mesh: Mesh
 ) {
+    let _span = debug_span!("upsert_chunk_mesh", chunk = ?chunk).entered();
     let existing = terrain_preview
         .chunks
         .get(&chunk)

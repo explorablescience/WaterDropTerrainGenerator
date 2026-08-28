@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use wde::prelude::*;
 
 use bevy::prelude::*;
+use rayon::prelude::*;
 use wde::wde_renderer::{assets::{Mesh, MeshBbox}, passes::Vertex};
 
 use crate::{
@@ -19,41 +21,54 @@ pub fn heightmap_to_mesh(
     cell_size: f32,
     world_offset: Vec3
 ) -> Mesh {
-    // Remove padding
-    let padded = size + 3;
-    let sample = |x: isize, z: isize| -> f32 {
-        let x = (x + 1).clamp(0, padded as isize - 1) as usize;
-        let z = (z + 1).clamp(0, padded as isize - 1) as usize;
-        heightmap[z * padded + x]
-    };
+    let _span = debug_span!("heightmap_to_mesh", label = label, size = size).entered();
 
-    // Build vertices and normals
+    // `heightmap` is padded by exactly 1 texel on each side, so a vertex at local (x, z) and its
+    // neighbors for the central-difference normal always land in-bounds at (x + 1, z + 1) without clamping.
+    let padded = size + 3;
     let verts = size + 1;
+
+    // Build vertices and normals, one row of `heightmap` at a time (rows are independent, so this runs in parallel).
+    let rows: Vec<(Vec<Vertex>, Vec3, Vec3)> = (0..verts)
+        .into_par_iter()
+        .map(|z| {
+            let row_above = &heightmap[z * padded..(z + 1) * padded];
+            let row_center = &heightmap[(z + 1) * padded..(z + 2) * padded];
+            let row_below = &heightmap[(z + 2) * padded..(z + 3) * padded];
+
+            let mut min = Vec3::splat(f32::MAX);
+            let mut max = Vec3::splat(f32::MIN);
+            let mut row = Vec::with_capacity(verts);
+            for x in 0..verts {
+                let height = row_center[x + 1] * HEIGHT_SCALE;
+                let position =
+                    world_offset + Vec3::new(x as f32 * cell_size, height, z as f32 * cell_size);
+
+                // Central-difference slope estimate, used as a smooth per-vertex normal.
+                let dx = (row_center[x + 2] - row_center[x]) * HEIGHT_SCALE;
+                let dz = (row_below[x + 1] - row_above[x + 1]) * HEIGHT_SCALE;
+                let normal = Vec3::new(-dx, 2.0 * cell_size, -dz).normalize();
+
+                min = min.min(position);
+                max = max.max(position);
+                row.push(Vertex {
+                    position: [position.x, position.y, position.z],
+                    uv: [x as f32 / size as f32, z as f32 / size as f32],
+                    normal: [normal.x, normal.y, normal.z],
+                    tangent: [1.0, 0.0, 0.0, 1.0]
+                });
+            }
+            (row, min, max)
+        })
+        .collect();
+
     let mut vertices = Vec::with_capacity(verts * verts);
     let mut min = Vec3::splat(f32::MAX);
     let mut max = Vec3::splat(f32::MIN);
-    for z in 0..verts {
-        for x in 0..verts {
-            let height = sample(x as isize, z as isize) * HEIGHT_SCALE;
-            let position =
-                world_offset + Vec3::new(x as f32 * cell_size, height, z as f32 * cell_size);
-
-            // Central-difference slope estimate, used as a smooth per-vertex normal.
-            let dx = (sample(x as isize + 1, z as isize) - sample(x as isize - 1, z as isize))
-                * HEIGHT_SCALE;
-            let dz = (sample(x as isize, z as isize + 1) - sample(x as isize, z as isize - 1))
-                * HEIGHT_SCALE;
-            let normal = Vec3::new(-dx, 2.0 * cell_size, -dz).normalize();
-
-            min = min.min(position);
-            max = max.max(position);
-            vertices.push(Vertex {
-                position: [position.x, position.y, position.z],
-                uv: [x as f32 / size as f32, z as f32 / size as f32],
-                normal: [normal.x, normal.y, normal.z],
-                tangent: [1.0, 0.0, 0.0, 1.0]
-            });
-        }
+    for (row, row_min, row_max) in rows {
+        vertices.extend(row);
+        min = min.min(row_min);
+        max = max.max(row_max);
     }
 
     // Build indices for a triangle list
@@ -97,12 +112,32 @@ pub(super) fn padded_heightmap(
     tile_size: usize,
     chunks: &HashMap<ChunkCoord, ChunkPreview>
 ) -> Vec<f32> {
+    let _span = debug_span!("padded_heightmap", chunk = ?chunk, tile_size = tile_size).entered();
     let padded = tile_size + 3;
     let mut out = vec![0.0; padded * padded];
-    for pz in 0..padded {
+
+    // Fast path: the interior is always this chunk's own data, so copy it directly instead of
+    // paying for a HashMap lookup (via `sample_across_chunks`) per texel.
+    if let Some(own) = chunks.get(&chunk) {
+        for z in 0..tile_size {
+            let src = &own.core_data[z * tile_size..(z + 1) * tile_size];
+            let dst = (z + 1) * padded + 1;
+            out[dst..dst + tile_size].copy_from_slice(src);
+        }
+    }
+
+    // Slow path: only the 1-texel padding ring can come from a neighboring chunk.
+    for pz in [0, padded - 1] {
+        let lz = pz as isize - 1;
         for px in 0..padded {
             let lx = px as isize - 1;
-            let lz = pz as isize - 1;
+            out[pz * padded + px] = sample_across_chunks(chunk, tile_size, chunks, lx, lz);
+        }
+    }
+    for pz in 1..padded - 1 {
+        let lz = pz as isize - 1;
+        for px in [0, padded - 1] {
+            let lx = px as isize - 1;
             out[pz * padded + px] = sample_across_chunks(chunk, tile_size, chunks, lx, lz);
         }
     }

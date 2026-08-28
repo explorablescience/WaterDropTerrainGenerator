@@ -61,17 +61,17 @@ fn main() {
                 on_thread_spawn: None,
                 on_thread_destroy: None,
             },
-            async_compute: TaskPoolThreadAssignmentPolicy {
+            compute: TaskPoolThreadAssignmentPolicy {
                 min_threads: 1,
                 max_threads: 1,
                 percent: 0.25,
                 on_thread_spawn: None,
                 on_thread_destroy: None,
             },
-            compute: TaskPoolThreadAssignmentPolicy {
+            async_compute: TaskPoolThreadAssignmentPolicy {
                 min_threads: 1,
                 max_threads: usize::MAX,
-                percent: 1.0, // This 1.0 here means "whatever is left over", i.e. chunk dispatch.
+                percent: 1.0, // "whatever is left over", i.e. concurrent chunk dispatch.
                 on_thread_spawn: None,
                 on_thread_destroy: None,
             },

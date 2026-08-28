@@ -1,13 +1,14 @@
 use std::collections::HashSet;
 
 use bevy::prelude::*;
+use rayon::prelude::*;
 use wde::prelude::*;
 
 use crate::{
     TerrainSessionHolder,
     core::{
         graph::GraphNodeId, node::NodeError::InputNotConnected, parallelism::ChunkJobs,
-        tiling::crop_padding,
+        tiling::{ChunkCoord, crop_padding},
     },
     render::{
         generate_chunks::{TerrainPreview, set_chunk_data, set_preview_meshes, upsert_chunk_mesh},
@@ -123,21 +124,27 @@ pub(super) fn update_render_chunks_local(
         (all_chunks, changed_chunks)
     };
 
-    // Regenerate the meshes data for every chunk that changed
+    // Regenerate the meshes data for every chunk that changed.
     {
         let _span = debug_span!("update_render_chunks_local_mesh", selected_node = ?selected_node)
             .entered();
-        for chunk in &changed_chunks {
-            let padded = padded_heightmap(*chunk, tile_size, &terrain_preview.chunks);
-            let world_offset = chunk_origin(*chunk, &chunk_grid);
-            let mesh = heightmap_to_mesh(
-                &format!("terrain-preview-{}-{}", chunk.0, chunk.1),
-                &padded,
-                tile_size,
-                chunk_grid.world_scale(),
-                world_offset,
-            );
-            upsert_chunk_mesh(meshes, terrain_preview, *chunk, mesh);
+        let new_meshes: Vec<(ChunkCoord, Mesh)> = changed_chunks
+            .par_iter()
+            .map(|chunk| {
+                let padded = padded_heightmap(*chunk, tile_size, &terrain_preview.chunks);
+                let world_offset = chunk_origin(*chunk, &chunk_grid);
+                let mesh = heightmap_to_mesh(
+                    &format!("terrain-preview-{}-{}", chunk.0, chunk.1),
+                    &padded,
+                    tile_size,
+                    chunk_grid.world_scale(),
+                    world_offset,
+                );
+                (*chunk, mesh)
+            })
+            .collect();
+        for (chunk, mesh) in new_meshes {
+            upsert_chunk_mesh(meshes, terrain_preview, chunk, mesh);
         }
     }
 
