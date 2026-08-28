@@ -15,9 +15,6 @@ use crate::{
     },
 };
 
-/// World-space distance between adjacent heightmap samples for the global (non-tiled) preview.
-const GLOBAL_CELL_SIZE: f32 = 0.1;
-
 /// Renders `selected_node`'s own bare, self-centered result (see `TileContext::for_global`) as one mesh, centered at the world origin.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn update_render_chunks_global(
@@ -28,6 +25,7 @@ pub(super) fn update_render_chunks_global(
     material_handle: Handle<PbrMaterial>,
     selected_node: GraphNodeId,
     native_resolution: usize,
+    world_size: f32,
     force: bool,
 ) {
     let chunk = ChunkCoord(0, 0);
@@ -93,11 +91,11 @@ pub(super) fn update_render_chunks_global(
         queue_layer_write(terrain_preview, 0, padded);
     }
 
-    // The global preview is always exactly one instance, centered at the world origin.
-    let extent = native_resolution as f32 * GLOBAL_CELL_SIZE;
+    // The global preview is always exactly one instance, centered at the world origin
+    let cell_size = world_size / native_resolution as f32;
     let instances = vec![ChunkInstance {
-        world_offset: [-extent * 0.5, -extent * 0.5],
-        cell_size: GLOBAL_CELL_SIZE,
+        world_offset: [-world_size * 0.5, -world_size * 0.5],
+        cell_size,
         layer: 0
     }];
 

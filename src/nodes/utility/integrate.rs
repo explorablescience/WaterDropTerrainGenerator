@@ -18,7 +18,7 @@ const ICON: NodeIcon = NodeIcon {
 pub struct Integrate {
     /// World-space location the input's own local origin `(0, 0)` should land on.
     pub position: (f32, f32),
-    /// World units the input's full local domain (`[-0.5, 0.5)` on each axis) should span.
+    /// World-space size of the input's own local extent `(0, 0)` to `(1, 1)`
     pub scale: f32
 }
 impl Default for Integrate {
@@ -114,13 +114,14 @@ impl Node for Integrate {
         let input_size = input.size();
         // The physical footprint is `scale` alone - `input_size` only picks how many texels sample it, not how large it is.
         let input_ctx = TileContext::for_global(input_size);
+        let scale = self.scale * input.world_size;
 
         let mut output = pool.allocate();
         let s = output.size();
         output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
             for (x, texel) in row.iter_mut().enumerate() {
                 let world = ctx.world_pos(x, y);
-                let local = TileContext::to_local(world, self.position, self.scale);
+                let local = TileContext::to_local(world, self.position, scale);
                 let (sx, sy) = input_ctx.to_texel(local);
                 *texel = bilinear_sample(input, input_size, sx, sy);
             }

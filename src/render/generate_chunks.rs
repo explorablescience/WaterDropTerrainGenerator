@@ -76,7 +76,7 @@ pub(crate) fn update_render_chunks(
         None => return // Material not created yet
     };
     match node_locality {
-        NodeLocality::Global { native_resolution } => update_render_chunks_global(
+        NodeLocality::Global { native_resolution, world_size } => update_render_chunks_global(
             &asset_server,
             &mut terrain_preview,
             &mut terrain_preview_sync,
@@ -84,6 +84,7 @@ pub(crate) fn update_render_chunks(
             material_handle,
             selected_node,
             native_resolution,
+            world_size,
             force
         ),
         NodeLocality::Local => update_render_chunks_local(

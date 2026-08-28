@@ -67,7 +67,7 @@ impl NodeGraph {
         }
 
         for &ancestor in &self.collect_ancestors(node_id)? {
-            if let NodeLocality::Global { native_resolution } =
+            if let NodeLocality::Global { native_resolution, .. } =
                 self.topology.node(ancestor)?.locality()
             {
                 let global_pool = TilePool::new(native_resolution);
@@ -119,7 +119,8 @@ impl NodeGraph {
     ) -> Result<NodeGraphProcessResult, NodeError> {
         let _span =
             debug_span!("process_chunk_shared", node_id = ?node_id, chunk = ?chunk).entered();
-        if let NodeLocality::Global { native_resolution } = self.topology.node(node_id)?.locality()
+        if let NodeLocality::Global { native_resolution, .. } =
+            self.topology.node(node_id)?.locality()
         {
             let global_pool = TilePool::new(native_resolution);
             let global_ctx = TileContext::for_global(native_resolution);
@@ -201,7 +202,7 @@ impl NodeGraph {
 
             let from_locality = self.topology.node(*from_node)?.locality();
             let (child_scope, child_pool, child_ctx) = match from_locality {
-                NodeLocality::Global { native_resolution } => (
+                NodeLocality::Global { native_resolution, .. } => (
                     EvalScope::Global,
                     TilePool::new(native_resolution),
                     TileContext::for_global(native_resolution),

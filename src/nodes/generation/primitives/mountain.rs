@@ -18,14 +18,17 @@ const ICON: NodeIcon = NodeIcon {
 pub struct Mountain {
     pub height: f32,
     pub radius: f32,
-    pub native_resolution: u32
+    pub native_resolution: u32,
+    /// World units this node's own local domain spans when previewed standalone; an `Integrate` downstream multiplies its own `scale` by this.
+    pub world_size: f32
 }
 impl Default for Mountain {
     fn default() -> Self {
         Self {
             height: 2.0,
             radius: 0.1,
-            native_resolution: 256
+            native_resolution: 256,
+            world_size: 25.6
         }
     }
 }
@@ -61,6 +64,16 @@ impl Mountain {
                     default: NParamValue::Int(256),
                     constraints: Some(NParamConstraints::IntRange { min: 16, max: 4096 })
                 },
+                NParamDesc {
+                    key: "world_size",
+                    label: "World Size",
+                    category: "Placement",
+                    default: NParamValue::Float(25.6),
+                    constraints: Some(NParamConstraints::FloatRange {
+                        min: 0.1,
+                        max: 500.0
+                    })
+                },
             ]
         })
     }
@@ -89,7 +102,8 @@ impl Node for Mountain {
 
     fn locality(&self) -> NodeLocality {
         NodeLocality::Global {
-            native_resolution: self.native_resolution as usize
+            native_resolution: self.native_resolution as usize,
+            world_size: self.world_size
         }
     }
 
@@ -109,6 +123,7 @@ impl Node for Mountain {
             "height" => Some(NParamValue::Float(self.height)),
             "radius" => Some(NParamValue::Float(self.radius)),
             "native_resolution" => Some(NParamValue::Int(self.native_resolution as i32)),
+            "world_size" => Some(NParamValue::Float(self.world_size)),
             _ => None
         }
     }
@@ -117,6 +132,7 @@ impl Node for Mountain {
             ("height", NParamValue::Float(v)) => self.height = v,
             ("radius", NParamValue::Float(v)) => self.radius = v,
             ("native_resolution", NParamValue::Int(v)) => self.native_resolution = v as u32,
+            ("world_size", NParamValue::Float(v)) => self.world_size = v,
             (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into())
         }
         Ok(())
@@ -136,6 +152,7 @@ impl Node for Mountain {
                 *texel = self.dome(local, (0.0, 0.0));
             }
         });
+        output.world_size = self.world_size;
         Ok(vec![Arc::new(output)])
     }
 }

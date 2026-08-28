@@ -271,7 +271,8 @@ impl Node for FakeGlobalSource {
     }
     fn locality(&self) -> NodeLocality {
         NodeLocality::Global {
-            native_resolution: self.native_resolution
+            native_resolution: self.native_resolution,
+            world_size: 1.0
         }
     }
     fn outputs(&self) -> &[NodeSocket] {
@@ -569,7 +570,8 @@ impl Node for FakeGlobalWorldXMarker {
     }
     fn locality(&self) -> NodeLocality {
         NodeLocality::Global {
-            native_resolution: self.native_resolution
+            native_resolution: self.native_resolution,
+            world_size: 1.0
         }
     }
     fn outputs(&self) -> &[NodeSocket] {

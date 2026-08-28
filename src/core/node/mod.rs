@@ -100,12 +100,16 @@ pub enum NodePortType {
     Scalar, // Scalar value (f32) - used for parameters, not textures
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeLocality {
     /// Given just that chunk's (padded) tile and a world-space coordinate frame to sample consistently across chunk borders.
     Local,
     /// Given the whole terrain's (padded) tile, so it can sample across the entire terrain at once. This is used for nodes that need to know about the global context.
-    Global { native_resolution: usize },
+    Global {
+        native_resolution: usize,
+        /// World units this node's own
+        world_size: f32
+    },
 }
 
 /// High-level grouping of nodes, used to color-code and organize nodes in the graph editor.
