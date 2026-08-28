@@ -9,7 +9,6 @@ fn every_expected_node_type_is_registered() {
         "Perlin",
         "Load File",
         "Mountain",
-        "Integrate",
         "Export"
     ] {
         assert!(

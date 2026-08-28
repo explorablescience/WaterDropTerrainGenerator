@@ -15,7 +15,7 @@ mod registry;
 
 pub use error::NodeError;
 pub use message::{
-    MessageLifetime, NodeMessage, NodeMessageLog, NodeMessageSeverity, TimedNodeMessage,
+    MessageLifetime, NodeMessage, NodeMessageLog, NodeMessageSeverity, TimedNodeMessage
 };
 pub use parameters::{NParamConstraints, NParamDesc, NParamValidator, NParamValue};
 pub use registry::{NodeDescriptor, registered_nodes};
@@ -59,7 +59,7 @@ pub trait Node: Debug + Send + Sync {
         &mut self,
         _key: &str,
         _output: &[TileHandle],
-        _output_size: usize,
+        _output_size: usize
     ) -> Result<(), NodeError> {
         Err("Action not supported".into())
     }
@@ -69,7 +69,7 @@ pub trait Node: Debug + Send + Sync {
         &self,
         _pool: &Arc<TilePool>,
         _inputs: &[TileHandle],
-        _ctx: &TileContext,
+        _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![])
     }
@@ -89,7 +89,7 @@ pub trait Node: Debug + Send + Sync {
 pub struct NodeSocket {
     pub name: &'static str,
     pub dtype: NodePortType,
-    pub required: bool,
+    pub required: bool
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodePortType {
@@ -97,19 +97,20 @@ pub enum NodePortType {
     Mask,   // Same as Height, but used for masks
     Color,  // RGBA texture
     Vector, // Vector field (f32x3 per texel)
-    Scalar, // Scalar value (f32) - used for parameters, not textures
+    Scalar  // Scalar value (f32) - used for parameters, not textures
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeLocality {
     /// Given just that chunk's (padded) tile and a world-space coordinate frame to sample consistently across chunk borders.
     Local,
-    /// Given the whole terrain's (padded) tile, so it can sample across the entire terrain at once. This is used for nodes that need to know about the global context.
-    Global {
-        native_resolution: usize,
-        /// World units this node's own
-        world_size: f32
-    },
+    /// Evaluated once over the terrain's whole real-world extent (see
+    /// [`ChunkGrid::world_extent`](crate::core::tiling::ChunkGrid::world_extent)) at
+    /// `native_resolution` texels per axis, instead of per chunk - for operations whose effect
+    /// isn't bounded by any fixed kernel radius (e.g. erosion transport), so no per-chunk padding
+    /// could express it. Any ancestor or descendant at a different resolution (or `Local` scope)
+    /// is bilinearly resampled into/out of this frame automatically by the graph engine.
+    Global { native_resolution: usize }
 }
 
 /// High-level grouping of nodes, used to color-code and organize nodes in the graph editor.
@@ -122,7 +123,7 @@ pub enum NodeCategory {
     DataExtraction,
     Texturing,
     Utility,
-    Export,
+    Export
 }
 impl NodeCategory {
     /// Every category, in the order they should be listed in the "Add Node" menu.
@@ -134,7 +135,7 @@ impl NodeCategory {
         NodeCategory::DataExtraction,
         NodeCategory::Texturing,
         NodeCategory::Utility,
-        NodeCategory::Export,
+        NodeCategory::Export
     ];
 
     pub fn display_name(&self) -> &'static str {
@@ -146,7 +147,7 @@ impl NodeCategory {
             NodeCategory::DataExtraction => "Data Extraction",
             NodeCategory::Texturing => "Texturing",
             NodeCategory::Utility => "Utility",
-            NodeCategory::Export => "Export",
+            NodeCategory::Export => "Export"
         }
     }
 
@@ -158,7 +159,7 @@ impl NodeCategory {
                 "Mathematical",
                 "Geometric",
                 "Primitives",
-                "Landscape",
+                "Landscape"
             ],
             NodeCategory::Modification => &[
                 "Transforms",
@@ -166,14 +167,14 @@ impl NodeCategory {
                 "Height Adjustments",
                 "Remapping",
                 "Smoothing",
-                "Stylized FX",
+                "Stylized FX"
             ],
             NodeCategory::Surface => &[
                 "Rock Formations",
                 "Terracing",
                 "Micro Structures",
                 "Surface Texture",
-                "Instance Scatter",
+                "Instance Scatter"
             ],
             NodeCategory::Simulation => {
                 &["Erosion", "Hydrology", "Snow & Ice", "Ecological Scatter"]
@@ -181,7 +182,7 @@ impl NodeCategory {
             NodeCategory::DataExtraction => &["Topographic Analysis", "Texture Masks"],
             NodeCategory::Texturing => &["Color Maps", "Color Blends"],
             NodeCategory::Utility => &["Compositing", "Data Operations", "Logic"],
-            NodeCategory::Export => &["Production Export"],
+            NodeCategory::Export => &["Production Export"]
         }
     }
 }
@@ -190,5 +191,5 @@ impl NodeCategory {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeIcon {
     pub id: &'static str,
-    pub png_bytes: &'static [u8],
+    pub png_bytes: &'static [u8]
 }

@@ -30,7 +30,9 @@ pub struct TerrainPreview {
     heightmap_array: Option<Handle<Texture>>,
     /// `(padded texel size, layer count)` the current `heightmap_array` was built with.
     array_dims: Option<(u32, u32)>,
-    pending_layer_writes: Vec<(u32, Vec<f32>)>
+    pending_layer_writes: Vec<(u32, Vec<f32>)>,
+    /// Whether the most recently rendered node was `Global`.
+    last_selected_was_global: Option<bool>
 }
 
 /// Creates the material used for rendering the terrain preview meshes.
@@ -71,12 +73,18 @@ pub(crate) fn update_render_chunks(
         chunk_jobs.clear();
     }
 
+    let is_global = matches!(node_locality, NodeLocality::Global { .. });
+    if terrain_preview.last_selected_was_global != Some(is_global) {
+        terrain_preview.chunks.clear();
+    }
+    terrain_preview.last_selected_was_global = Some(is_global);
+
     let material_handle = match &terrain_preview.material_handle {
         Some(handle) => handle.clone(),
         None => return // Material not created yet
     };
     match node_locality {
-        NodeLocality::Global { native_resolution, world_size } => update_render_chunks_global(
+        NodeLocality::Global { native_resolution } => update_render_chunks_global(
             &asset_server,
             &mut terrain_preview,
             &mut terrain_preview_sync,
@@ -84,7 +92,6 @@ pub(crate) fn update_render_chunks(
             material_handle,
             selected_node,
             native_resolution,
-            world_size,
             force
         ),
         NodeLocality::Local => update_render_chunks_local(
@@ -142,8 +149,12 @@ pub(super) fn sync_preview_state(
     instances: Vec<ChunkInstance>,
     layer_of: impl Fn(ChunkCoord) -> u32
 ) {
-    let _span = debug_span!("sync_preview_state", size = size, instances = instances.len())
-        .entered();
+    let _span = debug_span!(
+        "sync_preview_state",
+        size = size,
+        instances = instances.len()
+    )
+    .entered();
 
     // Rebuild the shared mesh when the vertex density (tile_size / native_resolution) changes.
     if terrain_preview.mesh_size != Some(size) {

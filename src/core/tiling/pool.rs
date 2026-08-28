@@ -9,9 +9,7 @@ pub type TileHandle = Arc<TileBuffer>;
 #[derive(Debug, Clone)]
 pub struct TileBuffer {
     data: Vec<f32>,
-    pool: Arc<TilePool>,
-    /// World units this tile's own local domain spans.
-    pub world_size: f32
+    pool: Arc<TilePool>
 }
 impl TileBuffer {
     pub fn size(&self) -> usize {
@@ -68,8 +66,7 @@ impl TilePool {
         });
         TileBuffer {
             data: tile,
-            pool: Arc::clone(self),
-            world_size: 1.0
+            pool: Arc::clone(self)
         }
     }
 

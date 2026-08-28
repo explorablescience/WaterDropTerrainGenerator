@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use waterdrop_terrain_generator::core::graph::{NodeGraph, NodeGraphProcessResult};
 use waterdrop_terrain_generator::core::node::{
-    Node, NodeCategory, NodeError, NodeIcon, NodePortType, NodeSocket
+    Node, NodeCategory, NodeError, NodeIcon, NodeLocality, NodePortType, NodeSocket
 };
 use waterdrop_terrain_generator::core::tiling::{ChunkGrid, TileContext, TileHandle, TilePool};
 use waterdrop_terrain_generator::nodes::*;
@@ -102,6 +102,73 @@ impl Node for FakeOptionalSink {
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![inputs[0].clone()])
     }
+}
+
+/// A `Global` source with a configurable resolution, used to test that connecting across
+/// locality/resolution boundaries is always accepted - the graph engine resamples automatically.
+#[derive(Debug)]
+struct FakeGlobalHeightSource {
+    native_resolution: usize
+}
+impl Node for FakeGlobalHeightSource {
+    fn label(&self) -> &str {
+        "Fake Global Height Source"
+    }
+    fn category(&self) -> NodeCategory {
+        NodeCategory::Generation
+    }
+    fn icon(&self) -> NodeIcon {
+        TEST_ICON
+    }
+    fn locality(&self) -> NodeLocality {
+        NodeLocality::Global {
+            native_resolution: self.native_resolution
+        }
+    }
+    fn outputs(&self) -> &[NodeSocket] {
+        &[NodeSocket {
+            name: "Height",
+            dtype: NodePortType::Height,
+            required: true
+        }]
+    }
+}
+
+#[test]
+fn connecting_a_global_node_directly_into_a_local_socket_succeeds() {
+    // No manual placement node needed: the graph engine resamples a `Global` ancestor's
+    // whole-terrain tile into whatever frame a `Local` consumer needs.
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let source = graph.add_node(Box::new(FakeGlobalHeightSource {
+        native_resolution: 8
+    }));
+    let sink = graph.add_node(Box::new(Erosion::default()));
+
+    assert!(graph.connect(source, 0, sink, 0).is_ok());
+}
+
+#[test]
+fn connecting_two_global_nodes_with_different_native_resolution_succeeds() {
+    // Resampling handles resolution mismatches between two `Global` nodes just as it does between
+    // a `Global` node and a `Local` one.
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let source = graph.add_node(Box::new(FakeGlobalHeightSource {
+        native_resolution: 8
+    }));
+    let sink = graph.add_node(Box::new(HydraulicErosion::default())); // native_resolution: 256
+
+    assert!(graph.connect(source, 0, sink, 0).is_ok());
+}
+
+#[test]
+fn connecting_a_local_node_into_a_global_nodes_input_succeeds() {
+    // The graph's normal "bake a local generator once at global scope" pattern: a `Global` node
+    // pulling in a `Local` ancestor evaluates it once, in its own real-world-aligned frame.
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4 as f32));
+    let source = graph.add_node(Box::new(Perlin::default()));
+    let sink = graph.add_node(Box::new(HydraulicErosion::default()));
+
+    assert!(graph.connect(source, 0, sink, 0).is_ok());
 }
 
 #[test]

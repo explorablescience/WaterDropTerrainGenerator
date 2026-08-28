@@ -14,8 +14,7 @@ const ICON: NodeIcon = NodeIcon {
 };
 
 /// A basic `Local` primitive: one smooth dome, pointwise in world space (no neighbor reads, no
-/// whole-domain statistic), so it needs no padding and no `Integrate` to place it - `position` and
-/// `radius` are already in world units.
+/// whole-domain statistic), so it needs no padding - `position` and `radius` are plain world units.
 #[derive(Debug)]
 pub struct Mountain {
     pub height: f32,

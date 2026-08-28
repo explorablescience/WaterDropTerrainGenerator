@@ -10,11 +10,12 @@ use crate::core::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CacheKey(pub u64); // hash(params, input keys, node_type, node_id)
 
-/// A specific chunk, or the single whole-terrain pass used to evaluate a `Global` node (and any `Local` node pulled into that pass as an input).
+/// A specific chunk, or the single whole-terrain pass (at a given `native_resolution`) used to
+/// evaluate a `Global` node. Each scope has its own cache entry for every node, since the same `Local` node produces a different tile for each chunk it's evaluated for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EvalScope {
     Chunk(ChunkCoord),
-    Global
+    Global(usize)
 }
 
 #[derive(Clone)]
@@ -47,7 +48,10 @@ impl EvalCache {
 
     /// Drops every cached scope of `id` (every chunk's output, plus its global one if any).
     pub fn remove(&self, id: GraphNodeId) {
-        self.states.lock().unwrap().retain(|(node_id, _), _| *node_id != id);
+        self.states
+            .lock()
+            .unwrap()
+            .retain(|(node_id, _), _| *node_id != id);
     }
 
     /// Whether `id` has a `Baked` entry in any scope - baked nodes are opaque to invalidation.
@@ -77,7 +81,7 @@ impl EvalCache {
         self.states
             .lock()
             .unwrap()
-            .retain(|(_, scope), _| matches!(scope, EvalScope::Global));
+            .retain(|(_, scope), _| matches!(scope, EvalScope::Global(_)));
     }
 
     /// Total heap bytes currently held by every distinct cached tile, across every node and every scope

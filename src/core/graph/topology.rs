@@ -87,6 +87,7 @@ impl Topology {
                 to_socket: to_socket_desc.name.to_string()
             });
         }
+        // No locality check needed here
         // An input pin can only ever hold one connection: replace whatever was already plugged into it.
         let existing = to_entry.inputs[to_socket];
         if let Some((old_from_node, old_from_socket)) = existing {

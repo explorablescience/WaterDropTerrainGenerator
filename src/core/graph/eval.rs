@@ -5,11 +5,13 @@ use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+use rayon::prelude::*;
+
 use crate::core::graph::state::{CacheKey, EvalScope, NodeState, cache_key_of};
 use crate::core::graph::topology::GraphNodeId;
 use crate::core::graph::{NodeGraph, NodeGraphProcessResult};
 use crate::core::node::{Node, NodeError, NodeLocality};
-use crate::core::tiling::{ChunkCoord, TileContext, TilePool};
+use crate::core::tiling::{ChunkCoord, TileContext, TileHandle, TilePool, bilinear_sample};
 
 impl NodeGraph {
     /// Stops at a `Global` ancestor: its kernel padding is handled entirely within its own whole-terrain pass.
@@ -43,7 +45,7 @@ impl NodeGraph {
                 let node = self.topology.node(id)?;
                 Ok::<usize, NodeError>(match node.locality() {
                     NodeLocality::Global { .. } => 0,
-                    NodeLocality::Local => node.size().div_ceil(2),
+                    NodeLocality::Local => node.size().div_ceil(2)
                 })
             })
             .collect::<Result<Vec<_>, _>>()?
@@ -67,12 +69,17 @@ impl NodeGraph {
         }
 
         for &ancestor in &self.collect_ancestors(node_id)? {
-            if let NodeLocality::Global { native_resolution, .. } =
+            if let NodeLocality::Global { native_resolution } =
                 self.topology.node(ancestor)?.locality()
             {
                 let global_pool = TilePool::new(native_resolution);
-                let global_ctx = TileContext::for_global(native_resolution);
-                self.process_scoped(ancestor, EvalScope::Global, &global_pool, &global_ctx)?;
+                let global_ctx = TileContext::for_global(&self.chunk_grid, native_resolution);
+                self.process_scoped(
+                    ancestor,
+                    EvalScope::Global(native_resolution),
+                    &global_pool,
+                    &global_ctx
+                )?;
             }
         }
         Ok(())
@@ -88,13 +95,14 @@ impl NodeGraph {
             return Ok(true);
         }
         for &ancestor in &self.collect_ancestors(node_id)? {
-            if matches!(
-                self.topology.node(ancestor)?.locality(),
-                NodeLocality::Global { .. }
-            ) && !matches!(
-                self.cache.state(ancestor, EvalScope::Global),
-                NodeState::Cached(_)
-            ) {
+            if let NodeLocality::Global { native_resolution } =
+                self.topology.node(ancestor)?.locality()
+                && !matches!(
+                    self.cache
+                        .state(ancestor, EvalScope::Global(native_resolution)),
+                    NodeState::Cached(_)
+                )
+            {
                 return Ok(true);
             }
         }
@@ -105,7 +113,7 @@ impl NodeGraph {
     pub fn process_chunk(
         &mut self,
         node_id: GraphNodeId,
-        chunk: ChunkCoord,
+        chunk: ChunkCoord
     ) -> Result<NodeGraphProcessResult, NodeError> {
         self.prepare_for_parallel_eval(node_id)?;
         self.process_chunk_shared(node_id, chunk)
@@ -115,16 +123,20 @@ impl NodeGraph {
     pub fn process_chunk_shared(
         &self,
         node_id: GraphNodeId,
-        chunk: ChunkCoord,
+        chunk: ChunkCoord
     ) -> Result<NodeGraphProcessResult, NodeError> {
         let _span =
             debug_span!("process_chunk_shared", node_id = ?node_id, chunk = ?chunk).entered();
-        if let NodeLocality::Global { native_resolution, .. } =
-            self.topology.node(node_id)?.locality()
+        if let NodeLocality::Global { native_resolution } = self.topology.node(node_id)?.locality()
         {
             let global_pool = TilePool::new(native_resolution);
-            let global_ctx = TileContext::for_global(native_resolution);
-            return self.process_scoped(node_id, EvalScope::Global, &global_pool, &global_ctx);
+            let global_ctx = TileContext::for_global(&self.chunk_grid, native_resolution);
+            return self.process_scoped(
+                node_id,
+                EvalScope::Global(native_resolution),
+                &global_pool,
+                &global_ctx
+            );
         }
 
         let internal_tile_size = self.required_internal_tile_size(node_id)?;
@@ -144,7 +156,7 @@ impl NodeGraph {
         node_id: GraphNodeId,
         scope: EvalScope,
         pool: &Arc<TilePool>,
-        ctx: &TileContext,
+        ctx: &TileContext
     ) -> Result<NodeGraphProcessResult, NodeError> {
         match self.cache.state(node_id, scope) {
             NodeState::Cached((_, tiles)) => {
@@ -173,7 +185,7 @@ impl NodeGraph {
         node_id: GraphNodeId,
         scope: EvalScope,
         pool: &Arc<TilePool>,
-        ctx: &TileContext,
+        ctx: &TileContext
     ) -> Result<NodeGraphProcessResult, NodeError> {
         let inputs = self.topology.inputs(node_id)?.to_vec();
         let mut input_tiles = Vec::with_capacity(inputs.len());
@@ -181,7 +193,9 @@ impl NodeGraph {
         // (node, scope) each input tile came from, for eviction below once this node's output is produced.
         let mut consumed = Vec::with_capacity(inputs.len());
 
+        // Evaluate all inputs first, so that if any of them are dirty, this node can be marked dirty and skipped without wasting work.
         for (socket, input) in inputs.iter().enumerate() {
+            // If the input is unconnected, check if it's required. If so, error; if not, feed a neutral tile.
             let Some((from_node, from_socket)) = input else {
                 let node = self.topology.node(node_id)?;
                 let socket_desc = node.inputs().get(socket);
@@ -191,7 +205,7 @@ impl NodeGraph {
                         node: node.label().to_string(),
                         socket: socket_desc
                             .map(|s| s.name.to_string())
-                            .unwrap_or_else(|| socket.to_string()),
+                            .unwrap_or_else(|| socket.to_string())
                     });
                 }
                 // Optional and unconnected: feed the node a neutral, zero-filled tile.
@@ -200,23 +214,27 @@ impl NodeGraph {
                 continue;
             };
 
+            // Evaluate the ancestor node in its own frame
             let from_locality = self.topology.node(*from_node)?.locality();
             let (child_scope, child_pool, child_ctx) = match from_locality {
-                NodeLocality::Global { native_resolution, .. } => (
-                    EvalScope::Global,
+                NodeLocality::Global { native_resolution } => (
+                    // If the ancestor is a `Global` pass, evaluate it in its own whole-terrain frame
+                    EvalScope::Global(native_resolution),
                     TilePool::new(native_resolution),
-                    TileContext::for_global(native_resolution),
+                    TileContext::for_global(&self.chunk_grid, native_resolution)
                 ),
-                NodeLocality::Local => (scope, pool.clone(), *ctx),
+                // If the ancestor is a `Local` chunk, evaluate it in the same frame as this node's own chunk.
+                NodeLocality::Local => (scope, pool.clone(), *ctx)
             };
 
-            let tile =
+            // Compute the ancestor's tile
+            let raw_tile =
                 match self.process_scoped(*from_node, child_scope, &child_pool, &child_ctx)? {
                     NodeGraphProcessResult::Processed(_, tiles) => match tiles.get(*from_socket) {
                         Some(tile) => tile.clone(),
                         None => {
                             return Err(NodeError::OutputNotAvailable {
-                                node: self.topology.node(*from_node)?.label().to_string(),
+                                node: self.topology.node(*from_node)?.label().to_string()
                             });
                         }
                     },
@@ -224,26 +242,36 @@ impl NodeGraph {
                         return Ok(NodeGraphProcessResult::Processing);
                     }
                 };
+            let tile = match from_locality {
+                NodeLocality::Global { .. } => {
+                    // Ancestor is `Global`: resample its tile into this node's frame
+                    resample_tile(pool, ctx, &raw_tile, child_pool.tile_length(), &child_ctx)
+                }
+                // Ancestor is `Local`: already in the right frame, no resampling needed
+                NodeLocality::Local => raw_tile
+            };
             input_tiles.push(tile);
             input_keys.push(cache_key_of(&self.cache.state(*from_node, child_scope)));
             consumed.push((*from_node, child_scope));
         }
 
+        // All inputs are ready; call the node's `process` method to produce its output tile(s).
         let node = self.topology.node(node_id)?;
         let key = compute_cache_key(node, node_id, &input_keys);
         let output = node.process(pool, &input_tiles, ctx)?;
         self.set_is_processing();
 
+        // Cache the output tile(s) and bump the graph's generation, so future calls can see that this node has been processed.
         self.cache
             .set(node_id, scope, NodeState::Cached((key, output.clone())));
         let generation = self.increment_generation();
 
-        // Evict any `Chunk`-scoped inputs that are no longer needed by this node, to free up memory for other chunks. 
+        // Evict any ancestor tiles that are no longer needed by any downstream nodes. This is a best-effort attempt to free memory; if a tile is still in use by another node, it will remain cached.
         for (from_node, from_scope) in consumed {
             if !matches!(from_scope, EvalScope::Chunk(_)) {
                 continue;
             }
-            
+
             let ref_count = if let Ok(outputs) = self.topology.outputs(from_node) {
                 outputs
                     .iter()
@@ -257,7 +285,9 @@ impl NodeGraph {
             } else {
                 0
             };
-            if !(matches!(scope, EvalScope::Global) || ref_count > 0) && matches!(self.cache.state(from_node, scope), NodeState::Cached(_)) {
+            if !(matches!(scope, EvalScope::Global(_)) || ref_count > 0)
+                && matches!(self.cache.state(from_node, scope), NodeState::Cached(_))
+            {
                 self.cache.set(from_node, scope, NodeState::Dirty); // tiles freed via TileHandle's own drop
             }
         }
@@ -266,10 +296,30 @@ impl NodeGraph {
     }
 }
 
+/// Resamples a tile from one coordinate frame to another, using bilinear interpolation. The source tile is assumed to be in the `src_ctx` frame, and the output tile will be in the `dst_ctx` frame.
+fn resample_tile(
+    dst_pool: &Arc<TilePool>,
+    dst_ctx: &TileContext,
+    src: &TileHandle,
+    src_size: usize,
+    src_ctx: &TileContext
+) -> TileHandle {
+    let mut output = dst_pool.allocate();
+    let s = output.size();
+    output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
+        for (x, texel) in row.iter_mut().enumerate() {
+            let world = dst_ctx.world_pos(x, y);
+            let (sx, sy) = src_ctx.to_texel(world);
+            *texel = bilinear_sample(src, src_size, sx, sy);
+        }
+    });
+    Arc::new(output)
+}
+
 fn compute_cache_key(
     node: &dyn Node,
     node_id: GraphNodeId,
-    input_keys: &[Option<CacheKey>],
+    input_keys: &[Option<CacheKey>]
 ) -> CacheKey {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     node_id.0.hash(&mut hasher);

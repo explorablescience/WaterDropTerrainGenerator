@@ -1,3 +1,3 @@
-mod integrate;
+mod combine;
 
-pub use integrate::*;
+pub use combine::*;

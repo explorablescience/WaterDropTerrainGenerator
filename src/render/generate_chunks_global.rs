@@ -6,16 +6,17 @@ use crate::{
     core::{
         graph::GraphNodeId,
         node::NodeError::InputNotConnected,
-        tiling::{ChunkCoord, crop_padding},
+        tiling::{ChunkCoord, crop_padding}
     },
     render::{
         chunk_array::{ChunkInstance, TerrainPreviewSync},
         generate_chunks::{TerrainPreview, queue_layer_write, set_chunk_data, sync_preview_state},
-        utils::padded_heightmap,
-    },
+        utils::padded_heightmap
+    }
 };
 
-/// Renders `selected_node`'s own bare, self-centered result (see `TileContext::for_global`) as one mesh, centered at the world origin.
+/// Renders `selected_node`'s own whole-terrain result (see `TileContext::for_global`) as one mesh
+/// covering the same real world extent the chunked terrain does.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn update_render_chunks_global(
     asset_server: &AssetServer,
@@ -25,9 +26,9 @@ pub(super) fn update_render_chunks_global(
     material_handle: Handle<PbrMaterial>,
     selected_node: GraphNodeId,
     native_resolution: usize,
-    world_size: f32,
-    force: bool,
+    force: bool
 ) {
+    let (world_extent_x, world_extent_y) = terrain_graph.read().graph().chunk_grid().world_extent();
     let chunk = ChunkCoord(0, 0);
 
     // Drop every other per-chunk entry *before* touching the padding/stitching machinery below
@@ -62,7 +63,7 @@ pub(super) fn update_render_chunks_global(
                     _ => error!(
                         "Error while processing terrain graph for the global preview: {:?}",
                         e
-                    ),
+                    )
                 }
 
                 // If the chunk was already flat, don't overwrite it with a new flat chunk (to avoid unnecessary mesh regeneration)
@@ -75,7 +76,7 @@ pub(super) fn update_render_chunks_global(
                         terrain_preview,
                         chunk,
                         vec![0.0; native_resolution * native_resolution],
-                        true,
+                        true
                     );
                     changed = true;
                 }
@@ -91,10 +92,10 @@ pub(super) fn update_render_chunks_global(
         queue_layer_write(terrain_preview, 0, padded);
     }
 
-    // The global preview is always exactly one instance, centered at the world origin
-    let cell_size = world_size / native_resolution as f32;
+    // The global preview is always exactly one instance, covering the terrain's real world extent
+    let cell_size = world_extent_x / native_resolution as f32;
     let instances = vec![ChunkInstance {
-        world_offset: [-world_size * 0.5, -world_size * 0.5],
+        world_offset: [-world_extent_x * 0.5, -world_extent_y * 0.5],
         cell_size,
         layer: 0
     }];
