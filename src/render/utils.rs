@@ -13,7 +13,7 @@ use crate::{
 /// World-space height gained per unit of heightmap value.
 const HEIGHT_SCALE: f32 = 1.0;
 
-/// Builds a grid [`Mesh`] from a heightmap, with the given world-space cell size and world-space offset for the mesh's origin.
+/// Builds a grid [`Mesh`] from a heightmap.
 pub fn heightmap_to_mesh(
     label: &str,
     heightmap: &[f32],
@@ -23,12 +23,11 @@ pub fn heightmap_to_mesh(
 ) -> Mesh {
     let _span = debug_span!("heightmap_to_mesh", label = label, size = size).entered();
 
-    // `heightmap` is padded by exactly 1 texel on each side, so a vertex at local (x, z) and its
-    // neighbors for the central-difference normal always land in-bounds at (x + 1, z + 1) without clamping.
+    // `heightmap` is padded 1 texel per side, so (x, z) and its normal-sample neighbors always land in-bounds at +1.
     let padded = size + 3;
     let verts = size + 1;
 
-    // Build vertices and normals, one row of `heightmap` at a time (rows are independent, so this runs in parallel).
+    // One row at a time, in parallel (rows are independent).
     let rows: Vec<(Vec<Vertex>, Vec3, Vec3)> = (0..verts)
         .into_par_iter()
         .map(|z| {
@@ -44,7 +43,7 @@ pub fn heightmap_to_mesh(
                 let position =
                     world_offset + Vec3::new(x as f32 * cell_size, height, z as f32 * cell_size);
 
-                // Central-difference slope estimate, used as a smooth per-vertex normal.
+                // Central-difference slope -> smooth per-vertex normal.
                 let dx = (row_center[x + 2] - row_center[x]) * HEIGHT_SCALE;
                 let dz = (row_below[x + 1] - row_above[x + 1]) * HEIGHT_SCALE;
                 let normal = Vec3::new(-dx, 2.0 * cell_size, -dz).normalize();
@@ -89,12 +88,12 @@ pub fn heightmap_to_mesh(
         vertices,
         indices,
         bbox: MeshBbox { min, max },
-        use_ssbo: false // Using custom buffers to avoid overflow
+        use_ssbo: false // custom buffers, to avoid overflow
     }
 }
 
 
-/// World-space position of `chunk`'s local `(0, 0)` texel.
+/// `chunk`'s local `(0, 0)` texel, in world space.
 pub(super) fn chunk_origin(chunk: ChunkCoord, grid: &ChunkGrid) -> Vec3 {
     let step = grid.tile_size() as f32 * grid.world_scale();
     let extent_x = grid.chunks_x() as f32 * step;
@@ -106,7 +105,7 @@ pub(super) fn chunk_origin(chunk: ChunkCoord, grid: &ChunkGrid) -> Vec3 {
     )
 }
 
-/// Builds a padded heightmap for `chunk` by sampling neighboring chunks as needed. The returned heightmap is `(tile_size + 3) x (tile_size + 3)` in size, with the extra padding used for smooth normal calculation at the edges of the chunk.
+/// Builds `chunk`'s `(tile_size + 3)²` heightmap, padded with neighbor-sampled edges for smooth border normals.
 pub(super) fn padded_heightmap(
     chunk: ChunkCoord,
     tile_size: usize,
@@ -116,8 +115,8 @@ pub(super) fn padded_heightmap(
     let padded = tile_size + 3;
     let mut out = vec![0.0; padded * padded];
 
-    // Fast path: the interior is always this chunk's own data, so copy it directly instead of
-    // paying for a HashMap lookup (via `sample_across_chunks`) per texel.
+    // Fast path: the core (padded index [1, tile_size]) is always this chunk's own data, so copy
+    // it directly instead of a per-texel HashMap lookup.
     if let Some(own) = chunks.get(&chunk) {
         for z in 0..tile_size {
             let src = &own.core_data[z * tile_size..(z + 1) * tile_size];
@@ -126,17 +125,19 @@ pub(super) fn padded_heightmap(
         }
     }
 
-    // Slow path: only the 1-texel padding ring can come from a neighboring chunk.
-    for pz in [0, padded - 1] {
+    // Slow path: padding is asymmetric (1 texel low, 2 high — heightmap_to_mesh needs vertex
+    // indices -1..=tile_size+1), so only these can come from a neighboring chunk.
+    let border = || (0..=0usize).chain(tile_size + 1..=tile_size + 2);
+    for pz in border() {
         let lz = pz as isize - 1;
         for px in 0..padded {
             let lx = px as isize - 1;
             out[pz * padded + px] = sample_across_chunks(chunk, tile_size, chunks, lx, lz);
         }
     }
-    for pz in 1..padded - 1 {
+    for pz in 1..=tile_size {
         let lz = pz as isize - 1;
-        for px in [0, padded - 1] {
+        for px in border() {
             let lx = px as isize - 1;
             out[pz * padded + px] = sample_across_chunks(chunk, tile_size, chunks, lx, lz);
         }
@@ -144,7 +145,7 @@ pub(super) fn padded_heightmap(
     out
 }
 
-/// Samples a texel from the given chunk or one of its neighbors, clamping to the edge of the chunk if the neighbor is missing or has no data yet.
+/// Samples a texel from `chunk` or a neighbor, clamping to the edge if that chunk is missing or has no data yet.
 fn sample_across_chunks(
     chunk: ChunkCoord,
     tile_size: usize,
@@ -159,7 +160,7 @@ fn sample_across_chunks(
     if let Some(preview) = chunks.get(&neighbor) {
         return preview.core_data[sz as usize * tile_size + sx as usize];
     }
-    // No such chunk (grid edge) or no data yet.
+    // Grid edge, or no data yet.
     let Some(own) = chunks.get(&chunk) else {
         return 0.0;
     };
@@ -167,7 +168,7 @@ fn sample_across_chunks(
     let csz = lz.clamp(0, size - 1) as usize;
     own.core_data[csz * tile_size + csx]
 }
-/// Splits a core-tile-relative coordinate into which neighboring chunk to sample from and which texel within that chunk's tile to read.
+/// Splits a tile-relative coordinate into (neighbor chunk offset, texel within it).
 fn locate(l: isize, size: isize) -> (i32, isize) {
     (l.div_euclid(size) as i32, l.rem_euclid(size))
 }
