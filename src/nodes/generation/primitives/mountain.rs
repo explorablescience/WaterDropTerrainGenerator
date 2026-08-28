@@ -4,7 +4,7 @@ use rayon::prelude::*;
 
 use crate::core::node::{
     NParamConstraints, NParamDesc, NParamValue, Node, NodeCategory, NodeDescriptor, NodeError,
-    NodeIcon, NodeLocality, NodePortType, NodeSocket
+    NodeIcon, NodePortType, NodeSocket
 };
 use crate::core::tiling::{TileContext, TileHandle, TilePool};
 
@@ -13,22 +13,21 @@ const ICON: NodeIcon = NodeIcon {
     png_bytes: include_bytes!("../../../../assets/icons/node_mountain.png")
 };
 
-/// A very basic `Global` primitive: one smooth dome.
+/// A basic `Local` primitive: one smooth dome, pointwise in world space (no neighbor reads, no
+/// whole-domain statistic), so it needs no padding and no `Integrate` to place it - `position` and
+/// `radius` are already in world units.
 #[derive(Debug)]
 pub struct Mountain {
     pub height: f32,
     pub radius: f32,
-    pub native_resolution: u32,
-    /// World units this node's own local domain spans when previewed standalone; an `Integrate` downstream multiplies its own `scale` by this.
-    pub world_size: f32
+    pub position: (f32, f32)
 }
 impl Default for Mountain {
     fn default() -> Self {
         Self {
             height: 2.0,
-            radius: 0.1,
-            native_resolution: 256,
-            world_size: 25.6
+            radius: 2.5,
+            position: (0.0, 0.0)
         }
     }
 }
@@ -51,27 +50,20 @@ impl Mountain {
                     key: "radius",
                     label: "Radius",
                     category: "Shape",
-                    default: NParamValue::Float(0.3),
+                    default: NParamValue::Float(2.5),
                     constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.01,
-                        max: 2.0
+                        min: 0.1,
+                        max: 20.0
                     })
                 },
                 NParamDesc {
-                    key: "native_resolution",
-                    label: "Native Resolution",
-                    category: "Shape",
-                    default: NParamValue::Int(256),
-                    constraints: Some(NParamConstraints::IntRange { min: 16, max: 4096 })
-                },
-                NParamDesc {
-                    key: "world_size",
-                    label: "World Size",
+                    key: "position",
+                    label: "Position",
                     category: "Placement",
-                    default: NParamValue::Float(25.6),
-                    constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.1,
-                        max: 500.0
+                    default: NParamValue::Vector2(0.0, 0.0),
+                    constraints: Some(NParamConstraints::Vector2Range {
+                        min: (-50.0, -50.0),
+                        max: (50.0, 50.0)
                     })
                 },
             ]
@@ -100,13 +92,6 @@ impl Node for Mountain {
         ICON
     }
 
-    fn locality(&self) -> NodeLocality {
-        NodeLocality::Global {
-            native_resolution: self.native_resolution as usize,
-            world_size: self.world_size
-        }
-    }
-
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
@@ -122,8 +107,7 @@ impl Node for Mountain {
         match key {
             "height" => Some(NParamValue::Float(self.height)),
             "radius" => Some(NParamValue::Float(self.radius)),
-            "native_resolution" => Some(NParamValue::Int(self.native_resolution as i32)),
-            "world_size" => Some(NParamValue::Float(self.world_size)),
+            "position" => Some(NParamValue::Vector2(self.position.0, self.position.1)),
             _ => None
         }
     }
@@ -131,8 +115,7 @@ impl Node for Mountain {
         match (key, value) {
             ("height", NParamValue::Float(v)) => self.height = v,
             ("radius", NParamValue::Float(v)) => self.radius = v,
-            ("native_resolution", NParamValue::Int(v)) => self.native_resolution = v as u32,
-            ("world_size", NParamValue::Float(v)) => self.world_size = v,
+            ("position", NParamValue::Vector2(x, y)) => self.position = (x, y),
             (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into())
         }
         Ok(())
@@ -148,11 +131,10 @@ impl Node for Mountain {
         let s = output.size();
         output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
             for (x, texel) in row.iter_mut().enumerate() {
-                let local = ctx.local_pos(x, y);
-                *texel = self.dome(local, (0.0, 0.0));
+                let world = ctx.world_pos(x, y);
+                *texel = self.dome(world, self.position);
             }
         });
-        output.world_size = self.world_size;
         Ok(vec![Arc::new(output)])
     }
 }
