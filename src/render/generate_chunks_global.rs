@@ -9,11 +9,9 @@ use crate::{
         tiling::{ChunkCoord, crop_padding},
     },
     render::{
-        generate_chunks::{
-            TerrainPreview, set_preview_meshes, set_chunk_data, upsert_chunk_mesh,
-        },
-        render_subpass::TerrainPreviewMeshes,
-        utils::{heightmap_to_mesh, padded_heightmap},
+        chunk_array::{ChunkInstance, TerrainPreviewSync},
+        generate_chunks::{TerrainPreview, queue_layer_write, set_chunk_data, sync_preview_state},
+        utils::padded_heightmap,
     },
 };
 
@@ -23,9 +21,9 @@ const GLOBAL_CELL_SIZE: f32 = 0.1;
 /// Renders `selected_node`'s own bare, self-centered result (see `TileContext::for_global`) as one mesh, centered at the world origin.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn update_render_chunks_global(
-    meshes: &mut Assets<Mesh>,
+    asset_server: &AssetServer,
     terrain_preview: &mut TerrainPreview,
-    terrain_preview_meshes: &mut TerrainPreviewMeshes,
+    terrain_preview_sync: &mut TerrainPreviewSync,
     terrain_graph: &TerrainSessionHolder,
     material_handle: Handle<PbrMaterial>,
     selected_node: GraphNodeId,
@@ -88,22 +86,29 @@ pub(super) fn update_render_chunks_global(
         changed
     };
 
-    // If the chunk's data changed, regenerate its mesh data
+    // If the chunk's data changed, queue its (padded) heightmap for upload into layer 0.
     if changed {
-        let _span = debug_span!("update_render_chunks_global_mesh", chunk = ?chunk).entered();
+        let _span = debug_span!("update_render_chunks_global_upload", chunk = ?chunk).entered();
         let padded = padded_heightmap(chunk, native_resolution, &terrain_preview.chunks);
-        let extent = native_resolution as f32 * GLOBAL_CELL_SIZE;
-        let world_offset = Vec3::new(-extent * 0.5, 0.0, -extent * 0.5);
-        let mesh = heightmap_to_mesh(
-            "terrain-preview-global",
-            &padded,
-            native_resolution,
-            GLOBAL_CELL_SIZE,
-            world_offset,
-        );
-        upsert_chunk_mesh(meshes, terrain_preview, chunk, mesh);
+        queue_layer_write(terrain_preview, 0, padded);
     }
 
-    // Update the meshes from the newly generated chunk data (or the existing one if it didn't change)
-    set_preview_meshes(terrain_preview, terrain_preview_meshes, material_handle);
+    // The global preview is always exactly one instance, centered at the world origin.
+    let extent = native_resolution as f32 * GLOBAL_CELL_SIZE;
+    let instances = vec![ChunkInstance {
+        world_offset: [-extent * 0.5, -extent * 0.5],
+        cell_size: GLOBAL_CELL_SIZE,
+        layer: 0
+    }];
+
+    // Publish the current mesh/array/instance state for the render world to pick up.
+    sync_preview_state(
+        asset_server,
+        terrain_preview,
+        terrain_preview_sync,
+        material_handle,
+        native_resolution,
+        instances,
+        |_| 0
+    );
 }

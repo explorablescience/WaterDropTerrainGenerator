@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use wde::prelude::*;
 
 use bevy::prelude::*;
-use rayon::prelude::*;
 use wde::wde_renderer::{assets::{Mesh, MeshBbox}, passes::Vertex};
 
 use crate::{
@@ -10,64 +9,21 @@ use crate::{
     render::generate_chunks::ChunkPreview
 };
 
-/// World-space height gained per unit of heightmap value.
-const HEIGHT_SCALE: f32 = 1.0;
-
-/// Builds a grid [`Mesh`] from a heightmap.
-pub fn heightmap_to_mesh(
-    label: &str,
-    heightmap: &[f32],
-    size: usize,
-    cell_size: f32,
-    world_offset: Vec3
-) -> Mesh {
-    let _span = debug_span!("heightmap_to_mesh", label = label, size = size).entered();
-
-    // `heightmap` is padded 1 texel per side, so (x, z) and its normal-sample neighbors always land in-bounds at +1.
-    let padded = size + 3;
+/// Builds the single flat grid [`Mesh`] shared by every chunk instance.
+pub fn build_shared_chunk_mesh(size: usize) -> Mesh {
+    let _span = debug_span!("build_shared_chunk_mesh", size = size).entered();
     let verts = size + 1;
 
-    // One row at a time, in parallel (rows are independent).
-    let rows: Vec<(Vec<Vertex>, Vec3, Vec3)> = (0..verts)
-        .into_par_iter()
-        .map(|z| {
-            let row_above = &heightmap[z * padded..(z + 1) * padded];
-            let row_center = &heightmap[(z + 1) * padded..(z + 2) * padded];
-            let row_below = &heightmap[(z + 2) * padded..(z + 3) * padded];
-
-            let mut min = Vec3::splat(f32::MAX);
-            let mut max = Vec3::splat(f32::MIN);
-            let mut row = Vec::with_capacity(verts);
-            for x in 0..verts {
-                let height = row_center[x + 1] * HEIGHT_SCALE;
-                let position =
-                    world_offset + Vec3::new(x as f32 * cell_size, height, z as f32 * cell_size);
-
-                // Central-difference slope -> smooth per-vertex normal.
-                let dx = (row_center[x + 2] - row_center[x]) * HEIGHT_SCALE;
-                let dz = (row_below[x + 1] - row_above[x + 1]) * HEIGHT_SCALE;
-                let normal = Vec3::new(-dx, 2.0 * cell_size, -dz).normalize();
-
-                min = min.min(position);
-                max = max.max(position);
-                row.push(Vertex {
-                    position: [position.x, position.y, position.z],
-                    uv: [x as f32 / size as f32, z as f32 / size as f32],
-                    normal: [normal.x, normal.y, normal.z],
-                    tangent: [1.0, 0.0, 0.0, 1.0]
-                });
-            }
-            (row, min, max)
-        })
-        .collect();
-
     let mut vertices = Vec::with_capacity(verts * verts);
-    let mut min = Vec3::splat(f32::MAX);
-    let mut max = Vec3::splat(f32::MIN);
-    for (row, row_min, row_max) in rows {
-        vertices.extend(row);
-        min = min.min(row_min);
-        max = max.max(row_max);
+    for z in 0..verts {
+        for x in 0..verts {
+            vertices.push(Vertex {
+                position: [x as f32, 0.0, z as f32],
+                uv: [x as f32 / size as f32, z as f32 / size as f32],
+                normal: [0.0, 1.0, 0.0],
+                tangent: [1.0, 0.0, 0.0, 1.0]
+            });
+        }
     }
 
     // Build indices for a triangle list
@@ -84,11 +40,14 @@ pub fn heightmap_to_mesh(
     }
 
     Mesh {
-        label: label.to_string(),
+        label: "terrain-preview-shared-chunk".to_string(),
         vertices,
         indices,
-        bbox: MeshBbox { min, max },
-        use_ssbo: false // custom buffers, to avoid overflow
+        bbox: MeshBbox {
+            min: Vec3::ZERO,
+            max: Vec3::new(size as f32, 0.0, size as f32)
+        },
+        use_ssbo: false
     }
 }
 
@@ -116,8 +75,12 @@ pub(super) fn padded_heightmap(
     let mut out = vec![0.0; padded * padded];
 
     // Fast path: the core (padded index [1, tile_size]) is always this chunk's own data, so copy
-    // it directly instead of a per-texel HashMap lookup.
-    if let Some(own) = chunks.get(&chunk) {
+    // it directly instead of a per-texel HashMap lookup. Guarded by a length check: a chunk whose
+    // background job hasn't caught up with a just-changed tile size yet still holds data sized
+    // for the *old* tile_size, which this array's indexing would otherwise overrun.
+    if let Some(own) = chunks.get(&chunk)
+        && own.core_data.len() == tile_size * tile_size
+    {
         for z in 0..tile_size {
             let src = &own.core_data[z * tile_size..(z + 1) * tile_size];
             let dst = (z + 1) * padded + 1;
@@ -157,13 +120,19 @@ fn sample_across_chunks(
     let (dx, sx) = locate(lx, size);
     let (dz, sz) = locate(lz, size);
     let neighbor = ChunkCoord(chunk.0 + dx, chunk.1 + dz);
-    if let Some(preview) = chunks.get(&neighbor) {
+    if let Some(preview) = chunks.get(&neighbor)
+        && preview.core_data.len() == tile_size * tile_size
+    {
         return preview.core_data[sz as usize * tile_size + sx as usize];
     }
-    // Grid edge, or no data yet.
+    // Grid edge, no data yet, or the neighbor's data doesn't match `tile_size` (its background
+    // job hasn't caught up with a just-changed tile size yet).
     let Some(own) = chunks.get(&chunk) else {
         return 0.0;
     };
+    if own.core_data.len() != tile_size * tile_size {
+        return 0.0;
+    }
     let csx = lx.clamp(0, size - 1) as usize;
     let csz = lz.clamp(0, size - 1) as usize;
     own.core_data[csz * tile_size + csx]

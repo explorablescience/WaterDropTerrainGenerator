@@ -8,12 +8,12 @@ use crate::{
     TerrainSessionHolder,
     core::{
         graph::GraphNodeId, node::NodeError::InputNotConnected, parallelism::ChunkJobs,
-        tiling::{ChunkCoord, crop_padding},
+        tiling::crop_padding,
     },
     render::{
-        generate_chunks::{TerrainPreview, set_chunk_data, set_preview_meshes, upsert_chunk_mesh},
-        render_subpass::TerrainPreviewMeshes,
-        utils::{chunk_origin, heightmap_to_mesh, padded_heightmap},
+        chunk_array::{ChunkInstance, TerrainPreviewSync},
+        generate_chunks::{TerrainPreview, queue_layer_write, set_chunk_data, sync_preview_state},
+        utils::{chunk_origin, padded_heightmap},
     },
 };
 
@@ -22,9 +22,9 @@ use crate::{
 /// frame only picks up whichever chunks have finished since the last one.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn update_render_chunks_local(
-    meshes: &mut Assets<Mesh>,
+    asset_server: &AssetServer,
     terrain_preview: &mut TerrainPreview,
-    terrain_preview_meshes: &mut TerrainPreviewMeshes,
+    terrain_preview_sync: &mut TerrainPreviewSync,
     chunk_jobs: &mut ChunkJobs,
     terrain_graph: &TerrainSessionHolder,
     material_handle: Handle<PbrMaterial>,
@@ -34,6 +34,7 @@ pub(super) fn update_render_chunks_local(
     let _span = debug_span!("update_render_chunks_local", selected_node = ?selected_node).entered();
     let chunk_grid = *terrain_graph.read().graph().chunk_grid();
     let tile_size = chunk_grid.tile_size();
+    let chunks_x = chunk_grid.chunks_x();
 
     // Prepare the graph for parallel evaluation if needed
     {
@@ -124,27 +125,19 @@ pub(super) fn update_render_chunks_local(
         (all_chunks, changed_chunks)
     };
 
-    // Regenerate the meshes data for every chunk that changed.
+    // Queue every changed chunk's (padded) heightmap for upload into its texture array layer.
     {
-        let _span = debug_span!("update_render_chunks_local_mesh", selected_node = ?selected_node)
+        let _span = debug_span!("update_render_chunks_local_upload", selected_node = ?selected_node)
             .entered();
-        let new_meshes: Vec<(ChunkCoord, Mesh)> = changed_chunks
+        let writes: Vec<(u32, Vec<f32>)> = changed_chunks
             .par_iter()
             .map(|chunk| {
                 let padded = padded_heightmap(*chunk, tile_size, &terrain_preview.chunks);
-                let world_offset = chunk_origin(*chunk, &chunk_grid);
-                let mesh = heightmap_to_mesh(
-                    &format!("terrain-preview-{}-{}", chunk.0, chunk.1),
-                    &padded,
-                    tile_size,
-                    chunk_grid.world_scale(),
-                    world_offset,
-                );
-                (*chunk, mesh)
+                (chunk.1 as u32 * chunks_x + chunk.0 as u32, padded)
             })
             .collect();
-        for (chunk, mesh) in new_meshes {
-            upsert_chunk_mesh(meshes, terrain_preview, chunk, mesh);
+        for (layer, padded) in writes {
+            queue_layer_write(terrain_preview, layer, padded);
         }
     }
 
@@ -154,6 +147,27 @@ pub(super) fn update_render_chunks_local(
         .retain(|chunk, _| all_chunks.contains(chunk));
     chunk_jobs.retain_live(&all_chunks);
 
-    // Update the meshes from the newly generated chunk data (or the existing one if it didn't change)
-    set_preview_meshes(terrain_preview, terrain_preview_meshes, material_handle);
+    // Build every chunk's instance descriptor (deterministic: layer = grid-row-major index).
+    let instances: Vec<ChunkInstance> = chunk_grid
+        .coords()
+        .map(|chunk| {
+            let offset = chunk_origin(chunk, &chunk_grid);
+            ChunkInstance {
+                world_offset: [offset.x, offset.z],
+                cell_size: chunk_grid.world_scale(),
+                layer: chunk.1 as u32 * chunks_x + chunk.0 as u32
+            }
+        })
+        .collect();
+
+    // Publish the current mesh/array/instance state for the render world to pick up.
+    sync_preview_state(
+        asset_server,
+        terrain_preview,
+        terrain_preview_sync,
+        material_handle,
+        tile_size,
+        instances,
+        |chunk| chunk.1 as u32 * chunks_x + chunk.0 as u32
+    );
 }

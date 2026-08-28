@@ -7,23 +7,30 @@ use crate::{
     TerrainSessionHolder,
     core::{node::NodeLocality, parallelism::ChunkJobs, tiling::ChunkCoord},
     render::{
+        chunk_array::{ChunkInstance, TerrainPreviewSync},
         generate_chunks_global::update_render_chunks_global,
         generate_chunks_local::update_render_chunks_local,
-        render_subpass::TerrainPreviewMeshes
+        utils::{build_shared_chunk_mesh, padded_heightmap}
     }
 };
 
 pub(super) struct ChunkPreview {
     pub(super) core_data: Vec<f32>,
     /// Whether `core_data` is the flat fallback shown when this chunk's node can't be evaluated.
-    pub(super) is_flat: bool,
-    pub(super) mesh_handle: Option<Handle<Mesh>>
+    pub(super) is_flat: bool
 }
 
 #[derive(Resource, Default)]
 pub struct TerrainPreview {
     pub(super) chunks: HashMap<ChunkCoord, ChunkPreview>,
-    material_handle: Option<Handle<PbrMaterial>>
+    material_handle: Option<Handle<PbrMaterial>>,
+
+    mesh: Option<Handle<Mesh>>,
+    mesh_size: Option<usize>,
+    heightmap_array: Option<Handle<Texture>>,
+    /// `(padded texel size, layer count)` the current `heightmap_array` was built with.
+    array_dims: Option<(u32, u32)>,
+    pending_layer_writes: Vec<(u32, Vec<f32>)>
 }
 
 /// Creates the material used for rendering the terrain preview meshes.
@@ -40,9 +47,9 @@ pub(crate) fn create_material(
 
 /// Updates the terrain preview meshes based on the currently selected node in the terrain graph.
 pub(crate) fn update_render_chunks(
-    mut meshes: ResMut<Assets<Mesh>>,
+    asset_server: Res<AssetServer>,
     mut terrain_preview: ResMut<TerrainPreview>,
-    mut terrain_preview_meshes: ResMut<TerrainPreviewMeshes>,
+    mut terrain_preview_sync: ResMut<TerrainPreviewSync>,
     mut chunk_jobs: ResMut<ChunkJobs>,
     terrain_graph: Res<TerrainSessionHolder>
 ) {
@@ -70,9 +77,9 @@ pub(crate) fn update_render_chunks(
     };
     match node_locality {
         NodeLocality::Global { native_resolution } => update_render_chunks_global(
-            &mut meshes,
+            &asset_server,
             &mut terrain_preview,
-            &mut terrain_preview_meshes,
+            &mut terrain_preview_sync,
             &terrain_graph,
             material_handle,
             selected_node,
@@ -80,9 +87,9 @@ pub(crate) fn update_render_chunks(
             force
         ),
         NodeLocality::Local => update_render_chunks_local(
-            &mut meshes,
+            &asset_server,
             &mut terrain_preview,
-            &mut terrain_preview_meshes,
+            &mut terrain_preview_sync,
             &mut chunk_jobs,
             &terrain_graph,
             material_handle,
@@ -109,55 +116,73 @@ pub(super) fn set_chunk_data(
                 chunk,
                 ChunkPreview {
                     core_data: data,
-                    is_flat,
-                    mesh_handle: None
+                    is_flat
                 }
             );
         }
     }
 }
 
-/// Reuses the existing mesh asset for `chunk` if present, otherwise creates a new one.
-pub(super) fn upsert_chunk_mesh(
-    meshes: &mut Assets<Mesh>,
-    terrain_preview: &mut TerrainPreview,
-    chunk: ChunkCoord,
-    mesh: Mesh
-) {
-    let _span = debug_span!("upsert_chunk_mesh", chunk = ?chunk).entered();
-    let existing = terrain_preview
-        .chunks
-        .get(&chunk)
-        .and_then(|c| c.mesh_handle.clone());
-    match existing {
-        Some(handle) => {
-            if let Err(e) = meshes.insert(handle.id(), mesh) {
-                error!(
-                    "Failed to update terrain preview mesh for chunk {:?}: {:?}",
-                    chunk, e
-                );
-            }
-        }
-        None => {
-            let handle = meshes.add(mesh);
-            if let Some(preview) = terrain_preview.chunks.get_mut(&chunk) {
-                preview.mesh_handle = Some(handle);
-            }
-        }
-    }
+/// Queues `chunk`'s (already padded) heightmap for upload into `layer` of the heightmap texture
+/// array. Actually uploaded next render frame by [`crate::render::chunk_array::sync_terrain_preview_gpu`].
+pub(super) fn queue_layer_write(terrain_preview: &mut TerrainPreview, layer: u32, data: Vec<f32>) {
+    terrain_preview.pending_layer_writes.push((layer, data));
 }
 
-/// Publishes every chunk's current mesh into the render-world-facing resource so [`SubRenderPassTerrainPreview`](super::terrain_preview_subpass::SubRenderPassTerrainPreview) draws them next extract.
-pub(super) fn set_preview_meshes(
-    terrain_preview: &TerrainPreview,
-    terrain_preview_meshes: &mut TerrainPreviewMeshes,
-    material_handle: Handle<PbrMaterial>
+/// Ensures the shared chunk mesh and heightmap texture array match `size`/`instances.len()`,
+/// recreating them (and re-queuing every known chunk's data) when they don't, then publishes the
+/// current state into `terrain_preview_sync` for the render world to pick up.
+pub(super) fn sync_preview_state(
+    asset_server: &AssetServer,
+    terrain_preview: &mut TerrainPreview,
+    terrain_preview_sync: &mut TerrainPreviewSync,
+    material_handle: Handle<PbrMaterial>,
+    size: usize,
+    instances: Vec<ChunkInstance>,
+    layer_of: impl Fn(ChunkCoord) -> u32
 ) {
-    let _span = debug_span!("set_preview_meshes").entered();
-    terrain_preview_meshes.meshes = terrain_preview
-        .chunks
-        .values()
-        .filter_map(|c| c.mesh_handle.clone())
-        .collect();
-    terrain_preview_meshes.material = Some(material_handle);
+    let _span = debug_span!("sync_preview_state", size = size, instances = instances.len())
+        .entered();
+
+    // Rebuild the shared mesh when the vertex density (tile_size / native_resolution) changes.
+    if terrain_preview.mesh_size != Some(size) {
+        terrain_preview.mesh = Some(asset_server.add(build_shared_chunk_mesh(size)));
+        terrain_preview.mesh_size = Some(size);
+    }
+
+    // Recreate the heightmap texture array when its per-layer size or layer count changes. A
+    // fresh texture starts uninitialized, so every currently-known chunk must be re-uploaded.
+    // Layer count is clamped to at least 2: the engine creates a plain D2 (non-array) view for a
+    // 1-layer texture, which wouldn't match this pipeline's D2Array-typed bind group layout (the
+    // global-locality preview only ever has one chunk/instance).
+    let padded_size = (size + 3) as u32;
+    let layer_count = instances.len().max(2) as u32;
+    if terrain_preview.array_dims != Some((padded_size, layer_count)) {
+        terrain_preview.heightmap_array = Some(asset_server.add(Texture {
+            label: "terrain-preview-heightmap-array".to_string(),
+            size: (padded_size, padded_size),
+            format: TextureFormat::R32Float,
+            usages: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::STORAGE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::COPY_SRC,
+            layer_count,
+            filterable: false,
+            ..Default::default()
+        }));
+        terrain_preview.array_dims = Some((padded_size, layer_count));
+
+        for &chunk in terrain_preview.chunks.keys() {
+            let padded = padded_heightmap(chunk, size, &terrain_preview.chunks);
+            terrain_preview
+                .pending_layer_writes
+                .push((layer_of(chunk), padded));
+        }
+    }
+
+    terrain_preview_sync.heightmap_array = terrain_preview.heightmap_array.clone();
+    terrain_preview_sync.mesh = terrain_preview.mesh.clone();
+    terrain_preview_sync.material = Some(material_handle);
+    terrain_preview_sync.instances = instances;
+    terrain_preview_sync.pending_writes = std::mem::take(&mut terrain_preview.pending_layer_writes);
 }
