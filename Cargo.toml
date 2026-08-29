@@ -8,6 +8,7 @@ bytemuck = { version = "1", features = ["derive"] }
 egui-snarl = "0.9"
 egui_tiles = { version = "0.14", default-features = false }
 egui_extras = { version = "0.33", default-features = false, features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 inventory = "0.3"
 rayon = "1"
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "async-std"] }
