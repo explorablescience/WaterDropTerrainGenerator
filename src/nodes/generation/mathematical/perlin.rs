@@ -1,5 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
+use bevy::math::{Vec2, Vec3};
 use rayon::prelude::*;
 
 use crate::core::node::{
@@ -13,49 +14,110 @@ const ICON: NodeIcon = NodeIcon {
     png_bytes: include_bytes!("../../../../assets/icons/node_perlin.png")
 };
 
-/// Period (in lattice units) the hashed noise lattice wraps around after, so the noise repeats on a fixed, predictable period rather than an incidental one.
-const NOISE_PERIOD: i32 = 1024;
-
-/// Cheap integer hash of a lattice point, wrapped to [`NOISE_PERIOD`], mapped to `[-1, 1]`.
-fn hash(ix: i32, iy: i32) -> f32 {
-    let px = ix.rem_euclid(NOISE_PERIOD) as u32;
-    let py = iy.rem_euclid(NOISE_PERIOD) as u32;
-    let mut h = px.wrapping_mul(374761393) ^ py.wrapping_mul(668265263);
-    h = (h ^ (h >> 13)).wrapping_mul(1274126177);
-    h ^= h >> 16;
-    (h as f32 / u32::MAX as f32) * 2.0 - 1.0
+// Precision-adjusted variations of https://www.shadertoy.com/view/4djSRW
+fn hash1(p: f32) -> f32 {
+    let mut p = frac(p * 0.011);
+    p *= p + 7.5;
+    p *= p + p;
+    frac(p)
+}
+fn hash2(p: Vec2) -> f32 {
+    let mut p3 = frac3(Vec3::new(p.x, p.y, p.x) * 0.13);
+    let d = p3.dot(Vec3::new(p3.y, p3.z, p3.x) + Vec3::splat(3.333));
+    p3 += Vec3::splat(d);
+    frac((p3.x + p3.y) * p3.z)
+}
+fn frac(x: f32) -> f32 {
+    x - x.floor()
+}
+fn frac3(v: Vec3) -> Vec3 {
+    v - v.floor()
 }
 
-/// This is value noise, not true gradient-based Perlin noise, but it's periodic (see [`NOISE_PERIOD`]) and cheap.
-fn value_noise(x: f32, y: f32) -> f32 {
-    let x0 = x.floor();
-    let y0 = y.floor();
-    let (ix0, iy0) = (x0 as i32, y0 as i32);
-    let (fx, fy) = (x - x0, y - y0);
-    let (sx, sy) = (fx * fx * (3.0 - 2.0 * fx), fy * fy * (3.0 - 2.0 * fy));
+// 2D Perlin noise function (https://www.shadertoy.com/view/4dS3Wd)
+fn noise(pos: Vec2) -> f32 {
+    let i = pos.floor();
+    let f = pos - i;
 
-    let n00 = hash(ix0, iy0);
-    let n10 = hash(ix0 + 1, iy0);
-    let n01 = hash(ix0, iy0 + 1);
-    let n11 = hash(ix0 + 1, iy0 + 1);
+    // Four corners in 2D of a tile
+    let a = hash2(i);
+    let b = hash2(i + Vec2::new(1.0, 0.0));
+    let c = hash2(i + Vec2::new(0.0, 1.0));
+    let d = hash2(i + Vec2::new(1.0, 1.0));
 
-    let nx0 = n00 + sx * (n10 - n00);
-    let nx1 = n01 + sx * (n11 - n01);
-    nx0 + sy * (nx1 - nx0)
+    // Simple 2D lerp using smoothstep envelope between the values
+    let u = f * f * (Vec2::splat(3.0) - Vec2::splat(2.0) * f);
+    mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y
 }
 
-#[derive(Debug)]
+// Fractal Brownian Motion (fBm) using Perlin noise
+// Rotate each octave to reduce axial bias
+fn fbm(pos: Vec2, params: &Perlin, seed_offset: Vec2) -> f32 {
+    let mut x = pos * params.frequency + seed_offset;
+    let mut v = 0.0;
+    let mut a = params.amplitude;
+    let g = (-params.hurst_exponent).exp();
+    let shift = Vec2::splat(100.0);
+    let (s, c) = 0.5_f32.sin_cos();
+    for _ in 0..params.octaves {
+        v += a * noise(x);
+        x = Vec2::new(c * x.x - s * x.y, s * x.x + c * x.y) * 2.0 + shift;
+        a *= g;
+    }
+    v
+}
+
+// Generate fbm with warping effects (https://iquilezles.org/articles/warp/)
+fn fbm_with_warp(pos: Vec2, params: &Perlin, seed_offset: Vec2) -> f32 {
+    let mut offset = seed_offset + Vec2::splat(121484.0);
+    for _ in 0..params.warp_octaves {
+        let warp_pos = pos * params.warp_frequency + offset;
+
+        // Using arbitrary offsets to decorrelate
+        let q = Vec2::new(
+            fbm(warp_pos, params, seed_offset),
+            fbm(warp_pos + Vec2::new(5.2, 1.3), params, seed_offset)
+        );
+        offset = params.warp_amplitude * q;
+    }
+    fbm(pos + offset, params, seed_offset)
+}
+
+// Utility functions
+fn seed_offset(seed: u32) -> Vec2 {
+    Vec2::new(
+        hash1(seed as f32) * 1000.0,
+        hash1(seed as f32 + 91.7) * 1000.0
+    )
+}
+fn mix(a: f32, b: f32, t: f32) -> f32 {
+    a * (1.0 - t) + b * t
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct Perlin {
-    pub frequency: f32,
     pub amplitude: f32,
-    pub octaves: u32
+    pub seed: u32,
+
+    pub frequency: f32,
+    pub octaves: u32,
+    pub hurst_exponent: f32,
+
+    pub warp_amplitude: f32,
+    pub warp_frequency: f32,
+    pub warp_octaves: u32    
 }
 impl Default for Perlin {
     fn default() -> Self {
         Self {
-            frequency: 1.0,
+            seed: 0,
             amplitude: 1.0,
-            octaves: 4
+            frequency: 0.05,
+            octaves: 6,
+            hurst_exponent: 0.7,
+            warp_amplitude: 0.0,
+            warp_frequency: 0.0,
+            warp_octaves: 1
         }
     }
 }
@@ -65,8 +127,8 @@ impl Perlin {
         SPECS.get_or_init(|| {
             vec![
                 NParamDesc {
-                    key: "frequency",
-                    label: "Frequency",
+                    key: "amplitude",
+                    label: "Scale",
                     category: "Noise",
                     default: NParamValue::Float(1.0),
                     constraints: Some(NParamConstraints::FloatRange {
@@ -75,22 +137,58 @@ impl Perlin {
                     })
                 },
                 NParamDesc {
-                    key: "amplitude",
-                    label: "Amplitude",
+                    key: "seed",
+                    label: "Seed",
                     category: "Noise",
-                    default: NParamValue::Float(1.0),
+                    default: NParamValue::Int(0),
+                    constraints: Some(NParamConstraints::IntRange { min: 0, max: 10000 })
+                },
+                NParamDesc {
+                    key: "frequency",
+                    label: "Frequency",
+                    category: "Fractal Brownian Motion",
+                    default: NParamValue::Float(0.05),
                     constraints: Some(NParamConstraints::FloatRange {
                         min: 0.0,
-                        max: 10.0
+                        max: 2.0
                     })
                 },
                 NParamDesc {
                     key: "octaves",
                     label: "Octaves",
-                    category: "Noise",
-                    default: NParamValue::Int(4),
+                    category: "Fractal Brownian Motion",
+                    default: NParamValue::Int(6),
                     constraints: Some(NParamConstraints::IntRange { min: 1, max: 10 })
                 },
+                NParamDesc {
+                    key: "hurst_exponent",
+                    label: "Hurst Exponent",
+                    category: "Fractal Brownian Motion",
+                    default: NParamValue::Float(0.7),
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 })
+                },
+
+                NParamDesc {
+                    key: "warp_amplitude",
+                    label: "Warp Amplitude",
+                    category: "Warping",
+                    default: NParamValue::Float(0.0),
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 10.0 })
+                },
+                NParamDesc {
+                    key: "warp_frequency",
+                    label: "Warp Frequency",
+                    category: "Warping",
+                    default: NParamValue::Float(0.0),
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 10.0 })
+                },
+                NParamDesc {
+                    key: "warp_octaves",
+                    label: "Warp Octaves",
+                    category: "Warping",
+                    default: NParamValue::Int(1),
+                    constraints: Some(NParamConstraints::IntRange { min: 1, max: 10 })
+                }
             ]
         })
     }
@@ -99,18 +197,15 @@ impl Perlin {
     fn process_tile(&self, pool: &Arc<TilePool>, ctx: &TileContext) -> TileHandle {
         let mut output = pool.allocate();
         let s = output.size();
+        let offset = seed_offset(self.seed);
         output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
             for (x, texel) in row.iter_mut().enumerate() {
                 let (nx, ny) = ctx.world_pos(x, y);
-                let mut noise_value = 0.0;
-                let mut frequency = self.frequency;
-                let mut amplitude = self.amplitude;
-                for _ in 0..self.octaves {
-                    noise_value += value_noise(nx * frequency, ny * frequency) * amplitude;
-                    frequency *= 2.0;
-                    amplitude *= 0.5;
+                if self.warp_amplitude > 0.0 {
+                    *texel = fbm_with_warp([nx, ny].into(), self, offset);
+                } else {
+                    *texel = fbm([nx, ny].into(), self, offset);
                 }
-                *texel = noise_value;
             }
         });
         Arc::new(output)
@@ -141,17 +236,27 @@ impl Node for Perlin {
     }
     fn get_param(&self, key: &str) -> Option<NParamValue> {
         match key {
-            "frequency" => Some(NParamValue::Float(self.frequency)),
             "amplitude" => Some(NParamValue::Float(self.amplitude)),
+            "seed" => Some(NParamValue::Int(self.seed as i32)),
+            "frequency" => Some(NParamValue::Float(self.frequency)),
             "octaves" => Some(NParamValue::Int(self.octaves as i32)),
+            "hurst_exponent" => Some(NParamValue::Float(self.hurst_exponent)),
+            "warp_amplitude" => Some(NParamValue::Float(self.warp_amplitude)),
+            "warp_frequency" => Some(NParamValue::Float(self.warp_frequency)),
+            "warp_octaves" => Some(NParamValue::Int(self.warp_octaves as i32)),
             _ => None
         }
     }
     fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), NodeError> {
         match (key, value) {
-            ("frequency", NParamValue::Float(v)) => self.frequency = v,
             ("amplitude", NParamValue::Float(v)) => self.amplitude = v,
+            ("seed", NParamValue::Int(v)) => self.seed = v as u32,
+            ("frequency", NParamValue::Float(v)) => self.frequency = v,
             ("octaves", NParamValue::Int(v)) => self.octaves = v as u32,
+            ("hurst_exponent", NParamValue::Float(v)) => self.hurst_exponent = v,
+            ("warp_amplitude", NParamValue::Float(v)) => self.warp_amplitude = v,
+            ("warp_frequency", NParamValue::Float(v)) => self.warp_frequency = v,
+            ("warp_octaves", NParamValue::Int(v)) => self.warp_octaves = v as u32,
             (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into())
         }
         Ok(())
