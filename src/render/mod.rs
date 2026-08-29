@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use wde::prelude::*;
 
 use crate::{
-    core::parallelism::ChunkJobs,
+    core::parallelism::{ChunkJobs, GlobalPassJobs},
     render::{
         chunk_array::{
             TerrainPreviewArrayBg, TerrainPreviewGpu, TerrainPreviewInstances,
@@ -29,6 +29,7 @@ impl Plugin for RenderPlugin {
         app.init_resource::<TerrainPreview>()
             .init_resource::<TerrainPreviewSync>()
             .init_resource::<ChunkJobs>()
+            .init_resource::<GlobalPassJobs>()
             .add_systems(Startup, create_material)
             .add_systems(Update, update_render_chunks);
 

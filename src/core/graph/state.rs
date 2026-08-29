@@ -22,7 +22,8 @@ pub enum EvalScope {
 pub enum NodeState {
     Dirty,
     Processing,
-    Cached((CacheKey, Vec<TileHandle>)),
+    /// `u32` is the generation this entry was computed at.
+    Cached((CacheKey, u32, Vec<TileHandle>)),
     Baked((CacheKey, PathBuf))
 }
 
@@ -97,7 +98,7 @@ impl EvalCache {
         let mut seen = std::collections::HashSet::new();
         let mut total = 0usize;
         for state in states.values() {
-            let NodeState::Cached((_, tiles)) = state else {
+            let NodeState::Cached((_, _, tiles)) = state else {
                 continue;
             };
             for tile in tiles {
@@ -112,7 +113,7 @@ impl EvalCache {
 
 pub(super) fn cache_key_of(state: &NodeState) -> Option<CacheKey> {
     match state {
-        NodeState::Cached((k, _)) | NodeState::Baked((k, _)) => Some(*k),
+        NodeState::Cached((k, _, _)) | NodeState::Baked((k, _)) => Some(*k),
         _ => None
     }
 }

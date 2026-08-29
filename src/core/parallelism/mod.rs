@@ -3,5 +3,5 @@
 mod jobs;
 mod session;
 
-pub use jobs::ChunkJobs;
+pub use jobs::{ChunkJobs, GlobalPassJobs};
 pub use session::*;

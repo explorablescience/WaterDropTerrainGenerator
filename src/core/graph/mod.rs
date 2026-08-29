@@ -58,9 +58,6 @@ impl NodeGraph {
     }
 
     // Generation management
-    pub(super) fn generation(&self) -> u32 {
-        self.generation.load(Ordering::Relaxed)
-    }
     pub(super) fn increment_generation(&self) -> u32 {
         self.generation.fetch_add(1, Ordering::Relaxed) + 1
     }

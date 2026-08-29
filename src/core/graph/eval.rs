@@ -55,45 +55,57 @@ impl NodeGraph {
     }
 
     /// Prepares the graph for parallel evaluation of `node_id` across multiple chunks. This is a prerequisite for calling [`Self::process_chunk_shared`] concurrently from multiple threads.
+    ///
+    /// Blocks the caller until any required `Global` ancestor's pass is done - fine for
+    /// [`Self::process_chunk`]'s synchronous use, but a caller fanning out to background chunk jobs
+    /// should use [`Self::needs_pool_resize`]/[`Self::resize_pool_for`] and
+    /// [`Self::pending_global_ancestors`] instead, to dispatch each ancestor as its own background
+    /// task (`GlobalPassJobs`) rather than block.
     pub fn prepare_for_parallel_eval(&mut self, node_id: GraphNodeId) -> Result<(), NodeError> {
         let _span = debug_span!("prepare_for_parallel_eval", node_id = ?node_id).entered();
+        self.resize_pool_for(node_id)?;
+        for ancestor in self.pending_global_ancestors(node_id)? {
+            self.process_chunk_shared(ancestor, ChunkCoord(0, 0))?;
+        }
+        Ok(())
+    }
+
+    /// Whether `node_id`'s cached per-chunk tiles were allocated at the wrong size and the pool
+    /// needs resizing. Cheap: only inspects sizes, does no processing.
+    pub fn needs_pool_resize(&self, node_id: GraphNodeId) -> Result<bool, NodeError> {
+        if let NodeLocality::Global { .. } = self.topology.node(node_id)?.locality() {
+            return Ok(false); // process_chunk_shared handles this directly, no fan-out involved
+        }
+        Ok(self.required_internal_tile_size(node_id)? != self.pool.tile_length())
+    }
+
+    /// Resizes the tile pool to `node_id`'s required internal size, invalidating cached per-chunk
+    /// state (`Global`-scoped entries live in their own pools and are left untouched).
+    pub fn resize_pool_for(&mut self, node_id: GraphNodeId) -> Result<(), NodeError> {
         if let NodeLocality::Global { .. } = self.topology.node(node_id)?.locality() {
             return Ok(()); // process_chunk_shared handles this directly, no fan-out involved
         }
-
         let internal_tile_size = self.required_internal_tile_size(node_id)?;
         if internal_tile_size != self.pool.tile_length() {
             // Cached tiles were allocated for the previous tile size; can't mix with the new pool.
             self.pool = TilePool::new(internal_tile_size);
             self.cache.clear_chunk_states();
         }
-
-        for &ancestor in &self.collect_ancestors(node_id)? {
-            if let NodeLocality::Global { native_resolution } =
-                self.topology.node(ancestor)?.locality()
-            {
-                let global_pool = TilePool::new(native_resolution);
-                let global_ctx = TileContext::for_global(&self.chunk_grid, native_resolution);
-                self.process_scoped(
-                    ancestor,
-                    EvalScope::Global(native_resolution),
-                    &global_pool,
-                    &global_ctx
-                )?;
-            }
-        }
         Ok(())
     }
 
-    /// Returns true if `node_id` requires a new internal tile size, or has any `Global` ancestors that are not yet cached. This is a prerequisite for calling [`Self::prepare_for_parallel_eval`] before fanning out to [`Self::process_chunk_shared`].
-    pub fn needs_parallel_prepare(&self, node_id: GraphNodeId) -> Result<bool, NodeError> {
-        let _span = debug_span!("needs_parallel_prepare", node_id = ?node_id).entered();
+    /// `node_id`'s `Global`-locality ancestors whose whole-terrain pass isn't cached yet. A caller
+    /// should dispatch each one as its own background task and barrier on it (see `GlobalPassJobs`)
+    /// before fanning `node_id` out to per-chunk parallel jobs.
+    pub fn pending_global_ancestors(
+        &self,
+        node_id: GraphNodeId
+    ) -> Result<Vec<GraphNodeId>, NodeError> {
+        let _span = debug_span!("pending_global_ancestors", node_id = ?node_id).entered();
         if let NodeLocality::Global { .. } = self.topology.node(node_id)?.locality() {
-            return Ok(false); // handled directly by process_chunk_shared, no fan-out involved
+            return Ok(Vec::new()); // process_chunk_shared handles this directly, no fan-out involved
         }
-        if self.required_internal_tile_size(node_id)? != self.pool.tile_length() {
-            return Ok(true);
-        }
+        let mut pending = Vec::new();
         for &ancestor in &self.collect_ancestors(node_id)? {
             if let NodeLocality::Global { native_resolution } =
                 self.topology.node(ancestor)?.locality()
@@ -103,10 +115,10 @@ impl NodeGraph {
                     NodeState::Cached(_)
                 )
             {
-                return Ok(true);
+                pending.push(ancestor);
             }
         }
-        Ok(false)
+        Ok(pending)
     }
 
     /// Processes a single chunk of a node, returning the new generation and output tiles if the chunk was actually recomputed. If `force` is true, the chunk will be recomputed even if its generation hasn't advanced.
@@ -158,9 +170,16 @@ impl NodeGraph {
         pool: &Arc<TilePool>,
         ctx: &TileContext
     ) -> Result<NodeGraphProcessResult, NodeError> {
+        let _span = debug_span!(
+            "process_scoped",
+            node_id = ?node_id,
+            scope = ?scope,
+            pool_size = pool.tile_length()
+        )
+        .entered();
         match self.cache.state(node_id, scope) {
-            NodeState::Cached((_, tiles)) => {
-                return Ok(NodeGraphProcessResult::Processed(self.generation(), tiles));
+            NodeState::Cached((_, generation, tiles)) => {
+                return Ok(NodeGraphProcessResult::Processed(generation, tiles));
             }
             NodeState::Baked(_) => todo!("load baked tiles from disk"),
             // Re-entering a node still on the call stack means a cycle - concurrent chunk tasks
@@ -261,10 +280,13 @@ impl NodeGraph {
         let output = node.process(pool, &input_tiles, ctx)?;
         self.set_is_processing();
 
-        // Cache the output tile(s) and bump the graph's generation, so future calls can see that this node has been processed.
-        self.cache
-            .set(node_id, scope, NodeState::Cached((key, output.clone())));
+        // Cache the output alongside the generation it was produced at, for cache hits to report.
         let generation = self.increment_generation();
+        self.cache.set(
+            node_id,
+            scope,
+            NodeState::Cached((key, generation, output.clone()))
+        );
 
         // Evict any ancestor tiles that are no longer needed by any downstream nodes. This is a best-effort attempt to free memory; if a tile is still in use by another node, it will remain cached.
         for (from_node, from_scope) in consumed {

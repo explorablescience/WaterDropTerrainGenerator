@@ -7,7 +7,9 @@ use wde::prelude::*;
 use crate::{
     TerrainSessionHolder,
     core::{
-        graph::GraphNodeId, node::NodeError::InputNotConnected, parallelism::ChunkJobs,
+        graph::GraphNodeId,
+        node::NodeError::InputNotConnected,
+        parallelism::{ChunkJobs, GlobalPassJobs},
         tiling::crop_padding
     },
     render::{
@@ -26,6 +28,7 @@ pub(super) fn update_render_chunks_local(
     terrain_preview: &mut TerrainPreview,
     terrain_preview_sync: &mut TerrainPreviewSync,
     chunk_jobs: &mut ChunkJobs,
+    global_jobs: &mut GlobalPassJobs,
     terrain_graph: &TerrainSessionHolder,
     material_handle: Handle<PbrMaterial>,
     selected_node: GraphNodeId
@@ -35,33 +38,62 @@ pub(super) fn update_render_chunks_local(
     let tile_size = chunk_grid.tile_size();
     let chunks_x = chunk_grid.chunks_x();
 
-    // Prepare the graph for parallel evaluation if needed
+    // Resize the pool if needed - cheap bookkeeping, safe to do inline
     {
-        let _span =
-            debug_span!("update_render_chunks_local_prepare", selected_node = ?selected_node)
-                .entered();
-        // Bound to a `let` so the read guard drops before `Ok(true)` below takes the write lock
-        let needs_prepare = terrain_graph
+        let needs_resize = terrain_graph
             .read()
             .graph()
-            .needs_parallel_prepare(selected_node);
-        match needs_prepare {
+            .needs_pool_resize(selected_node);
+        match needs_resize {
             Ok(true) => {
                 if let Err(e) = terrain_graph
                     .write()
                     .graph_mut()
-                    .prepare_for_parallel_eval(selected_node)
+                    .resize_pool_for(selected_node)
                 {
                     match e {
                         InputNotConnected { .. } => {} // Fine
-                        _ => error!("Failed to prepare terrain graph for evaluation: {:?}", e)
+                        _ => error!("Failed to resize tile pool for evaluation: {:?}", e)
                     }
                     return;
                 }
             }
             Ok(false) => {}
             Err(e) => {
-                error!("Failed to check terrain graph preparation: {:?}", e);
+                error!("Failed to check tile pool size: {:?}", e);
+                return;
+            }
+        }
+    }
+
+    // Barrier on any required `Global` ancestor's whole-terrain pass, computed as its own
+    // background task rather than blocking this frame. Chunk fan-out below only proceeds once
+    // every such ancestor is cached.
+    {
+        let _span =
+            debug_span!("update_render_chunks_local_global_ancestors", selected_node = ?selected_node)
+                .entered();
+        let pending_ancestors = terrain_graph
+            .read()
+            .graph()
+            .pending_global_ancestors(selected_node);
+        match pending_ancestors {
+            Ok(ancestors) => {
+                for ancestor in ancestors {
+                    let Some(result) = global_jobs.poll_or_spawn(terrain_graph, ancestor) else {
+                        return; // still computing, or was just spawned
+                    };
+                    if let Err(e) = result {
+                        match e {
+                            InputNotConnected { .. } => {} // Fine
+                            _ => error!("Failed to compute global ancestor pass: {:?}", e)
+                        }
+                        return;
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to check pending global ancestors: {:?}", e);
                 return;
             }
         }

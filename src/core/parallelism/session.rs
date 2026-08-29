@@ -63,7 +63,7 @@ impl TerrainSession {
         self.messages.prune_expired();
     }
 
-    /// Processes synchronously the output of `node_id` for `chunk`, returning the new generation and output tiles if the chunk was actually recomputed. If `force` is true, the chunk will be considered recomputed even if its generation hasn't advanced.
+    /// Processes synchronously the output of `node_id` for `chunk`, returning the new generation and output tiles if the chunk's output actually changed since last seen.
     pub fn process_sync(
         &mut self,
         node_id: GraphNodeId,
@@ -73,7 +73,7 @@ impl TerrainSession {
         let result = self.graph.process_chunk(node_id, chunk);
         self.apply_chunk_result(node_id, chunk, result)
     }
-    /// Applies the result of a chunk processing operation, updating the internal state and returning the new generation and output tiles if the chunk was actually recomputed. If `force` is true, the chunk will be considered recomputed even if its generation hasn't advanced.
+    /// Applies the result of a chunk processing operation, returning the new generation and output tiles if the chunk's output actually changed since last seen.
     pub fn apply_chunk_result(
         &mut self,
         node_id: GraphNodeId,
@@ -84,8 +84,12 @@ impl TerrainSession {
         let key = (node_id, chunk);
         match result? {
             NodeGraphProcessResult::Processed(new_generation, output_tiles) => {
-                self.chunk_generations.insert(key, new_generation);
-                Ok(Some((new_generation, output_tiles)))
+                let previous_generation = self.chunk_generations.insert(key, new_generation);
+                if previous_generation == Some(new_generation) {
+                    Ok(None)
+                } else {
+                    Ok(Some((new_generation, output_tiles)))
+                }
             }
             NodeGraphProcessResult::Processing => Ok(None)
         }

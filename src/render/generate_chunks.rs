@@ -5,7 +5,12 @@ use wde::prelude::*;
 
 use crate::{
     TerrainSessionHolder,
-    core::{graph::GraphNodeId, node::NodeLocality, parallelism::ChunkJobs, tiling::ChunkCoord},
+    core::{
+        graph::GraphNodeId,
+        node::NodeLocality,
+        parallelism::{ChunkJobs, GlobalPassJobs},
+        tiling::ChunkCoord
+    },
     render::{
         chunk_array::{ChunkInstance, TerrainPreviewSync},
         generate_chunks_global::update_render_chunks_global,
@@ -46,11 +51,13 @@ pub(crate) fn create_material(
 }
 
 /// Updates the terrain preview meshes based on the currently selected node in the terrain graph.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn update_render_chunks(
     asset_server: Res<AssetServer>,
     mut terrain_preview: ResMut<TerrainPreview>,
     mut terrain_preview_sync: ResMut<TerrainPreviewSync>,
     mut chunk_jobs: ResMut<ChunkJobs>,
+    mut global_jobs: ResMut<GlobalPassJobs>,
     terrain_graph: Res<TerrainSessionHolder>,
     mut old_selected_node: Local<Option<GraphNodeId>>,
     mut old_selected_node_last_dirty: Local<Option<std::time::Instant>>
@@ -85,6 +92,7 @@ pub(crate) fn update_render_chunks(
     };
     if reprocess {
         chunk_jobs.clear();
+        global_jobs.clear();
     }
 
     // Don't reprocess the graph if the cooldown hasn't elapsed yet
@@ -116,6 +124,7 @@ pub(crate) fn update_render_chunks(
             &mut terrain_preview,
             &mut terrain_preview_sync,
             &mut chunk_jobs,
+            &mut global_jobs,
             &terrain_graph,
             material_handle,
             selected_node

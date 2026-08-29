@@ -48,17 +48,27 @@ impl Plugin for CustomWdePlugins {
 }
 
 fn main() {
-    // Split the available CPU cores between Bevy's task pool and Rayon.
+    // Split the available CPU cores between Bevy's task pool and Rayon. `async_compute_threads` is
+    // sized directly (min == max) for concurrent per-chunk dispatch rather than left as leftover
+    // budget - `TaskPoolOptions` allocates IO, then async compute, then compute, each forced to at
+    // least its own `min_threads`, so a small shared `max_total_threads` used to let IO's forced
+    // thread eat into async compute's share and starve it down to a single thread on machines with
+    // few cores. Rayon gets whatever's left, for per-node internal parallelism (e.g. erosion, tile
+    // resampling).
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
-    let bevy_threads = (cores / 4).clamp(2, 4);
+    let async_compute_threads = (cores / 4).clamp(2, 8);
+    let bevy_threads = async_compute_threads + 2; // + IO(1) + Compute(1)
     let rayon_threads = cores.saturating_sub(bevy_threads).max(1);
 
     let _ = rayon::ThreadPoolBuilder::new()
         .num_threads(rayon_threads)
+        // Otherwise these threads inherit the main thread's OS name, and profilers like Tracy
+        // (which falls back to /proc/self/task/<tid>/comm) can't tell them apart from it.
+        .thread_name(|i| format!("Rayon {i}"))
         .build_global();
     let bevy_task_pool = TaskPoolPlugin {
         task_pool_options: TaskPoolOptions {
-            min_total_threads: 1,
+            min_total_threads: bevy_threads,
             max_total_threads: bevy_threads,
             io: TaskPoolThreadAssignmentPolicy {
                 min_threads: 1,
@@ -75,9 +85,9 @@ fn main() {
                 on_thread_destroy: None
             },
             async_compute: TaskPoolThreadAssignmentPolicy {
-                min_threads: 1,
-                max_threads: usize::MAX,
-                percent: 1.0, // "whatever is left over", i.e. concurrent chunk dispatch.
+                min_threads: async_compute_threads,
+                max_threads: async_compute_threads,
+                percent: 1.0,
                 on_thread_spawn: None,
                 on_thread_destroy: None
             }

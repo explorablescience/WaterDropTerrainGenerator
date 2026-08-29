@@ -114,9 +114,15 @@ fn timed_action_message_expires_and_is_pruned() {
 // temporary created in its scrutinee alive until the match itself ends - including across its own
 // arms - so `match holder.read()... { Ok(true) => { holder.write()... } ... }` keeps the read guard
 // held while the `Ok(true)` arm blocks forever on `.write()`. This bit `update_render_chunks_local`
-// (src/render/generate_chunks_local.rs) via `NodeGraph::needs_parallel_prepare` /
+// (src/render/generate_chunks_local.rs) via `NodeGraph::pending_global_ancestors` /
 // `prepare_for_parallel_eval`, whenever a `Global`-locality ancestor wasn't cached yet - e.g. right
 // after wiring one in, or after editing an upstream node's params invalidated its cache.
+
+/// Whether `id` still has an uncached `Global` ancestor - the same condition
+/// `update_render_chunks_local` checks before deciding to call `prepare_for_parallel_eval`.
+fn has_pending_global_ancestor(graph: &NodeGraph, id: GraphNodeId) -> Result<bool, NodeError> {
+    Ok(!graph.pending_global_ancestors(id)?.is_empty())
+}
 
 /// Runs `f` on a background thread and reports whether it finished within `timeout`, without
 /// blocking the test forever if `f` deadlocks (the thread is simply leaked in that case).
@@ -160,17 +166,17 @@ fn build_perlin_erosion_combine_graph() -> (TerrainSessionHolder, GraphNodeId, G
 fn safe_read_then_write_sequence_does_not_deadlock_on_uncached_global_ancestor() {
     let (holder, _perlin, combine) = build_perlin_erosion_combine_graph();
 
-    // `needs_parallel_prepare` is `Ok(true)`: the erosion node's `Global` scope has never been
-    // evaluated yet, so this exercises the exact branch that used to deadlock.
+    // A pending `Global` ancestor: the erosion node's `Global` scope has never been evaluated yet,
+    // so this exercises the exact branch that used to deadlock.
     assert!(matches!(
-        holder.read().graph().needs_parallel_prepare(combine),
+        has_pending_global_ancestor(holder.read().graph(), combine),
         Ok(true)
     ));
 
     let completed = run_with_timeout(Duration::from_secs(5), move || {
         // The fix: bind the read guard's result to its own statement first, so it drops before
         // the `match` (and its `.write()` arm) even starts.
-        let needs_prepare = holder.read().graph().needs_parallel_prepare(combine);
+        let needs_prepare = has_pending_global_ancestor(holder.read().graph(), combine);
         if let Ok(true) = needs_prepare {
             holder
                 .write()
@@ -193,7 +199,7 @@ fn read_guard_held_across_match_arms_self_deadlocks_on_write() {
     // guard produced by the scrutinee is kept alive for the whole `match`, so the `Ok(true)` arm's
     // `.write()` call blocks on a lock this same thread is still holding.
     let completed = run_with_timeout(Duration::from_secs(2), move || {
-        if let Ok(true) = holder.read().graph().needs_parallel_prepare(combine) {
+        if let Ok(true) = has_pending_global_ancestor(holder.read().graph(), combine) {
             holder
                 .write()
                 .graph_mut()
@@ -211,7 +217,7 @@ fn read_guard_held_across_match_arms_self_deadlocks_on_write() {
 }
 
 #[test]
-fn dirtying_a_cached_global_ancestor_flips_needs_parallel_prepare_back_to_true() {
+fn dirtying_a_cached_global_ancestor_flips_pending_global_ancestors_back_to_nonempty() {
     let (holder, perlin, combine) = build_perlin_erosion_combine_graph();
 
     // Prime the cache: after a successful prepare, the erosion node's `Global` scope is cached.
@@ -221,7 +227,7 @@ fn dirtying_a_cached_global_ancestor_flips_needs_parallel_prepare_back_to_true()
         .prepare_for_parallel_eval(combine)
         .expect("prepare should succeed: perlin -> erosion is fully wired");
     assert!(matches!(
-        holder.read().graph().needs_parallel_prepare(combine),
+        has_pending_global_ancestor(holder.read().graph(), combine),
         Ok(false)
     ));
 
@@ -236,12 +242,12 @@ fn dirtying_a_cached_global_ancestor_flips_needs_parallel_prepare_back_to_true()
         .set_param("frequency", NParamValue::Float(2.5))
         .expect("frequency is a valid Perlin param");
     assert!(matches!(
-        holder.read().graph().needs_parallel_prepare(combine),
+        has_pending_global_ancestor(holder.read().graph(), combine),
         Ok(true)
     ));
 
     let completed = run_with_timeout(Duration::from_secs(5), move || {
-        let needs_prepare = holder.read().graph().needs_parallel_prepare(combine);
+        let needs_prepare = has_pending_global_ancestor(holder.read().graph(), combine);
         if let Ok(true) = needs_prepare {
             holder
                 .write()
