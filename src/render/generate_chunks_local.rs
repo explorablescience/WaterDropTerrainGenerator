@@ -8,13 +8,13 @@ use crate::{
     TerrainSessionHolder,
     core::{
         graph::GraphNodeId, node::NodeError::InputNotConnected, parallelism::ChunkJobs,
-        tiling::crop_padding,
+        tiling::crop_padding
     },
     render::{
         chunk_array::{ChunkInstance, TerrainPreviewSync},
         generate_chunks::{TerrainPreview, queue_layer_write, set_chunk_data, sync_preview_state},
-        utils::{chunk_origin, padded_heightmap},
-    },
+        utils::{chunk_origin, padded_heightmap}
+    }
 };
 
 /// Renders `selected_node`'s output tiled across every chunk of the terrain's [`ChunkGrid`](crate::core::tiling::ChunkGrid).
@@ -40,18 +40,22 @@ pub(super) fn update_render_chunks_local(
         let _span =
             debug_span!("update_render_chunks_local_prepare", selected_node = ?selected_node)
                 .entered();
-        match terrain_graph
+        // Bound to a `let` so the read guard drops before `Ok(true)` below takes the write lock
+        let needs_prepare = terrain_graph
             .read()
             .graph()
-            .needs_parallel_prepare(selected_node)
-        {
+            .needs_parallel_prepare(selected_node);
+        match needs_prepare {
             Ok(true) => {
                 if let Err(e) = terrain_graph
                     .write()
                     .graph_mut()
                     .prepare_for_parallel_eval(selected_node)
                 {
-                    error!("Failed to prepare terrain graph for evaluation: {:?}", e);
+                    match e {
+                        InputNotConnected { .. } => {} // Fine
+                        _ => error!("Failed to prepare terrain graph for evaluation: {:?}", e)
+                    }
                     return;
                 }
             }
@@ -106,7 +110,7 @@ pub(super) fn update_render_chunks_local(
                         _ => error!(
                             "Error while processing terrain graph for chunk {:?}: {:?}",
                             chunk, e
-                        ),
+                        )
                     }
 
                     // Show a flat chunk instead
@@ -119,7 +123,7 @@ pub(super) fn update_render_chunks_local(
                             terrain_preview,
                             chunk,
                             vec![0.0; tile_size * tile_size],
-                            true,
+                            true
                         );
                         changed_chunks.insert(chunk);
                     }
@@ -131,8 +135,9 @@ pub(super) fn update_render_chunks_local(
 
     // Queue every changed chunk's (padded) heightmap for upload into its texture array layer.
     {
-        let _span = debug_span!("update_render_chunks_local_upload", selected_node = ?selected_node)
-            .entered();
+        let _span =
+            debug_span!("update_render_chunks_local_upload", selected_node = ?selected_node)
+                .entered();
         let writes: Vec<(u32, Vec<f32>)> = changed_chunks
             .par_iter()
             .map(|chunk| {
