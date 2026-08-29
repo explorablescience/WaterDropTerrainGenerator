@@ -16,12 +16,12 @@ const ICON: NodeIcon = NodeIcon {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 enum CombineMethod {
     #[default]
-    Average,
+    Average
 }
 impl CombineMethod {
     fn to_str(self) -> &'static str {
         match self {
-            CombineMethod::Average => "Average",
+            CombineMethod::Average => "Average"
         }
     }
     fn from_str(s: &str) -> Option<Self> {
@@ -38,7 +38,7 @@ impl CombineMethod {
 /// Combine multiple heightmaps using multiple compositing methods.
 #[derive(Debug, Default)]
 pub struct Combine {
-    method: CombineMethod,
+    method: CombineMethod
 }
 impl Combine {
     fn params() -> &'static [NParamDesc] {
@@ -49,7 +49,9 @@ impl Combine {
                 label: "Method",
                 category: "Combining",
                 default: NParamValue::Enum(CombineMethod::Average.to_str().to_string()),
-                constraints: Some(NParamConstraints::EnumOneOf { options: CombineMethod::all_options() })
+                constraints: Some(NParamConstraints::EnumOneOf {
+                    options: CombineMethod::all_options()
+                })
             }]
         })
     }
@@ -68,7 +70,11 @@ impl Combine {
                         count += 1;
                     }
                 }
-                row[x] = if count > 0 { sum / count as f32 } else { f32::NAN };
+                row[x] = if count > 0 {
+                    sum / count as f32
+                } else {
+                    f32::NAN
+                };
             }
         });
         Arc::new(output)
@@ -119,7 +125,10 @@ impl Node for Combine {
     }
     fn set_param(&mut self, key: &str, value: NParamValue) -> Result<(), NodeError> {
         match (key, value) {
-            ("method", NParamValue::Enum(v)) => self.method = CombineMethod::from_str(&v).ok_or_else(|| format!("Invalid method: {}", v))?,
+            ("method", NParamValue::Enum(v)) => {
+                self.method =
+                    CombineMethod::from_str(&v).ok_or_else(|| format!("Invalid method: {}", v))?
+            }
             (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into())
         }
         Ok(())

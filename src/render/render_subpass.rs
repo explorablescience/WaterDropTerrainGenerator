@@ -1,15 +1,15 @@
 use bevy::{
     ecs::system::{SystemParamItem, lifetimeless::SRes},
-    prelude::*,
+    prelude::*
 };
 use wde::prelude::*;
 
 use crate::render::{
     chunk_array::{
         TerrainPreviewArrayBg, TerrainPreviewGpu, TerrainPreviewInstancesBinding,
-        TerrainPreviewSync,
+        TerrainPreviewSync
     },
-    render_pipeline::TerrainPreviewRenderPipeline,
+    render_pipeline::TerrainPreviewRenderPipeline
 };
 
 pub(crate) struct SubRenderPassTerrainPreview;
@@ -22,13 +22,13 @@ impl RenderSubPass for SubRenderPassTerrainPreview {
         SBinding<CameraBinding>,
         SBinding<PbrMaterial>,
         SBinding<TerrainPreviewInstancesBinding>,
-        SBinding<TerrainPreviewArrayBg>,
+        SBinding<TerrainPreviewArrayBg>
     );
 
     fn describe(
         (sync, gpu, meshes, pipeline, camera, materials, instances, heightmap_array): &SystemParamItem<
             Self::Params
-        >,
+        >
     ) -> RenderSubPassDesc {
         if !gpu.ready || gpu.chunk_count == 0 {
             return RenderSubPassDesc::default();
@@ -43,18 +43,18 @@ impl RenderSubPass for SubRenderPassTerrainPreview {
                 sync.material
                     .as_ref()
                     .and_then(|handle| materials.get(handle.id()))
-                    .map(|m| m.bind_group.clone()),
+                    .map(|m| m.bind_group.clone())
             ),
             SubPassCommand::BindGroup(
                 2,
-                instances.iter().next().map(|(_, i)| i.bind_group.clone()),
+                instances.iter().next().map(|(_, i)| i.bind_group.clone())
             ),
             SubPassCommand::BindGroup(
                 3,
                 gpu.bind_group
                     .as_ref()
                     .and_then(|h| heightmap_array.get(h))
-                    .map(|a| a.bind_group.clone()),
+                    .map(|a| a.bind_group.clone())
             ),
             SubPassCommand::DrawBatches(vec![DrawCommandsBatch {
                 bind_group: None,
@@ -64,7 +64,7 @@ impl RenderSubPass for SubRenderPassTerrainPreview {
                     .and_then(|m| meshes.get(m.id()))
                     .map(|m| m.index_count)
                     .unwrap_or(0),
-                instance_range: 0..gpu.chunk_count,
+                instance_range: 0..gpu.chunk_count
             }]),
         ])
     }

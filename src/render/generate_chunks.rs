@@ -10,14 +10,14 @@ use crate::{
         chunk_array::{ChunkInstance, TerrainPreviewSync},
         generate_chunks_global::update_render_chunks_global,
         generate_chunks_local::update_render_chunks_local,
-        utils::{build_shared_chunk_mesh, padded_heightmap},
-    },
+        utils::{build_shared_chunk_mesh, padded_heightmap}
+    }
 };
 
 pub(super) struct ChunkPreview {
     pub(super) core_data: Vec<f32>,
     /// Whether `core_data` is the flat fallback shown when this chunk's node can't be evaluated.
-    pub(super) is_flat: bool,
+    pub(super) is_flat: bool
 }
 
 #[derive(Resource, Default)]
@@ -30,13 +30,13 @@ pub struct TerrainPreview {
     heightmap_array: Option<Handle<Texture>>,
     /// `(padded texel size, layer count)` the current `heightmap_array` was built with.
     array_dims: Option<(u32, u32)>,
-    pending_layer_writes: Vec<(u32, Vec<f32>)>,
+    pending_layer_writes: Vec<(u32, Vec<f32>)>
 }
 
 /// Creates the material used for rendering the terrain preview meshes.
 pub(crate) fn create_material(
     asset_server: Res<AssetServer>,
-    mut terrain_preview: ResMut<TerrainPreview>,
+    mut terrain_preview: ResMut<TerrainPreview>
 ) {
     terrain_preview.material_handle = Some(asset_server.add(PbrMaterial {
         label: "terrain-white".to_string(),
@@ -53,11 +53,11 @@ pub(crate) fn update_render_chunks(
     mut chunk_jobs: ResMut<ChunkJobs>,
     terrain_graph: Res<TerrainSessionHolder>,
     mut old_selected_node: Local<Option<GraphNodeId>>,
-    mut old_selected_node_last_dirty: Local<Option<std::time::Instant>>,
+    mut old_selected_node_last_dirty: Local<Option<std::time::Instant>>
 ) {
     let selected_node = match terrain_graph.read().selected_node {
         Some(node_id) => node_id,
-        None => return,
+        None => return
     };
     if old_selected_node_last_dirty.is_none() {
         *old_selected_node_last_dirty = Some(std::time::Instant::now());
@@ -95,11 +95,11 @@ pub(crate) fn update_render_chunks(
     // Call the appropriate update function based on the selected node's locality
     let material_handle = match &terrain_preview.material_handle {
         Some(handle) => handle.clone(),
-        None => return, // Material not created yet
+        None => return // Material not created yet
     };
     let node_locality = match terrain_graph.read().graph().node(selected_node) {
         Ok(node) => node.locality(),
-        Err(_) => return, // Selected node no longer exists
+        Err(_) => return // Selected node no longer exists
     };
     match node_locality {
         NodeLocality::Global { native_resolution } => update_render_chunks_global(
@@ -109,7 +109,7 @@ pub(crate) fn update_render_chunks(
             &terrain_graph,
             material_handle,
             selected_node,
-            native_resolution,
+            native_resolution
         ),
         NodeLocality::Local => update_render_chunks_local(
             &asset_server,
@@ -118,8 +118,8 @@ pub(crate) fn update_render_chunks(
             &mut chunk_jobs,
             &terrain_graph,
             material_handle,
-            selected_node,
-        ),
+            selected_node
+        )
     }
 }
 
@@ -128,7 +128,7 @@ pub(super) fn set_chunk_data(
     terrain_preview: &mut TerrainPreview,
     chunk: ChunkCoord,
     data: Vec<f32>,
-    is_flat: bool,
+    is_flat: bool
 ) {
     match terrain_preview.chunks.get_mut(&chunk) {
         Some(preview) => {
@@ -140,8 +140,8 @@ pub(super) fn set_chunk_data(
                 chunk,
                 ChunkPreview {
                     core_data: data,
-                    is_flat,
-                },
+                    is_flat
+                }
             );
         }
     }
@@ -163,7 +163,7 @@ pub(super) fn sync_preview_state(
     material_handle: Handle<PbrMaterial>,
     size: usize,
     instances: Vec<ChunkInstance>,
-    layer_of: impl Fn(ChunkCoord) -> u32,
+    layer_of: impl Fn(ChunkCoord) -> u32
 ) {
     let _span = debug_span!(
         "sync_preview_state",

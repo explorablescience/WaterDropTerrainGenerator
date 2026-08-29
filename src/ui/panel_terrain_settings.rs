@@ -5,11 +5,14 @@ use bevy::prelude::*;
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainSessionHolder, core::{
-        node::{NParamConstraints, NParamDesc, NParamValue}, parallelism::TILE_RESOLUTIONS, tiling::ChunkGrid
-    }, ui::{theme, widgets}
+    TerrainSessionHolder,
+    core::{
+        node::{NParamConstraints, NParamDesc, NParamValue},
+        parallelism::TILE_RESOLUTIONS,
+        tiling::ChunkGrid
+    },
+    ui::{theme, widgets}
 };
-
 
 /// Values are (re)synced from the graph's actual chunk grid each time the window transitions from closed to open, so editing here doesn't fight with e.g. a project load changing the grid while it's sitting open.
 /// The default values are set by the `ChunkGrid` constructor.
@@ -76,7 +79,10 @@ pub fn draw_terrain_settings(
                 theme::palette::ACCENT,
                 &mut state.chunks_y
             );
-            let prev_tile_size = state.tile_size.parse::<usize>().unwrap_or(TILE_RESOLUTIONS[0]);
+            let prev_tile_size = state
+                .tile_size
+                .parse::<usize>()
+                .unwrap_or(TILE_RESOLUTIONS[0]);
             let tile_size_changed = egui::Grid::new("terrain-settings-tile-size")
                 .num_columns(2)
                 .spacing([10.0, 8.0])
@@ -120,7 +126,10 @@ pub fn draw_terrain_settings(
             let (chunks_x, chunks_y, tile_size, world_scale) = (
                 state.chunks_x,
                 state.chunks_y,
-                state.tile_size.parse::<usize>().unwrap_or(TILE_RESOLUTIONS[0]),
+                state
+                    .tile_size
+                    .parse::<usize>()
+                    .unwrap_or(TILE_RESOLUTIONS[0]),
                 state.world_scale
             );
             widgets::button(ui, "Apply", theme::palette::ACCENT, || {

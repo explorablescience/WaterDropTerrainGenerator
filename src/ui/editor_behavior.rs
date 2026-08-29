@@ -65,8 +65,8 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
                         self.terrain_graph.clone()
                     );
                     let old_selected_node = self.terrain_graph.read().selected_node;
-                        let render_node = pinned_node.or(selected_node);
-                        if old_selected_node != render_node.map(|node| node.graph_id) {
+                    let render_node = pinned_node.or(selected_node);
+                    if old_selected_node != render_node.map(|node| node.graph_id) {
                         self.terrain_graph.write().selected_node =
                             render_node.map(|node| node.graph_id);
                     }

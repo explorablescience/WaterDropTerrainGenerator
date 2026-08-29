@@ -1,4 +1,10 @@
-use bevy::{app::{ScheduleRunnerPlugin, TaskPoolThreadAssignmentPolicy}, diagnostic::FrameCountPlugin, input::InputPlugin, prelude::*, time::TimePlugin};
+use bevy::{
+    app::{ScheduleRunnerPlugin, TaskPoolThreadAssignmentPolicy},
+    diagnostic::FrameCountPlugin,
+    input::InputPlugin,
+    prelude::*,
+    time::TimePlugin
+};
 use waterdrop_terrain_generator::{TerrainSessionHolder, render, ui};
 use wde::prelude::*;
 
@@ -19,20 +25,20 @@ impl Plugin for CustomWdePlugins {
             }
             .with_crate_level(
                 "waterdrop_terrain_generator",
-                wde::wde_logger::LogLevel::DEBUG,
+                wde::wde_logger::LogLevel::DEBUG
             ),
             wde::wde_renderer::RenderPlugin {
                 window_title: "WaterDrop Terrain Generator".into(),
                 window_resolution: (1600, 900),
                 window_icon: std::fs::read("assets/icon.png")
                     .ok()
-                    .and_then(|bytes| wde::wde_renderer::core::WindowIcon::from_bytes(&bytes).ok()),
+                    .and_then(|bytes| wde::wde_renderer::core::WindowIcon::from_bytes(&bytes).ok())
             },
             wde::wde_pbr::PbrPlugin,
             wde::wde_camera::CameraPlugin,
             wde::wde_camera_controller::CameraControllerPlugin,
             wde::wde_gizmos::GizmosPlugin,
-            wde::wde_editor::EditorPlugin,
+            wde::wde_editor::EditorPlugin
         ));
 
         app.init_resource::<TerrainSessionHolder>()
@@ -59,23 +65,23 @@ fn main() {
                 max_threads: 1,
                 percent: 0.25,
                 on_thread_spawn: None,
-                on_thread_destroy: None,
+                on_thread_destroy: None
             },
             compute: TaskPoolThreadAssignmentPolicy {
                 min_threads: 1,
                 max_threads: 1,
                 percent: 0.25,
                 on_thread_spawn: None,
-                on_thread_destroy: None,
+                on_thread_destroy: None
             },
             async_compute: TaskPoolThreadAssignmentPolicy {
                 min_threads: 1,
                 max_threads: usize::MAX,
                 percent: 1.0, // "whatever is left over", i.e. concurrent chunk dispatch.
                 on_thread_spawn: None,
-                on_thread_destroy: None,
-            },
-        },
+                on_thread_destroy: None
+            }
+        }
     };
 
     // Create the Bevy app and add the custom plugins.
@@ -92,7 +98,7 @@ fn main() {
         InputPlugin,
         TransformPlugin,
         CustomWdePlugins,
-        bevy_task_pool,
+        bevy_task_pool
     ));
     app.run();
 }
@@ -102,7 +108,7 @@ fn default_scene(mut commands: Commands) {
         Name::new("Main Camera"),
         Transform::from_xyz(-6.0, 13.0, -4.0),
         ActiveCamera,
-        ThirdPersonController::default(),
+        ThirdPersonController::default()
     ));
 
     commands.spawn((
@@ -111,6 +117,6 @@ fn default_scene(mut commands: Commands) {
             direction: Vec3::new(-1.0, -2.0, -1.0).normalize(),
             intensity: 0.5,
             ..Default::default()
-        },
+        }
     ));
 }

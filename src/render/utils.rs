@@ -2,7 +2,10 @@ use std::collections::HashMap;
 use wde::prelude::*;
 
 use bevy::prelude::*;
-use wde::wde_renderer::{assets::{Mesh, MeshBbox}, passes::Vertex};
+use wde::wde_renderer::{
+    assets::{Mesh, MeshBbox},
+    passes::Vertex
+};
 
 use crate::{
     core::tiling::{ChunkCoord, ChunkGrid},
@@ -50,7 +53,6 @@ pub fn build_shared_chunk_mesh(size: usize) -> Mesh {
         use_ssbo: false
     }
 }
-
 
 /// `chunk`'s local `(0, 0)` texel, in world space.
 pub(super) fn chunk_origin(chunk: ChunkCoord, grid: &ChunkGrid) -> Vec3 {

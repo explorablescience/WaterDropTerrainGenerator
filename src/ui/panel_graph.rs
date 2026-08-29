@@ -35,8 +35,8 @@ fn selection_id() -> egui::Id {
 }
 
 fn pinned_nodes_id() -> egui::Id {
-        egui::Id::new("panel-graph-pinned-nodes")
-    }
+    egui::Id::new("panel-graph-pinned-nodes")
+}
 
 /// Clears the persisted graph-editor selection - used after a project load replaces every node id,
 /// so a stale selection left over from before the load can't be looked up against the new graph.
@@ -50,7 +50,7 @@ pub fn selected_node(ctx: &egui::Context) -> Option<SelectedNode> {
 
 pub fn clear_pins(ctx: &egui::Context) {
     ctx.data_mut(|d| d.remove::<GraphNodeId>(pinned_nodes_id()));
-    }
+}
 
 /// Identifies a node both in the `egui-snarl` UI graph and in the underlying `NodeGraph`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -475,19 +475,31 @@ fn paint_pin_icon(ui: &egui::Ui, rect: egui::Rect, color: egui::Color32, pinned:
     let center = rect.center();
     let painter = ui.painter();
     painter.line_segment(
-        [center + egui::vec2(-2.5, -3.0), center + egui::vec2(2.5, -3.0)],
+        [
+            center + egui::vec2(-2.5, -3.0),
+            center + egui::vec2(2.5, -3.0)
+        ],
         egui::Stroke::new(1.2, color)
     );
     painter.line_segment(
-        [center + egui::vec2(-2.0, -3.0), center + egui::vec2(-2.0, 0.0)],
+        [
+            center + egui::vec2(-2.0, -3.0),
+            center + egui::vec2(-2.0, 0.0)
+        ],
         egui::Stroke::new(1.2, color)
     );
     painter.line_segment(
-        [center + egui::vec2(2.0, -3.0), center + egui::vec2(2.0, 0.0)],
+        [
+            center + egui::vec2(2.0, -3.0),
+            center + egui::vec2(2.0, 0.0)
+        ],
         egui::Stroke::new(1.2, color)
     );
     painter.line_segment(
-        [center + egui::vec2(-3.0, 0.0), center + egui::vec2(3.0, 0.0)],
+        [
+            center + egui::vec2(-3.0, 0.0),
+            center + egui::vec2(3.0, 0.0)
+        ],
         egui::Stroke::new(1.2, color)
     );
     painter.line_segment(
@@ -575,13 +587,19 @@ pub fn show_graph(
         selected: ui
             .ctx()
             .data(|d| d.get_temp::<SelectedNode>(selected_node_id)),
-        pinned: ui.ctx().data(|d| d.get_temp::<GraphNodeId>(pinned_nodes_id())),
+        pinned: ui
+            .ctx()
+            .data(|d| d.get_temp::<GraphNodeId>(pinned_nodes_id())),
         terrain_graph
     };
     if viewer.selected.is_none()
-        && let Some((snarl_id, _, GraphNode::Main(graph_id))) = graph_instance.nodes_pos_ids().next()
+        && let Some((snarl_id, _, GraphNode::Main(graph_id))) =
+            graph_instance.nodes_pos_ids().next()
     {
-        viewer.selected = Some(SelectedNode { snarl_id, graph_id: *graph_id });
+        viewer.selected = Some(SelectedNode {
+            snarl_id,
+            graph_id: *graph_id
+        });
     }
 
     SnarlWidget::new()

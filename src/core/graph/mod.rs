@@ -126,7 +126,6 @@ impl NodeGraph {
         Ok(NodeMutGuard { graph: self, id })
     }
 
-
     /// Propagates downstream, stopping at baked nodes.
     fn mark_dirty(&mut self, id: GraphNodeId) {
         *self.last_dirty.lock().unwrap() = Some(Instant::now());

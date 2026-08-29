@@ -13,7 +13,7 @@ pub(crate) struct ChunkInstance {
     /// World-space size of each texel in this chunk, in world units.
     pub cell_size: f32,
     /// Layer of the heightmap texture array that holds this chunk's padded heightmap.
-    pub layer: u32,
+    pub layer: u32
 }
 
 /// GPU-side storage buffer holding every chunk's [`ChunkInstance`], indexed by draw instance.
@@ -32,8 +32,8 @@ impl RenderData for TerrainPreviewInstances {
                 label: "terrain-preview-instances-buffer".to_string(),
                 size: std::mem::size_of::<ChunkInstance>() * MAX_PREVIEW_CHUNKS,
                 usage: BufferUsage::STORAGE | BufferUsage::COPY_DST,
-                content: None,
-            },
+                content: None
+            }
         );
     }
 }
@@ -46,7 +46,7 @@ impl RenderBinding for TerrainPreviewInstancesBinding {
     fn describe(
         &mut self,
         instances: &SystemParamItem<Self::Params>,
-        builder: &mut RenderBindingBuilder,
+        builder: &mut RenderBindingBuilder
     ) {
         builder.add_buffer(instances, TerrainPreviewInstances::BUFFER_ID);
     }
@@ -59,7 +59,7 @@ impl RenderBinding for TerrainPreviewInstancesBinding {
 /// Bind group exposing the heightmap texture array to the vertex shader.
 #[derive(Asset, Clone, TypePath, Default)]
 pub(crate) struct TerrainPreviewArrayBg {
-    pub heightmap_array: Option<Handle<Texture>>,
+    pub heightmap_array: Option<Handle<Texture>>
 }
 impl RenderBinding for TerrainPreviewArrayBg {
     type Params = ();
@@ -67,7 +67,7 @@ impl RenderBinding for TerrainPreviewArrayBg {
     fn describe(
         &mut self,
         _params: &SystemParamItem<Self::Params>,
-        builder: &mut RenderBindingBuilder,
+        builder: &mut RenderBindingBuilder
     ) {
         builder.add_texture_array_view_from_id(self.heightmap_array.as_ref().map(|h| h.id()));
     }
@@ -85,7 +85,7 @@ pub(crate) struct TerrainPreviewSync {
     pub material: Option<Handle<PbrMaterial>>,
     pub instances: Vec<ChunkInstance>,
     /// `(layer, padded heightmap data)` pairs queued since the last sync
-    pub pending_writes: Vec<(u32, Vec<f32>)>,
+    pub pending_writes: Vec<(u32, Vec<f32>)>
 }
 
 /// Render-world-only state that persists across frames.
@@ -96,11 +96,11 @@ pub(crate) struct TerrainPreviewGpu {
     pub bind_group: Option<Handle<TerrainPreviewArrayBg>>,
     pub chunk_count: u32,
     /// Writes not yet applied to the GPU texture, retried each frame until it succeeds.
-    pub pending_writes: Vec<(u32, Vec<f32>)>,
+    pub pending_writes: Vec<(u32, Vec<f32>)>
 }
 
 /// Uploads dirty heightmap layers, rewrites the instance buffer, and (re)creates the array bind
-/// group when the heightmap texture handle changes. 
+/// group when the heightmap texture handle changes.
 pub(crate) fn sync_terrain_preview_gpu(
     asset_server: Res<AssetServer>,
     sync: Res<TerrainPreviewSync>,
@@ -108,7 +108,7 @@ pub(crate) fn sync_terrain_preview_gpu(
     textures: Res<RenderAssets<GpuTexture>>,
     instances: ResRenderData<TerrainPreviewInstances>,
     buffers: Res<RenderAssets<GpuBuffer>>,
-    render_instance: Res<RenderInstance>,
+    render_instance: Res<RenderInstance>
 ) {
     gpu.chunk_count = sync.instances.len().min(MAX_PREVIEW_CHUNKS) as u32;
     if sync.instances.len() > MAX_PREVIEW_CHUNKS {
@@ -130,14 +130,15 @@ pub(crate) fn sync_terrain_preview_gpu(
         && let Some(heightmap_array) = &gpu.heightmap_array
     {
         gpu.bind_group = Some(asset_server.add(TerrainPreviewArrayBg {
-            heightmap_array: Some(heightmap_array.clone()),
+            heightmap_array: Some(heightmap_array.clone())
         }));
     }
     gpu.ready = gpu.bind_group.is_some();
 
     // Queue this frame's new writes
     if sync.is_changed() && !sync.pending_writes.is_empty() {
-        gpu.pending_writes.extend(sync.pending_writes.iter().cloned());
+        gpu.pending_writes
+            .extend(sync.pending_writes.iter().cloned());
     }
 
     // Flush as much of the queue as the GPU texture will currently accept
@@ -151,7 +152,7 @@ pub(crate) fn sync_terrain_preview_gpu(
                 &render_instance,
                 tex.texture.format,
                 layer,
-                bytemuck::cast_slice(&data),
+                bytemuck::cast_slice(&data)
             );
         }
     }
@@ -166,7 +167,7 @@ pub(crate) fn sync_terrain_preview_gpu(
         buf.buffer.write(
             &render_instance,
             bytemuck::cast_slice(&sync.instances[..gpu.chunk_count as usize]),
-            0,
+            0
         );
     }
 }

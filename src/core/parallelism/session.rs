@@ -7,7 +7,7 @@ use bevy::{platform::collections::HashMap, prelude::*};
 use crate::core::{
     graph::{GraphNodeId, NodeGraph, NodeGraphProcessResult},
     node::{NodeError, NodeMessage, NodeMessageLog},
-    tiling::{ChunkCoord, ChunkGrid, TileHandle},
+    tiling::{ChunkCoord, ChunkGrid, TileHandle}
 };
 
 /// A thread-safe wrapper around [`TerrainSession`] that can be stored as a Bevy resource.
@@ -32,7 +32,7 @@ pub struct TerrainSession {
     chunk_generations: HashMap<(GraphNodeId, ChunkCoord), u32>,
     displayed_node: Option<GraphNodeId>,
     pub selected_node: Option<GraphNodeId>,
-    messages: NodeMessageLog,
+    messages: NodeMessageLog
 }
 impl Default for TerrainSession {
     fn default() -> Self {
@@ -41,7 +41,7 @@ impl Default for TerrainSession {
             chunk_generations: HashMap::new(),
             displayed_node: None,
             selected_node: None,
-            messages: NodeMessageLog::default(),
+            messages: NodeMessageLog::default()
         }
     }
 }
@@ -67,7 +67,7 @@ impl TerrainSession {
     pub fn process_sync(
         &mut self,
         node_id: GraphNodeId,
-        chunk: ChunkCoord,
+        chunk: ChunkCoord
     ) -> Result<Option<(u32, Vec<TileHandle>)>, NodeError> {
         let _span = debug_span!("process_chunk", node_id = ?node_id, chunk = ?chunk).entered();
         let result = self.graph.process_chunk(node_id, chunk);
@@ -78,7 +78,7 @@ impl TerrainSession {
         &mut self,
         node_id: GraphNodeId,
         chunk: ChunkCoord,
-        result: Result<NodeGraphProcessResult, NodeError>,
+        result: Result<NodeGraphProcessResult, NodeError>
     ) -> Result<Option<(u32, Vec<TileHandle>)>, NodeError> {
         let _span = debug_span!("apply_chunk_result", node_id = ?node_id, chunk = ?chunk).entered();
         let key = (node_id, chunk);
@@ -87,7 +87,7 @@ impl TerrainSession {
                 self.chunk_generations.insert(key, new_generation);
                 Ok(Some((new_generation, output_tiles)))
             }
-            NodeGraphProcessResult::Processing => Ok(None),
+            NodeGraphProcessResult::Processing => Ok(None)
         }
     }
 

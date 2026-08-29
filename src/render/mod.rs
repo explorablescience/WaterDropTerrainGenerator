@@ -8,19 +8,19 @@ use crate::{
             TerrainPreviewArrayBg, TerrainPreviewGpu, TerrainPreviewInstances,
             TerrainPreviewInstancesBinding, TerrainPreviewSync, sync_terrain_preview_gpu
         },
-        render_pipeline::TerrainPreviewRenderPipeline,
-        render_subpass::SubRenderPassTerrainPreview,
         generate_chunks::{TerrainPreview, create_material, update_render_chunks},
-    },
+        render_pipeline::TerrainPreviewRenderPipeline,
+        render_subpass::SubRenderPassTerrainPreview
+    }
 };
 
-mod utils;
 mod chunk_array;
-mod render_pipeline;
-mod render_subpass;
 mod generate_chunks;
 mod generate_chunks_global;
 mod generate_chunks_local;
+mod render_pipeline;
+mod render_subpass;
+mod utils;
 
 /// Handles the generation and rendering of the terrain preview mesh in the editor.
 pub struct RenderPlugin;
@@ -37,7 +37,7 @@ impl Plugin for RenderPlugin {
             RenderDataRegisterPlugin::<TerrainPreviewInstances>::default(),
             RenderBindingRegisterPlugin::<TerrainPreviewInstancesBinding>::default(),
             RenderBindingRegisterPlugin::<TerrainPreviewArrayBg>::without_init(),
-            ExtractResourcePlugin::<TerrainPreviewSync>::default(),
+            ExtractResourcePlugin::<TerrainPreviewSync>::default()
         ));
 
         // Render pipeline and subpass for rendering the chunks

@@ -111,7 +111,7 @@ pub fn category_color(category: NodeCategory) -> egui::Color32 {
         NodeCategory::DataExtraction => palette::CATEGORY_DATA_EXTRACTION,
         NodeCategory::Texturing => palette::CATEGORY_TEXTURING,
         NodeCategory::Utility => palette::CATEGORY_UTILITY,
-        NodeCategory::Export => palette::CATEGORY_EXPORT,
+        NodeCategory::Export => palette::CATEGORY_EXPORT
     }
 }
 

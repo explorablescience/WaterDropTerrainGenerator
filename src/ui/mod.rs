@@ -5,7 +5,9 @@ use crate::{
     TerrainSessionHolder,
     core::node,
     ui::{
-        editor::EditorPanelsPlugin, footer::FooterPlugin, panel_graph::{GraphEditorState, GraphNode},
+        editor::EditorPanelsPlugin,
+        footer::FooterPlugin,
+        panel_graph::{GraphEditorState, GraphNode},
         panel_terrain_settings::draw_terrain_settings
     }
 };

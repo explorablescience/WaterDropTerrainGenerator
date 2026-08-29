@@ -132,14 +132,12 @@ fn save_project(
 
     let edges = graph
         .edges()
-        .map(
-            |(from_node, from_socket, to_node, to_socket)| SavedEdge {
-                from_node: from_node.0,
-                from_socket,
-                to_node: to_node.0,
-                to_socket
-            }
-        )
+        .map(|(from_node, from_socket, to_node, to_socket)| SavedEdge {
+            from_node: from_node.0,
+            from_socket,
+            to_node: to_node.0,
+            to_socket
+        })
         .collect();
 
     let file = ProjectFile {
@@ -181,7 +179,10 @@ fn load_project(
         let mut instance = (descriptor.factory)();
         for (key, value) in &saved.params {
             if let Err(e) = instance.set_param(key, value.clone()) {
-                warn!("Skipping stale parameter '{key}' on '{}': {e}", saved.type_label);
+                warn!(
+                    "Skipping stale parameter '{key}' on '{}': {e}",
+                    saved.type_label
+                );
             }
         }
         graph_ids.insert(saved.id, graph.add_node(instance));

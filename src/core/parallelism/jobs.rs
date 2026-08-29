@@ -40,11 +40,12 @@ impl ChunkJobs {
 
         // Otherwise, spawn a new task to evaluate the chunk
         let session = session.clone();
-        let task = AsyncComputeTaskPool::get()
-            .spawn(async move {
-                let _span = debug_span!("task_process_chunk_shared", node_id = ?node_id, chunk = ?chunk).entered();
-                session.read().graph().process_chunk_shared(node_id, chunk)
-            });
+        let task = AsyncComputeTaskPool::get().spawn(async move {
+            let _span =
+                debug_span!("task_process_chunk_shared", node_id = ?node_id, chunk = ?chunk)
+                    .entered();
+            session.read().graph().process_chunk_shared(node_id, chunk)
+        });
         self.pending.insert(chunk, task);
         None
     }

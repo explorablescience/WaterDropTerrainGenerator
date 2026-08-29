@@ -37,10 +37,7 @@ pub(super) fn update_render_chunks_global(
     let changed = {
         let _span = debug_span!("update_render_chunks_global_process", selected_node = ?selected_node, native_resolution = native_resolution).entered();
         let mut changed = false;
-        match terrain_graph
-            .write()
-            .process_sync(selected_node, chunk)
-        {
+        match terrain_graph.write().process_sync(selected_node, chunk) {
             Ok(Some((_, tiles))) => {
                 if let Some(heightmap) = tiles.first() {
                     // Set the chunk's data to the cropped heightmap
