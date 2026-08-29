@@ -133,7 +133,7 @@ impl Perlin {
                     default: NParamValue::Float(1.0),
                     constraints: Some(NParamConstraints::FloatRange {
                         min: 0.0,
-                        max: 10.0
+                        max: 4.0
                     })
                 },
                 NParamDesc {
@@ -150,7 +150,7 @@ impl Perlin {
                     default: NParamValue::Float(0.05),
                     constraints: Some(NParamConstraints::FloatRange {
                         min: 0.0,
-                        max: 2.0
+                        max: 1.0
                     })
                 },
                 NParamDesc {
