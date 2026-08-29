@@ -12,13 +12,20 @@ use crate::core::{
     tiling::ChunkCoord
 };
 
-/// A collection of background tasks for evaluating chunks of the currently-previewed node in a [`TerrainSession`].
+/// A collection of background tasks for evaluating chunks of the currently-previewed node in a
+/// [`TerrainSession`]. Finished chunks are buffered in `staged` so a caller can swap in a whole
+/// dirtied batch at once, rather than showing a fast chunk next to slower neighbors still on the
+/// previous generation.
 #[derive(Resource, Default)]
 pub struct ChunkJobs {
-    pending: HashMap<ChunkCoord, Task<Result<NodeGraphProcessResult, NodeError>>>
+    pending: HashMap<ChunkCoord, Task<Result<NodeGraphProcessResult, NodeError>>>,
+    staged: HashMap<ChunkCoord, Result<NodeGraphProcessResult, NodeError>>
 }
 impl ChunkJobs {
-    /// Spawns a background task to evaluate `node_id` at `chunk`, or polls the existing one if it was already spawned. Returns `Some(result)` if the task has finished, or `None` if it is still in flight.
+    /// Spawns a background task to evaluate `node_id` at `chunk`, or polls the existing one.
+    /// Always polls a pending task before checking the cache - a task's result lands in the cache
+    /// as a side effect of running, so checking the cache first can see it already `Cached` and
+    /// skip collecting the task, leaking its result forever.
     pub fn poll_or_spawn(
         &mut self,
         session: &TerrainSessionHolder,
@@ -35,6 +42,11 @@ impl ChunkJobs {
             }
         }
 
+        // Already cached: a pure cache hit, cheap enough to do synchronously.
+        if session.read().graph().is_chunk_cached(node_id, chunk) {
+            return Some(session.read().graph().process_chunk_shared(node_id, chunk));
+        }
+
         // Otherwise, spawn a new task to evaluate the chunk
         let session = session.clone();
         let task = AsyncComputeTaskPool::get()
@@ -43,14 +55,25 @@ impl ChunkJobs {
         None
     }
 
-    /// Drops pending jobs for chunks no longer in `live_chunks` (e.g. after a grid resize).
+    /// Buffers a finished chunk's result until [`Self::take_staged`] releases the whole batch.
+    pub fn stage_result(&mut self, chunk: ChunkCoord, result: Result<NodeGraphProcessResult, NodeError>) {
+        self.staged.insert(chunk, result);
+    }
+    /// Drains every buffered result, for a caller that has confirmed the whole batch is ready.
+    pub fn take_staged(&mut self) -> HashMap<ChunkCoord, Result<NodeGraphProcessResult, NodeError>> {
+        std::mem::take(&mut self.staged)
+    }
+
+    /// Drops pending/staged jobs for chunks no longer in `live_chunks` (e.g. after a grid resize).
     pub fn retain_live(&mut self, live_chunks: &std::collections::HashSet<ChunkCoord>) {
         self.pending.retain(|chunk, _| live_chunks.contains(chunk));
+        self.staged.retain(|chunk, _| live_chunks.contains(chunk));
     }
 
     /// Call when the previewed node changes, so a stale result isn't mistaken for the new one's.
     pub fn clear(&mut self) {
         self.pending.clear();
+        self.staged.clear();
     }
 }
 

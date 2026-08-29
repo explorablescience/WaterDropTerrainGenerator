@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::core::node::{Node, NodeError};
-use crate::core::tiling::{ChunkGrid, TileHandle, TilePool};
+use crate::core::tiling::{ChunkCoord, ChunkGrid, TileHandle, TilePool};
 
 mod eval;
 mod state;
@@ -16,7 +16,7 @@ mod topology;
 pub use state::{CacheKey, NodeState};
 pub use topology::GraphNodeId;
 
-use state::EvalCache;
+use state::{EvalCache, EvalScope};
 use topology::Topology;
 
 pub enum NodeGraphProcessResult {
@@ -143,6 +143,13 @@ impl NodeGraph {
     }
     fn is_dirty(&self, id: GraphNodeId) -> bool {
         self.cache.is_dirty(id)
+    }
+    /// Whether `node_id`'s output for `chunk` is already cached and up to date.
+    pub fn is_chunk_cached(&self, node_id: GraphNodeId, chunk: ChunkCoord) -> bool {
+        matches!(
+            self.cache.state(node_id, EvalScope::Chunk(chunk)),
+            NodeState::Cached(_)
+        )
     }
     pub fn is_or_ancestor_dirty(&self, id: GraphNodeId) -> bool {
         if self.is_dirty(id) {

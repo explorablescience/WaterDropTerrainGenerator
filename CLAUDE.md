@@ -74,7 +74,7 @@ Node types implement `trait Node` (`core/node/mod.rs`): `label`/`category`/`icon
 
 ### Async evaluation (`core/parallelism`)
 
-`TerrainSessionHolder` (`Arc<RwLock<TerrainSession>>`, a Bevy `Resource`) owns the `NodeGraph`, the currently-selected/displayed node, and per-`(node, chunk)` generation bookkeeping. `ChunkJobs` spawns one `AsyncComputeTaskPool` task per chunk (`process_chunk_shared`) and polls them across frames — a frame only picks up whichever chunks finished since the last one, so local-locality nodes fill in gradually rather than blocking.
+`TerrainSessionHolder` (`Arc<RwLock<TerrainSession>>`, a Bevy `Resource`) owns the `NodeGraph`, the currently-selected/displayed node, and per-`(node, chunk)` generation bookkeeping. `ChunkJobs` spawns one `AsyncComputeTaskPool` task per chunk (`process_chunk_shared`) and polls them across frames without blocking, but buffers each finished chunk in its own staging map rather than publishing it immediately — a dirtied batch (e.g. every chunk after a param edit) is swapped into the preview all at once, only once every chunk in it has finished, so the terrain never displays a mix of chunks computed at different parameter generations.
 
 ### Terrain preview rendering (`render/`)
 
