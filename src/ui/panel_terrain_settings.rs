@@ -132,9 +132,6 @@ pub fn draw_terrain_settings(
                     .unwrap_or(TILE_RESOLUTIONS[0]),
                 state.world_scale
             );
-
-            total_points_row(ui, chunks_x.round() as u64, chunks_y.round() as u64, tile_size as u64);
-            ui.add_space(4.0);
             widgets::button(ui, "Apply", theme::palette::ACCENT, || {
                 let grid = ChunkGrid::new(
                     chunks_x.round() as u32,
@@ -145,36 +142,6 @@ pub fn draw_terrain_settings(
                 terrain_graph.write().graph_mut().set_chunk_grid(grid);
             });
         });
-}
-
-/// Read-only, derived from the (possibly unapplied) chunk grid fields above rather than a real node parameter.
-fn total_points_row(ui: &mut egui::Ui, chunks_x: u64, chunks_y: u64, tile_size: u64) {
-    let total = chunks_x * chunks_y * tile_size * tile_size;
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new("Total Points")
-                .font(theme::body_font(theme::fonts::FONT_SIZE_BODY))
-                .color(theme::palette::TEXT_DISABLED)
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(
-                egui::RichText::new(format_thousands(total))
-                    .font(theme::body_font(theme::fonts::FONT_SIZE_BODY))
-                    .color(theme::palette::TEXT_MUTED)
-            );
-        });
-    });
-}
-
-fn format_thousands(value: u64) -> String {
-    let digits = value.to_string();
-    digits
-        .as_bytes()
-        .rchunks(3)
-        .rev()
-        .map(|chunk| std::str::from_utf8(chunk).unwrap())
-        .collect::<Vec<_>>()
-        .join(",")
 }
 
 fn section_label(ui: &mut egui::Ui, text: &str) {
