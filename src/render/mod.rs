@@ -56,6 +56,8 @@ impl Plugin for RenderPlugin {
 
         // Let `Node::process` implementations dispatch GPU compute from background chunk-eval
         // tasks, which have no render-world access of their own.
-        crate::core::gpu::init(render_app.world().resource::<RenderInstance>().0.clone());
+        crate::core::gpu::init(ComputeDispatcher::new(
+            render_app.world().resource::<RenderInstance>()
+        ));
     }
 }
