@@ -1,7 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
-use rayon::prelude::*;
-
+use crate::core::gpu;
 use crate::core::node::{
     NParamConstraints, NParamDesc, NParamValue, Node, NodeCategory, NodeDescriptor, NodeError,
     NodeIcon, NodePortType, NodeSocket
@@ -12,6 +11,18 @@ const ICON: NodeIcon = NodeIcon {
     id: "node-mountain",
     png_bytes: include_bytes!("../../../../assets/icons/node_mountain.png")
 };
+
+const SHADER: &str = include_str!("mountain.comp.wgsl");
+const WORKGROUP_SIZE: u32 = 8;
+
+/// Layout must match `mountain.comp.wgsl`'s `Params` struct exactly (vec4-aligned fields).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MountainParams {
+    height_radius_pos: [f32; 4],
+    origin_step: [f32; 4],
+    tile_size: [u32; 4]
+}
 
 /// A basic `Local` primitive: one smooth dome, pointwise in world space (no neighbor reads, no
 /// whole-domain statistic), so it needs no padding - `position` and `radius` are plain world units.
@@ -68,16 +79,6 @@ impl Mountain {
             ]
         })
     }
-
-    /// Smooth radial falloff from `center`: `self.height` at the center, `0` at `self.radius` and beyond.
-    fn dome(&self, local: (f32, f32), center: (f32, f32)) -> f32 {
-        let dx = local.0 - center.0;
-        let dy = local.1 - center.1;
-        let dist = (dx * dx + dy * dy).sqrt();
-        let t = (1.0 - dist / self.radius).clamp(0.0, 1.0);
-        let falloff = t * t * (3.0 - 2.0 * t); // smoothstep
-        falloff * self.height
-    }
 }
 impl Node for Mountain {
     fn label(&self) -> &str {
@@ -127,13 +128,27 @@ impl Node for Mountain {
         ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
         let mut output = pool.allocate();
-        let s = output.size();
-        output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
-            for (x, texel) in row.iter_mut().enumerate() {
-                let world = ctx.world_pos(x, y);
-                *texel = self.dome(world, self.position);
-            }
-        });
+        let size = output.size() as u32;
+        let params = MountainParams {
+            height_radius_pos: [self.height, self.radius, self.position.0, self.position.1],
+            origin_step: [
+                ctx.world_origin.0,
+                ctx.world_origin.1,
+                ctx.world_step.0,
+                ctx.world_step.1,
+            ],
+            tile_size: [size, 0, 0, 0]
+        };
+        let workgroups = size.div_ceil(WORKGROUP_SIZE);
+        let result = gpu::dispatch_f32(
+            "mountain",
+            SHADER,
+            &params,
+            &[],
+            (size * size) as usize,
+            (workgroups, workgroups, 1)
+        )?;
+        output.copy_from_slice(&result);
         Ok(vec![Arc::new(output)])
     }
 }

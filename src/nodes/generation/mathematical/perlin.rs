@@ -1,8 +1,6 @@
 use std::sync::{Arc, OnceLock};
 
-use bevy::math::{Vec2, Vec3};
-use rayon::prelude::*;
-
+use crate::core::gpu;
 use crate::core::node::{
     NParamConstraints, NParamDesc, NParamValue, Node, NodeCategory, NodeDescriptor, NodeError,
     NodeIcon, NodePortType, NodeSocket
@@ -14,84 +12,17 @@ const ICON: NodeIcon = NodeIcon {
     png_bytes: include_bytes!("../../../../assets/icons/node_perlin.png")
 };
 
-// Precision-adjusted variations of https://www.shadertoy.com/view/4djSRW
-fn hash1(p: f32) -> f32 {
-    let mut p = frac(p * 0.011);
-    p *= p + 7.5;
-    p *= p + p;
-    frac(p)
-}
-fn hash2(p: Vec2) -> f32 {
-    let mut p3 = frac3(Vec3::new(p.x, p.y, p.x) * 0.13);
-    let d = p3.dot(Vec3::new(p3.y, p3.z, p3.x) + Vec3::splat(3.333));
-    p3 += Vec3::splat(d);
-    frac((p3.x + p3.y) * p3.z)
-}
-fn frac(x: f32) -> f32 {
-    x - x.floor()
-}
-fn frac3(v: Vec3) -> Vec3 {
-    v - v.floor()
-}
+const SHADER: &str = include_str!("perlin.comp.wgsl");
+const WORKGROUP_SIZE: u32 = 8;
 
-// 2D Perlin noise function (https://www.shadertoy.com/view/4dS3Wd)
-fn noise(pos: Vec2) -> f32 {
-    let i = pos.floor();
-    let f = pos - i;
-
-    // Four corners in 2D of a tile
-    let a = hash2(i);
-    let b = hash2(i + Vec2::new(1.0, 0.0));
-    let c = hash2(i + Vec2::new(0.0, 1.0));
-    let d = hash2(i + Vec2::new(1.0, 1.0));
-
-    // Simple 2D lerp using smoothstep envelope between the values
-    let u = f * f * (Vec2::splat(3.0) - Vec2::splat(2.0) * f);
-    mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y
-}
-
-// Fractal Brownian Motion (fBm) using Perlin noise
-// Rotate each octave to reduce axial bias
-fn fbm(pos: Vec2, params: &Perlin, seed_offset: Vec2) -> f32 {
-    let mut x = pos * params.frequency + seed_offset;
-    let mut v = 0.0;
-    let mut a = params.amplitude;
-    let g = (-params.hurst_exponent).exp();
-    let shift = Vec2::splat(100.0);
-    let (s, c) = 0.5_f32.sin_cos();
-    for _ in 0..params.octaves {
-        v += a * noise(x);
-        x = Vec2::new(c * x.x - s * x.y, s * x.x + c * x.y) * 2.0 + shift;
-        a *= g;
-    }
-    v
-}
-
-// Generate fbm with warping effects (https://iquilezles.org/articles/warp/)
-fn fbm_with_warp(pos: Vec2, params: &Perlin, seed_offset: Vec2) -> f32 {
-    let mut offset = seed_offset + Vec2::splat(121484.0);
-    for _ in 0..params.warp_octaves {
-        let warp_pos = pos * params.warp_frequency + offset;
-
-        // Using arbitrary offsets to decorrelate
-        let q = Vec2::new(
-            fbm(warp_pos, params, seed_offset),
-            fbm(warp_pos + Vec2::new(5.2, 1.3), params, seed_offset)
-        );
-        offset = params.warp_amplitude * q;
-    }
-    fbm(pos + offset, params, seed_offset)
-}
-
-// Utility functions
-fn seed_offset(seed: u32) -> Vec2 {
-    Vec2::new(
-        hash1(seed as f32) * 1000.0,
-        hash1(seed as f32 + 91.7) * 1000.0
-    )
-}
-fn mix(a: f32, b: f32, t: f32) -> f32 {
-    a * (1.0 - t) + b * t
+/// Layout must match `perlin.comp.wgsl`'s `Params` struct exactly (vec4-aligned fields).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct PerlinParams {
+    origin_step: [f32; 4],
+    amp_freq_hurst_warpamp: [f32; 4],
+    warpfreq_seed: [f32; 4],
+    counts: [u32; 4]
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -105,7 +36,7 @@ pub struct Perlin {
 
     pub warp_amplitude: f32,
     pub warp_frequency: f32,
-    pub warp_octaves: u32    
+    pub warp_octaves: u32
 }
 impl Default for Perlin {
     fn default() -> Self {
@@ -192,24 +123,6 @@ impl Perlin {
             ]
         })
     }
-
-    /// Samples at each texel's world-space position (not a `[0, 1]` local range), so adjacent chunks line up seamlessly at their shared border.
-    fn process_tile(&self, pool: &Arc<TilePool>, ctx: &TileContext) -> TileHandle {
-        let mut output = pool.allocate();
-        let s = output.size();
-        let offset = seed_offset(self.seed);
-        output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
-            for (x, texel) in row.iter_mut().enumerate() {
-                let (nx, ny) = ctx.world_pos(x, y);
-                if self.warp_amplitude > 0.0 {
-                    *texel = fbm_with_warp([nx, ny].into(), self, offset);
-                } else {
-                    *texel = fbm([nx, ny].into(), self, offset);
-                }
-            }
-        });
-        Arc::new(output)
-    }
 }
 impl Node for Perlin {
     fn label(&self) -> &str {
@@ -268,7 +181,35 @@ impl Node for Perlin {
         _inputs: &[TileHandle],
         ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
-        Ok(vec![self.process_tile(pool, ctx)])
+        let mut output = pool.allocate();
+        let size = output.size() as u32;
+        let params = PerlinParams {
+            origin_step: [
+                ctx.world_origin.0,
+                ctx.world_origin.1,
+                ctx.world_step.0,
+                ctx.world_step.1,
+            ],
+            amp_freq_hurst_warpamp: [
+                self.amplitude,
+                self.frequency,
+                self.hurst_exponent,
+                self.warp_amplitude,
+            ],
+            warpfreq_seed: [self.warp_frequency, self.seed as f32, 0.0, 0.0],
+            counts: [self.octaves, self.warp_octaves, size, 0]
+        };
+        let workgroups = size.div_ceil(WORKGROUP_SIZE);
+        let result = gpu::dispatch_f32(
+            "perlin",
+            SHADER,
+            &params,
+            &[],
+            (size * size) as usize,
+            (workgroups, workgroups, 1)
+        )?;
+        output.copy_from_slice(&result);
+        Ok(vec![Arc::new(output)])
     }
 }
 

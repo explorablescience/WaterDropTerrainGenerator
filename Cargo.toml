@@ -25,6 +25,9 @@ path = "../WaterDropEngine/crates/core/wde"
 default-features = false
 features = ["pbr", "gizmos", "editor"]
 
+[dependencies.wde-wgpu]
+path = "../WaterDropEngine/crates/wrappers/wde-wgpu"
+
 [build-dependencies]
 anyhow = "1.0.104"
 fs_extra = "1.3.0"
