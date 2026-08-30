@@ -1,6 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
-use crate::core::gpu;
+use rayon::prelude::*;
+
 use crate::core::node::{
     NParamConstraints, NParamDesc, NParamValue, Node, NodeCategory, NodeDescriptor, NodeError,
     NodeIcon, NodePortType, NodeSocket
@@ -11,16 +12,6 @@ const ICON: NodeIcon = NodeIcon {
     id: "node-combine",
     png_bytes: include_bytes!("../../../assets/icons/node_combine.png")
 };
-
-const SHADER: &str = include_str!("combine.comp.wgsl");
-const WORKGROUP_SIZE: u32 = 8;
-
-/// Layout must match `combine.comp.wgsl`'s `Params` struct exactly.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct CombineParams {
-    tile_size: [u32; 4]
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 enum CombineMethod {
@@ -65,6 +56,29 @@ impl Combine {
         })
     }
 
+    fn process_tile(&self, pool: &Arc<TilePool>, inputs: &[TileHandle]) -> TileHandle {
+        let mut output = pool.allocate();
+        let s = output.size();
+        output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
+            for x in 0..s {
+                let mut sum = 0.0;
+                let mut count = 0;
+                for input in inputs {
+                    let val = input[y * s + x];
+                    if val.is_finite() {
+                        sum += val;
+                        count += 1;
+                    }
+                }
+                row[x] = if count > 0 {
+                    sum / count as f32
+                } else {
+                    f32::NAN
+                };
+            }
+        });
+        Arc::new(output)
+    }
 }
 impl Node for Combine {
     fn label(&self) -> &str {
@@ -126,23 +140,7 @@ impl Node for Combine {
         inputs: &[TileHandle],
         _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
-        let mut output = pool.allocate();
-        let size = output.size() as u32;
-        let params = CombineParams {
-            tile_size: [size, 0, 0, 0]
-        };
-        let input_slices: Vec<&[f32]> = inputs.iter().map(|t| &t[..]).collect();
-        let workgroups = size.div_ceil(WORKGROUP_SIZE);
-        let result = gpu::dispatch_f32(
-            "combine",
-            SHADER,
-            &params,
-            &input_slices,
-            (size * size) as usize,
-            (workgroups, workgroups, 1)
-        )?;
-        output.copy_from_slice(&result);
-        Ok(vec![Arc::new(output)])
+        Ok(vec![self.process_tile(pool, inputs)])
     }
 }
 

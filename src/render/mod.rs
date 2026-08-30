@@ -53,11 +53,5 @@ impl Plugin for RenderPlugin {
             .get_resource_mut::<RenderGraph>()
             .unwrap()
             .add_sub_pass::<SubRenderPassTerrainPreview, RenderPassDeferredGBuffer>();
-
-        // Let `Node::process` implementations dispatch GPU compute from background chunk-eval
-        // tasks, which have no render-world access of their own.
-        crate::core::gpu::init(ComputeDispatcher::new(
-            render_app.world().resource::<RenderInstance>()
-        ));
     }
 }

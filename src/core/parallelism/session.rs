@@ -37,7 +37,7 @@ pub struct TerrainSession {
 impl Default for TerrainSession {
     fn default() -> Self {
         Self {
-            graph: NodeGraph::new(ChunkGrid::new(2, 2, TILE_RESOLUTIONS[2], 0.1)),
+            graph: NodeGraph::new(ChunkGrid::new(1, 1, TILE_RESOLUTIONS[5], 0.01)),
             chunk_generations: HashMap::new(),
             displayed_node: None,
             selected_node: None,
