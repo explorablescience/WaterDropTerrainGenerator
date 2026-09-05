@@ -84,12 +84,12 @@ fn collect_node_messages(
     terrain_graph: &TerrainSessionHolder,
     graph_id: GraphNodeId
 ) -> Vec<NodeMessage> {
-    let mut terrain_graph = terrain_graph.write();
-    terrain_graph.prune_expired_messages();
+    terrain_graph.write().prune_expired_messages();
 
+    let terrain_graph = terrain_graph.read();
     let mut messages = Vec::new();
     // Uses `NodeGraph::process` rather than `TerrainSession::process`: the latter's generation bookkeeping is reserved for `update_terrain_preview` alone.
-    if let Err(err) = terrain_graph.graph_mut().process(graph_id) {
+    if let Err(err) = terrain_graph.graph().has_valid_connections(graph_id) {
         let text = match &err {
             NodeError::InputNotConnected {
                 node_id,

@@ -158,7 +158,32 @@ impl NodeGraph {
         self.process_scoped(node_id, EvalScope::Chunk(chunk), &pool, &ctx)
     }
 
-    /// Predates chunking; kept as the degenerate `1x1` case rather than removed.
+    /**
+     * Checks if all required inputs of a node are connected.
+     * Returns `Ok(())` if all node and ancestors required inputs are connected, or an error describing the unconnected required input found.
+    */
+    pub fn has_valid_connections(&self, node_id: GraphNodeId) -> Result<(), NodeError> {
+        let _span = debug_span!("has_valid_connections", node_id = ?node_id).entered();
+        for &ancestor in &self.collect_ancestors(node_id)? {
+            let node = self.topology.node(ancestor)?;
+            for (socket, input) in node.inputs().iter().enumerate() {
+                if input.required {
+                    let Some((from_node, _)) = self.topology.inputs(ancestor)?.get(socket).and_then(Option::as_ref) else {
+                        return Err(NodeError::InputNotConnected {
+                            node_id: ancestor,
+                            node: node.label().to_string(),
+                            socket: input.name.to_string()
+                        });
+                    };
+                    // Recursively check the ancestor's required inputs
+                    self.has_valid_connections(*from_node)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Process a node sync (used for the node actions in the UI).
     pub fn process(&mut self, node_id: GraphNodeId) -> Result<NodeGraphProcessResult, NodeError> {
         self.process_chunk(node_id, ChunkCoord(0, 0))
     }
