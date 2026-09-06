@@ -1,4 +1,6 @@
-use crate::core::node::{Node, NodeError};
+use std::collections::HashSet;
+
+use crate::core::node::{Node, NodeError, NodeLocality};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GraphNodeId(pub usize);
@@ -157,6 +159,27 @@ impl Topology {
         self.edges
             .iter()
             .map(|e| (e.from_node, e.from_socket, e.to_node, e.to_socket))
+    }
+
+    /// Ancestors of `node_id`, including itself; stops expanding through a `Global` ancestor.
+    pub(crate) fn collect_ancestors(
+        &self,
+        node_id: GraphNodeId
+    ) -> Result<HashSet<GraphNodeId>, NodeError> {
+        self.node(node_id)?;
+        let mut seen = HashSet::from([node_id]);
+        let mut stack = vec![node_id];
+        while let Some(id) = stack.pop() {
+            if id != node_id && matches!(self.node(id)?.locality(), NodeLocality::Global { .. }) {
+                continue;
+            }
+            for (from_node, _) in self.inputs(id)?.iter().flatten() {
+                if seen.insert(*from_node) {
+                    stack.push(*from_node);
+                }
+            }
+        }
+        Ok(seen)
     }
 
     /// Falls back to the numeric index if the node or socket no longer exists.

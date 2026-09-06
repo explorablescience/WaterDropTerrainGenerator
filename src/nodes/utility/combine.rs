@@ -32,7 +32,7 @@ impl CombineMethod {
 }
 
 /// Combine multiple heightmaps using multiple compositing methods.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Combine {
     method: CombineMethod
 }
@@ -137,6 +137,10 @@ impl Node for Combine {
         _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![self.process_tile(pool, inputs)])
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
     }
 }
 

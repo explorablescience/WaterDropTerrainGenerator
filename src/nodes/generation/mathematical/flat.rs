@@ -7,7 +7,7 @@ const ICON: NodeIcon = NodeIcon {
     png_bytes: include_bytes!("../../../../assets/icons/node_flat.png")
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Flat;
 impl Node for Flat {
     fn label(&self) -> &str {
@@ -27,6 +27,10 @@ impl Node for Flat {
             dtype: NodePortType::Height,
             required: true
         }]
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
     }
 
     fn process(

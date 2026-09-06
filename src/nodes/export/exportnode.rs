@@ -13,7 +13,7 @@ const ICON: NodeIcon = NodeIcon {
 /// the terrain's own chunk grid - and writes each as a 16-bit grayscale PNG into `folder_path`,
 /// named `{file_prefix}_{x}_{y}.png`. `[min_height, max_height]` maps to the PNG's full `0..65535`
 /// range; [`LoadFile`](crate::nodes::generation::LoadFile) reverses the same mapping on import.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExportFile {
     folder_path: String,
     file_prefix: String,
@@ -177,6 +177,10 @@ impl Node for ExportFile {
         _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![inputs[0].clone()])
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
     }
 
     fn on_action(

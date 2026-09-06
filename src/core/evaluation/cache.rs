@@ -1,47 +1,98 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
-use crate::core::{TileBuffer, graph::GraphNodeId};
+use crate::core::TileHandle;
+use crate::core::graph::GraphNodeId;
+use crate::core::tiling::ChunkCoord;
 
-type CacheUuid = u64;
-enum CacheState {
-    Dirty,
-    Processing,
-    Cached((CacheUuid, Arc<TileBuffer>)),
+pub type CacheUuid = u64;
+
+/// Resolution is part of the key so a `Global` node re-evaluated at a new `native_resolution`
+/// can't reuse a stale-sized entry (`mark_dirty` never reaches ancestors, only descendants).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EvalScope {
+    Chunk(ChunkCoord),
+    Global(usize)
 }
-pub type CacheEntry = (CacheUuid, Arc<TileBuffer>);
 
+enum CacheState {
+    Processing,
+    Cached(CacheUuid, Vec<TileHandle>)
+}
 
+/// `Local` bundles every chunk; `Global` is the node's single pass.
+pub enum CacheEntry {
+    Local(HashMap<ChunkCoord, (CacheUuid, Vec<TileHandle>)>),
+    Global(CacheUuid, Vec<TileHandle>)
+}
+
+/// A missing entry means dirty; there's no explicit `Dirty` state.
 #[derive(Default)]
 pub struct Cache {
     last_uuid: CacheUuid,
-    entries: HashMap<GraphNodeId, CacheState>,
+    entries: HashMap<(GraphNodeId, EvalScope), CacheState>
 }
 impl Cache {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn mark_dirty(&mut self, node_id: GraphNodeId) {
-        self.entries.insert(node_id, CacheState::Dirty);
+    pub fn mark_processing(&mut self, node_id: GraphNodeId, scope: EvalScope) {
+        self.entries
+            .insert((node_id, scope), CacheState::Processing);
     }
-    pub fn mark_processing(&mut self, node_id: GraphNodeId) {
-        self.entries.insert(node_id, CacheState::Processing);
-    }
-    pub fn is_dirty(&self, node_id: GraphNodeId) -> bool {
-        matches!(self.entries.get(&node_id), Some(CacheState::Dirty))
+    pub fn is_processing(&self, node_id: GraphNodeId, scope: EvalScope) -> bool {
+        matches!(
+            self.entries.get(&(node_id, scope)),
+            Some(CacheState::Processing)
+        )
     }
 
-    /// Returns the cached entry for the given node id, if it exists and is not dirty. The returned entry is a pair of (unique id, tile buffer), where the unique id can be used to determine if the cached entry is still valid or changed since it was last used.
-    pub fn get(&self, node_id: GraphNodeId) -> Option<CacheEntry> {
-        match self.entries.get(&node_id) {
-            Some(CacheState::Dirty) => None,
-            Some(CacheState::Processing) => None,
-            Some(CacheState::Cached(buffer)) => Some(buffer.clone()),
-            None => None,
+    /// Drops every scope of `node_id`.
+    pub fn mark_dirty(&mut self, node_id: GraphNodeId) {
+        self.entries.retain(|(id, _), _| *id != node_id);
+    }
+
+    pub fn get(
+        &self,
+        node_id: GraphNodeId,
+        scope: EvalScope
+    ) -> Option<(CacheUuid, Vec<TileHandle>)> {
+        match self.entries.get(&(node_id, scope)) {
+            Some(CacheState::Cached(uuid, tiles)) => Some((*uuid, tiles.clone())),
+            _ => None
         }
     }
-    pub fn set(&mut self, node_id: GraphNodeId, buffer: Arc<TileBuffer>) {
+    pub fn set(
+        &mut self,
+        node_id: GraphNodeId,
+        scope: EvalScope,
+        tiles: Vec<TileHandle>
+    ) -> CacheUuid {
         self.last_uuid += 1;
-        self.entries.insert(node_id, CacheState::Cached((self.last_uuid, buffer)));
+        self.entries
+            .insert((node_id, scope), CacheState::Cached(self.last_uuid, tiles));
+        self.last_uuid
+    }
+
+    /// Drops every `Chunk`-scoped entry graph-wide; `Global`-scoped ones are untouched.
+    pub fn clear_all_chunks(&mut self) {
+        self.entries
+            .retain(|(_, scope), _| matches!(scope, EvalScope::Global(_)));
+    }
+
+    /// Heap bytes held by every distinct cached tile.
+    pub fn allocated_bytes(&self) -> usize {
+        let mut seen = HashSet::new();
+        self.entries
+            .values()
+            .filter_map(|state| match state {
+                CacheState::Cached(_, tiles) => Some(tiles),
+                CacheState::Processing => None
+            })
+            .flatten()
+            .filter(|tile| seen.insert(Arc::as_ptr(tile)))
+            .map(|tile| tile.size() * tile.size() * std::mem::size_of::<f32>())
+            .sum()
     }
 }

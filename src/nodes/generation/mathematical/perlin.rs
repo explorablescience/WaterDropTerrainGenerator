@@ -101,7 +101,7 @@ pub struct Perlin {
 
     pub warp_amplitude: f32,
     pub warp_frequency: f32,
-    pub warp_octaves: u32    
+    pub warp_octaves: u32
 }
 impl Default for Perlin {
     fn default() -> Self {
@@ -127,10 +127,7 @@ impl Perlin {
                     label: "Scale",
                     category: "Noise",
                     default: NParamValue::Float(1.0),
-                    constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.0,
-                        max: 4.0
-                    })
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 4.0 })
                 },
                 NParamDesc {
                     key: "seed",
@@ -144,10 +141,7 @@ impl Perlin {
                     label: "Frequency",
                     category: "Fractal Brownian Motion",
                     default: NParamValue::Float(0.05),
-                    constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.0,
-                        max: 1.0
-                    })
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 })
                 },
                 NParamDesc {
                     key: "octaves",
@@ -163,20 +157,25 @@ impl Perlin {
                     default: NParamValue::Float(0.7),
                     constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 })
                 },
-
                 NParamDesc {
                     key: "warp_amplitude",
                     label: "Warp Amplitude",
                     category: "Warping",
                     default: NParamValue::Float(0.0),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 10.0 })
+                    constraints: Some(NParamConstraints::FloatRange {
+                        min: 0.0,
+                        max: 10.0
+                    })
                 },
                 NParamDesc {
                     key: "warp_frequency",
                     label: "Warp Frequency",
                     category: "Warping",
                     default: NParamValue::Float(0.0),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 10.0 })
+                    constraints: Some(NParamConstraints::FloatRange {
+                        min: 0.0,
+                        max: 10.0
+                    })
                 },
                 NParamDesc {
                     key: "warp_octaves",
@@ -184,7 +183,7 @@ impl Perlin {
                     category: "Warping",
                     default: NParamValue::Int(1),
                     constraints: Some(NParamConstraints::IntRange { min: 1, max: 10 })
-                }
+                },
             ]
         })
     }
@@ -265,6 +264,10 @@ impl Node for Perlin {
         ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![self.process_tile(pool, ctx)])
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(*self)
     }
 }
 

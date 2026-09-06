@@ -4,18 +4,13 @@ use bevy::prelude::*;
 use wde::prelude::*;
 
 use crate::{
-    TerrainSessionHolder,
-    core::{
-        graph::GraphNodeId,
-        node::NodeLocality,
-        parallelism::{ChunkJobs, GlobalPassJobs},
-        tiling::ChunkCoord
-    },
+    TerrainInstanceHolder,
+    core::{CacheUuid, graph::GraphNodeId, node::NodeLocality, tiling::ChunkCoord},
     render::{
         chunk_array::{ChunkInstance, TerrainPreviewSync},
         generate_chunks_global::update_render_chunks_global,
         generate_chunks_local::update_render_chunks_local,
-        utils::{build_shared_chunk_mesh, padded_heightmap}
+        utils::build_shared_chunk_mesh
     }
 };
 
@@ -28,6 +23,11 @@ pub(super) struct ChunkPreview {
 #[derive(Resource, Default)]
 pub struct TerrainPreview {
     pub(super) chunks: HashMap<ChunkCoord, ChunkPreview>,
+    /// The uuid each chunk's data was last uploaded at, so an unchanged `NodeGraph::get()` result
+    /// (returned every frame once the graph is stable, not just when something changes) can be
+    /// told apart from an actual recomputation without re-stitching/re-uploading every chunk.
+    pub(super) chunk_uuids: HashMap<ChunkCoord, CacheUuid>,
+    pub(super) global_uuid: Option<CacheUuid>,
     material_handle: Option<Handle<PbrMaterial>>,
 
     mesh: Option<Handle<Mesh>>,
@@ -36,6 +36,11 @@ pub struct TerrainPreview {
     /// `(padded texel size, layer count)` the current `heightmap_array` was built with.
     array_dims: Option<(u32, u32)>,
     pending_layer_writes: Vec<(u32, Vec<f32>)>
+}
+impl TerrainPreview {
+    pub(super) fn has_mesh(&self) -> bool {
+        self.mesh.is_some()
+    }
 }
 
 /// Creates the material used for rendering the terrain preview meshes.
@@ -51,61 +56,33 @@ pub(crate) fn create_material(
 }
 
 /// Updates the terrain preview meshes based on the currently selected node in the terrain graph.
-#[allow(clippy::too_many_arguments)]
+/// `NodeGraph::get` internally owns dirty-tracking, pool sizing, and per-chunk async scheduling
+/// (see [`crate::core::evaluation::Processor`]), so this only needs to poll it once per frame and
+/// react to whatever it returns - no separate dirty/cooldown bookkeeping needed here anymore.
 pub(crate) fn update_render_chunks(
     asset_server: Res<AssetServer>,
     mut terrain_preview: ResMut<TerrainPreview>,
     mut terrain_preview_sync: ResMut<TerrainPreviewSync>,
-    mut chunk_jobs: ResMut<ChunkJobs>,
-    mut global_jobs: ResMut<GlobalPassJobs>,
-    terrain_graph: Res<TerrainSessionHolder>,
-    mut old_selected_node: Local<Option<GraphNodeId>>,
-    mut old_selected_node_last_dirty: Local<Option<std::time::Instant>>
+    terrain: Res<TerrainInstanceHolder>,
+    mut old_selected_node: Local<Option<GraphNodeId>>
 ) {
-    let selected_node = match terrain_graph.read().selected_node {
-        Some(node_id) => node_id,
-        None => return
-    };
-    if old_selected_node_last_dirty.is_none() {
-        *old_selected_node_last_dirty = Some(std::time::Instant::now());
-    }
-
-    // Clear all previous chunk jobs if the selected node has changed or is dirty
-    let reprocess = {
-        let is_new_node = old_selected_node.is_some_and(|id| id != selected_node);
-        let is_dirty = terrain_graph
-            .read()
-            .graph()
-            .is_or_ancestor_dirty(selected_node);
-        if is_new_node {
-            *old_selected_node_last_dirty = Some(std::time::Instant::now());
-        }
-        let time_elapsed = old_selected_node_last_dirty
-            .as_ref()
-            .map(|t| t.elapsed())
-            .unwrap_or_default();
-        if is_dirty {
-            old_selected_node_last_dirty.replace(std::time::Instant::now());
-        }
-        old_selected_node.replace(selected_node);
-        is_new_node || (is_dirty && time_elapsed.as_millis() > 20)
-    };
-    if reprocess {
-        chunk_jobs.clear();
-        global_jobs.clear();
-    }
-
-    // Don't reprocess the graph if the cooldown hasn't elapsed yet
-    if !reprocess && terrain_graph.read().graph().should_reprocess_cooldown() {
+    let Some(selected_node) = terrain.read().selected_node() else {
         return;
+    };
+
+    // Switching to a different node makes every previously-tracked uuid meaningless - clearing
+    // them forces a full re-stitch/re-upload once the new node's data is ready.
+    if *old_selected_node != Some(selected_node) {
+        *old_selected_node = Some(selected_node);
+        terrain_preview.chunk_uuids.clear();
+        terrain_preview.global_uuid = None;
     }
 
-    // Call the appropriate update function based on the selected node's locality
     let material_handle = match &terrain_preview.material_handle {
         Some(handle) => handle.clone(),
         None => return // Material not created yet
     };
-    let node_locality = match terrain_graph.read().graph().node(selected_node) {
+    let node_locality = match terrain.read().graph().node(selected_node) {
         Ok(node) => node.locality(),
         Err(_) => return // Selected node no longer exists
     };
@@ -114,7 +91,7 @@ pub(crate) fn update_render_chunks(
             &asset_server,
             &mut terrain_preview,
             &mut terrain_preview_sync,
-            &terrain_graph,
+            &terrain,
             material_handle,
             selected_node,
             native_resolution
@@ -123,9 +100,7 @@ pub(crate) fn update_render_chunks(
             &asset_server,
             &mut terrain_preview,
             &mut terrain_preview_sync,
-            &mut chunk_jobs,
-            &mut global_jobs,
-            &terrain_graph,
+            &terrain,
             material_handle,
             selected_node
         )
@@ -164,7 +139,9 @@ pub(super) fn queue_layer_write(terrain_preview: &mut TerrainPreview, layer: u32
 
 /// Ensures the shared chunk mesh and heightmap texture array match `size`/`instances.len()`,
 /// recreating them (and re-queuing every known chunk's data) when they don't, then publishes the
-/// current state into `terrain_preview_sync` for the render world to pick up.
+/// current state into `terrain_preview_sync` for the render world to pick up. Callers only invoke
+/// this when something actually changed (or on first run), so mesh/array/GPU state is left alone
+/// on a stable frame.
 pub(super) fn sync_preview_state(
     asset_server: &AssetServer,
     terrain_preview: &mut TerrainPreview,
@@ -210,7 +187,8 @@ pub(super) fn sync_preview_state(
         terrain_preview.array_dims = Some((padded_size, layer_count));
 
         for &chunk in terrain_preview.chunks.keys() {
-            let padded = padded_heightmap(chunk, size, &terrain_preview.chunks);
+            let padded =
+                crate::render::utils::padded_heightmap(chunk, size, &terrain_preview.chunks);
             terrain_preview
                 .pending_layer_writes
                 .push((layer_of(chunk), padded));

@@ -4,4 +4,5 @@
 mod graph;
 mod node;
 mod parallelism;
+mod support;
 mod tiling;

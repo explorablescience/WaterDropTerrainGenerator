@@ -11,7 +11,7 @@ const ICON: NodeIcon = NodeIcon {
 
 /// A basic `Local` primitive: one smooth dome, pointwise in world space (no neighbor reads, no
 /// whole-domain statistic), so it needs no padding - `position` and `radius` are plain world units.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Mountain {
     pub height: f32,
     pub radius: f32,
@@ -131,6 +131,10 @@ impl Node for Mountain {
             }
         });
         Ok(vec![Arc::new(output)])
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
     }
 }
 

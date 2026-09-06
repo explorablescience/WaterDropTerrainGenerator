@@ -9,7 +9,7 @@ const ICON: NodeIcon = NodeIcon {
 };
 
 /// Simple hydraulic erosion simulation
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HydraulicErosion {
     pub droplets: u32,
     pub erosion_rate: f32,
@@ -206,6 +206,10 @@ impl Node for HydraulicErosion {
         let mut output = pool.allocate();
         output.copy_from_slice(&heights);
         Ok(vec![Arc::new(output)])
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
     }
 }
 

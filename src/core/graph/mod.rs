@@ -3,19 +3,16 @@
 use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
-use crate::core::{Cache, CacheEntry, Processor, TileBuffer};
 use crate::core::evaluation::TilePool;
 use crate::core::node::{Node, NodeError};
-use crate::core::tiling::{ChunkGrid};
-use topology::Topology;
+use crate::core::tiling::ChunkGrid;
+use crate::core::{Cache, CacheEntry, Processor};
 
 mod eval;
 mod topology;
 
-pub use topology::GraphNodeId;
-
+pub use topology::{GraphNodeId, Topology};
 
 pub struct NodeGraph {
     pool: Arc<TilePool>,
@@ -23,11 +20,9 @@ pub struct NodeGraph {
     topology: Topology,
     cache: Cache,
     processor: Processor,
-    is_processing: bool,
+    is_processing: bool
 }
 impl NodeGraph {
-    const PROCESSING_INDICATOR_HOLD: Duration = Duration::from_millis(400);
-
     pub fn new(chunk_grid: ChunkGrid) -> Self {
         Self {
             pool: TilePool::new(chunk_grid.tile_size()),
@@ -35,7 +30,7 @@ impl NodeGraph {
             topology: Topology::default(),
             cache: Cache::new(),
             processor: Processor::new(),
-            is_processing: false,
+            is_processing: false
         }
     }
 
@@ -115,20 +110,17 @@ impl NodeGraph {
             }
         }
     }
+    /// Drives evaluation forward by one step; `Ok(None)` while still processing.
     pub fn get(&mut self, node_id: GraphNodeId) -> Result<Option<CacheEntry>, NodeError> {
-        // If the node is not dirty, return the cached entry
-        if !self.cache.is_dirty(node_id) {
-            return Ok(self.cache.get(node_id));
-        }
-
-        let result = self.processor.process(self.topology, node_id);
-        match result {
-            Ok(_) => Ok(None), // Return None to indicate that the node is being processed
-            Err(e) => Err(e),
-        }
-    }
-    fn set(&mut self, node_id: GraphNodeId, entry: Arc<TileBuffer>) {
-        self.cache.set(node_id, entry);
+        let result = self.processor.process(
+            &self.topology,
+            &self.chunk_grid,
+            &mut self.pool,
+            &mut self.cache,
+            node_id
+        );
+        self.set_is_processing(self.processor.is_active());
+        result
     }
 
     // Usefull for UI feedback
@@ -139,7 +131,7 @@ impl NodeGraph {
         self.is_processing
     }
     pub fn allocated_bytes(&self) -> usize {
-        self.pool.allocated_bytes()
+        self.cache.allocated_bytes()
     }
 }
 

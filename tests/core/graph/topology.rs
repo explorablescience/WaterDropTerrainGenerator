@@ -1,11 +1,14 @@
 use std::sync::Arc;
 
-use waterdrop_terrain_generator::core::graph::{NodeGraph, NodeGraphProcessResult};
+use waterdrop_terrain_generator::core::graph::NodeGraph;
 use waterdrop_terrain_generator::core::node::{
     Node, NodeCategory, NodeError, NodeIcon, NodeLocality, NodePortType, NodeSocket
 };
-use waterdrop_terrain_generator::core::tiling::{ChunkGrid, TileContext, TileHandle, TilePool};
+use waterdrop_terrain_generator::core::tiling::{ChunkCoord, ChunkGrid};
+use waterdrop_terrain_generator::core::{CacheEntry, TileContext, TileHandle, TilePool};
 use waterdrop_terrain_generator::nodes::*;
+
+use crate::support::{init_task_pool, poll_until_ready};
 
 const TEST_ICON: NodeIcon = NodeIcon {
     id: "test-icon",
@@ -14,7 +17,7 @@ const TEST_ICON: NodeIcon = NodeIcon {
 
 /// A minimal source node with a single required `Height` output, used to exercise graph wiring
 /// without depending on any of the "real" nodes' own processing behaviour.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct FakeHeightSource;
 impl Node for FakeHeightSource {
     fn label(&self) -> &str {
@@ -41,11 +44,14 @@ impl Node for FakeHeightSource {
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![Arc::new(pool.allocate())])
     }
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
+    }
 }
 
 /// A sink node with a single required `Mask` input, used to prove that connecting mismatched
 /// socket types is rejected.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct FakeMaskSink;
 impl Node for FakeMaskSink {
     fn label(&self) -> &str {
@@ -64,11 +70,14 @@ impl Node for FakeMaskSink {
             required: true
         }]
     }
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
+    }
 }
 
 /// A sink node with a single *optional* `Height` input, whose output tells the test whether the
 /// input tile it received was the pool's zero-filled neutral tile.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct FakeOptionalSink;
 impl Node for FakeOptionalSink {
     fn label(&self) -> &str {
@@ -102,11 +111,14 @@ impl Node for FakeOptionalSink {
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![inputs[0].clone()])
     }
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
+    }
 }
 
 /// A `Global` source with a configurable resolution, used to test that connecting across
 /// locality/resolution boundaries is always accepted - the graph engine resamples automatically.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct FakeGlobalHeightSource {
     native_resolution: usize
 }
@@ -131,6 +143,9 @@ impl Node for FakeGlobalHeightSource {
             dtype: NodePortType::Height,
             required: true
         }]
+    }
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
     }
 }
 

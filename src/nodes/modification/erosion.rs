@@ -10,7 +10,7 @@ const ICON: NodeIcon = NodeIcon {
 };
 
 /// A minimal thermal-erosion node
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Erosion {
     /// How strongly each texel is pulled towards its neighbours' average height, in `[0, 1]`.
     strength: f32
@@ -111,6 +111,10 @@ impl Node for Erosion {
         _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![self.process_tile(pool, &inputs[0])])
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
     }
 }
 

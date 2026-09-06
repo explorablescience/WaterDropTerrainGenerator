@@ -12,7 +12,7 @@ const ICON: NodeIcon = NodeIcon {
 /// Reverses [`ExportFile`](crate::nodes::export::ExportFile): reads a `chunks` x `chunks` grid of
 /// `resolution`-sided 16-bit grayscale PNGs named `{file_prefix}_{x}_{y}.png` from `folder_path`,
 /// stitches them back into a single tile, and maps `0..65535` back to `[min_height, max_height]`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LoadFile {
     folder_path: String,
     file_prefix: String,
@@ -152,6 +152,10 @@ impl Node for LoadFile {
             (k, v) => return Err(format!("Unknown parameter {} with value {:?}", k, v).into())
         }
         Ok(())
+    }
+
+    fn clone_boxed(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
     }
 
     fn on_action(

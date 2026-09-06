@@ -11,13 +11,13 @@ mod message;
 mod parameters;
 mod registry;
 
+use crate::core::*;
 pub use error::NodeError;
 pub use message::{
     MessageLifetime, NodeMessage, NodeMessageLog, NodeMessageSeverity, TimedNodeMessage
 };
 pub use parameters::{NParamConstraints, NParamDesc, NParamValidator, NParamValue};
 pub use registry::{NodeDescriptor, registered_nodes};
-use crate::core::*;
 
 /// A node is a single operation in the terrain graph, which can be connected to other nodes to form a directed graph (DAG) of terrain operations.
 /// This is the core element of the terrain graph system, and is used to define the behavior of the graph editor and the terrain generation pipeline.
@@ -74,6 +74,9 @@ pub trait Node: Debug + Send + Sync {
     ) -> Result<Vec<TileHandle>, NodeError> {
         Ok(vec![])
     }
+
+    /// An owned snapshot, for handing to a background chunk-processing task.
+    fn clone_boxed(&self) -> Box<dyn Node>;
 
     fn params_hash(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
