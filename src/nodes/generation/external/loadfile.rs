@@ -3,6 +3,7 @@ use std::sync::{Arc, OnceLock};
 use rfd::FileDialog;
 
 use crate::core::*;
+use crate::nodes::EXPORT_RESOLUTIONS;
 
 const ICON: NodeIcon = NodeIcon {
     id: "node-load",
@@ -73,7 +74,9 @@ impl LoadFile {
                     label: "Resolution",
                     category: "Tiling",
                     default: NParamValue::Int(512),
-                    constraints: Some(NParamConstraints::IntRange { min: 16, max: 1024 })
+                    constraints: Some(NParamConstraints::IntList {
+                        values: EXPORT_RESOLUTIONS.iter().map(|&v| v as i32).collect()
+                    })
                 },
                 NParamDesc {
                     key: "min_height",

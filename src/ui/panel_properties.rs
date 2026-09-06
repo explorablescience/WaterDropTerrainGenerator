@@ -3,7 +3,8 @@ use wde::prelude::{ui::egui, *};
 use crate::{
     TerrainInstanceHolder,
     core::{
-        graph::{GraphNodeId},
+        CacheEntry, TileHandle,
+        graph::GraphNodeId,
         node::{NParamConstraints, NParamValue, NodeError, NodeMessage}
     },
     ui::{theme, widgets}
@@ -88,7 +89,6 @@ fn collect_node_messages(
 
     let terrain_graph = terrain_graph.read();
     let mut messages = Vec::new();
-    // Uses `NodeGraph::process` rather than `TerrainSession::process`: the latter's generation bookkeeping is reserved for `update_terrain_preview` alone.
     if let Err(err) = terrain_graph.graph().has_valid_connections(graph_id) {
         let text = match &err {
             NodeError::InputNotConnected {
@@ -127,6 +127,7 @@ fn collect_node_messages(
 enum ParamRange {
     StringMaxLength(usize),
     EnumOneOf(Vec<String>),
+    IntList(Vec<i32>),
     None
 }
 
@@ -157,6 +158,9 @@ fn show_node_params(
                     Some(NParamConstraints::EnumOneOf { options }) => {
                         ParamRange::EnumOneOf(options.iter().map(ToString::to_string).collect())
                     }
+                    Some(NParamConstraints::IntList { values }) => {
+                        ParamRange::IntList(values.clone())
+                    }
                     _ => ParamRange::None
                 };
                 ParamSpec {
@@ -172,6 +176,16 @@ fn show_node_params(
     if param_specs.is_empty() {
         return;
     }
+
+    let action_output: Vec<TileHandle> = match terrain_graph.write().get(graph_id) {
+        Ok(Some(CacheEntry::Global(_, tiles))) => tiles,
+        Ok(Some(CacheEntry::Local(_))) | Ok(None) => Vec::new(),
+        Err(NodeError::InputNotConnected { .. }) => Vec::new(), // already shown via has_valid_connections
+        Err(err) => {
+            terrain_graph.write().set_action_result(graph_id, Err(err));
+            Vec::new()
+        }
+    };
 
     // Group parameters by category, preserving the order in which each category first appears.
     let mut categories: Vec<(&'static str, Vec<usize>)> = Vec::new();
@@ -211,8 +225,11 @@ fn show_node_params(
                     let mut prev_row_drawn = false;
                     let mut i = 0;
                     while i < indices.len() {
-                        // Float/Int/String/Vector2/Action paint their own full-width pill, so they get their own row instead of sharing the label|control grid with Bool/Enum.
+                        // Float/Int/String/Vector2/Action paint their own full-width pill, so they get their own row instead of sharing the label|control grid with Bool/Enum. An `IntList`-constrained Int is picked from a fixed set instead, so it shares Enum's grid row.
                         let is_full_width = |idx: usize| {
+                            if matches!(param_specs[idx].range, ParamRange::IntList(_)) {
+                                return false;
+                            }
                             matches!(
                                 param_specs[idx].default,
                                 NParamValue::Float(_)
@@ -227,7 +244,13 @@ fn show_node_params(
                             ui.add_space(8.0);
                         }
                         if is_full_width(indices[i]) {
-                            show_param_row(ui, terrain_graph, graph_id, &param_specs[indices[i]]);
+                            show_param_row(
+                                ui,
+                                terrain_graph,
+                                graph_id,
+                                &param_specs[indices[i]],
+                                &action_output
+                            );
                             i += 1;
                         } else {
                             let start = i;
@@ -244,7 +267,8 @@ fn show_node_params(
                                             ui,
                                             terrain_graph,
                                             graph_id,
-                                            &param_specs[j]
+                                            &param_specs[j],
+                                            &action_output
                                         );
                                     }
                                 });
@@ -262,7 +286,8 @@ fn show_param_row(
     ui: &mut egui::Ui,
     terrain_graph: &TerrainInstanceHolder,
     graph_id: GraphNodeId,
-    spec: &ParamSpec
+    spec: &ParamSpec,
+    action_output: &[TileHandle]
 ) {
     let current = terrain_graph
         .read()
@@ -284,6 +309,31 @@ fn show_param_row(
             let color = theme::category_color(node.category());
             let changed = widgets::slider(ui, desc, color, &mut v).changed();
             changed.then_some(NParamValue::Float(v))
+        }
+        NParamValue::Int(v) if matches!(spec.range, ParamRange::IntList(_)) => {
+            let ParamRange::IntList(values) = &spec.range else {
+                unreachable!("guarded by the match arm above")
+            };
+            let color = {
+                let terrain_graph_read = terrain_graph.read();
+                let node = terrain_graph_read.graph().node(graph_id).unwrap();
+                theme::category_color(node.category())
+            };
+            let options: Vec<String> = values.iter().map(ToString::to_string).collect();
+            let mut current = v.to_string();
+            let changed = widgets::enum_selector(
+                ui,
+                (graph_id, spec.key),
+                spec.label,
+                color,
+                &options,
+                &mut current
+            )
+            .changed();
+            changed
+                .then(|| current.parse().ok())
+                .flatten()
+                .map(NParamValue::Int)
         }
         NParamValue::Int(v) => {
             let terrain_graph_read = terrain_graph.read();
@@ -371,27 +421,27 @@ fn show_param_row(
             changed.then_some(NParamValue::Enum(v))
         }
         NParamValue::Action {
-            show_success_message: _
+            show_success_message
         } => {
-            // let color = {
-            //     let terrain_graph_read = terrain_graph.read();
-            //     let node = terrain_graph_read.graph().node(graph_id).unwrap();
-            //     theme::category_color(node.category())
-            // };
-            // let terrain_graph = terrain_graph.clone();
-            // let key = spec.key;
-            // let action_label = spec.label;
-            // widgets::button(ui, spec.label, color, move || {
-            //     run_node_action(
-            //         &terrain_graph,
-            //         graph_id,
-            //         key,
-            //         action_label,
-            //         show_success_message
-            //     );
-            // });
-            // None
-            todo!("Action buttons are not yet implemented in the UI");
+            let color = {
+                let terrain_graph_read = terrain_graph.read();
+                let node = terrain_graph_read.graph().node(graph_id).unwrap();
+                theme::category_color(node.category())
+            };
+            let terrain_graph = terrain_graph.clone();
+            let key = spec.key;
+            let action_label = spec.label;
+            widgets::button(ui, spec.label, color, move || {
+                run_node_action(
+                    &terrain_graph,
+                    graph_id,
+                    key,
+                    action_label,
+                    show_success_message,
+                    action_output
+                );
+            });
+            None
         }
     };
 
@@ -415,41 +465,76 @@ fn show_param_row(
     }
 }
 
-// /// Records the result in the terrain graph so it can be displayed in the UI.
-// fn run_node_action(
-//     terrain_graph: &TerrainSessionHolder,
-//     graph_id: GraphNodeId,
-//     key: &str,
-//     action_label: &str,
-//     show_success_message: bool
-// ) {
-//     let output_size = terrain_graph.read().graph().tile_size();
+fn run_node_action(
+    terrain_graph: &TerrainInstanceHolder,
+    graph_id: GraphNodeId,
+    key: &str,
+    action_label: &str,
+    show_success_message: bool,
+    fallback_output: &[TileHandle]
+) {
+    let output_size = terrain_graph.read().graph().tile_size();
+    let resolution = terrain_graph
+        .read()
+        .graph()
+        .node(graph_id)
+        .unwrap()
+        .action_resolution(key);
 
-//     let mut terrain_graph = terrain_graph.write();
-//     // Best-effort: runs with an empty `output` if the node's inputs aren't fully wired up yet, e.g. so a "browse for a folder" action works before the graph does.
-//     let output = match terrain_graph.graph_mut().process(graph_id) {
-//         Ok(NodeGraphProcessResult::Processed(_, tiles)) => tiles,
-//         Ok(NodeGraphProcessResult::Processing) => Vec::new(),
-//         Err(err) => {
-//             trace!("Action '{}': node output unavailable ({})", key, err);
-//             Vec::new()
-//         }
-//     };
+    let gathered;
+    let output = match resolution {
+        Some(resolution) => {
+            gathered = gather_action_input(terrain_graph, graph_id, resolution);
+            &gathered
+        }
+        None => fallback_output
+    };
 
-//     let (node_label, result) = {
-//         let mut node = terrain_graph.graph_mut().node_mut(graph_id).unwrap();
-//         let node_label = node.label().to_string();
-//         let result = node.on_action(key, &output, output_size);
-//         (node_label, result)
-//     };
-//     match result {
-//         Ok(()) if show_success_message => {
-//             terrain_graph.set_action_result(graph_id, Ok(format!("{} completed", action_label)));
-//         }
-//         Ok(()) => terrain_graph.clear_action_message(graph_id),
-//         Err(err) => {
-//             error!("Action '{}' failed on node {}: {}", key, node_label, err);
-//             terrain_graph.set_action_result(graph_id, Err(err));
-//         }
-//     }
-// }
+    let mut terrain_graph = terrain_graph.write();
+    let (node_label, result) = {
+        let mut node = terrain_graph.graph_mut().node_mut(graph_id).unwrap();
+        let node_label = node.label().to_string();
+        let result = node.on_action(key, output, output_size);
+        (node_label, result)
+    };
+    match result {
+        Ok(()) if show_success_message => {
+            terrain_graph.set_action_result(graph_id, Ok(format!("{} completed", action_label)));
+        }
+        Ok(()) => terrain_graph.clear_action_message(graph_id),
+        Err(err) => {
+            error!("Action '{}' failed on node {}: {}", key, node_label, err);
+            terrain_graph.set_action_result(graph_id, Err(err));
+        }
+    }
+}
+
+/// For an action that declares a resolution via [`crate::core::node::Node::action_resolution`]:
+/// freshly evaluates whatever feeds the node's socket-0 input at that resolution, independent of
+/// the node's own (cheap, preview-resolution) cached output.
+fn gather_action_input(
+    terrain_graph: &TerrainInstanceHolder,
+    graph_id: GraphNodeId,
+    resolution: usize
+) -> Vec<TileHandle> {
+    let terrain_graph_read = terrain_graph.read();
+    let graph = terrain_graph_read.graph();
+    let Some((from, from_socket)) = graph
+        .edges()
+        .find_map(|(from, from_socket, to, to_socket)| {
+            (to == graph_id && to_socket == 0).then_some((from, from_socket))
+        })
+    else {
+        return Vec::new();
+    };
+    match graph.evaluate_once(from, resolution) {
+        Ok(tiles) => tiles.get(from_socket).cloned().into_iter().collect(),
+        Err(err) => {
+            trace!(
+                "Action input unavailable for node {:?} at resolution {}: {}",
+                graph_id, resolution, err
+            );
+            Vec::new()
+        }
+    }
+}

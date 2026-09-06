@@ -55,6 +55,14 @@ pub trait Node: Debug + Send + Sync {
         Err("Parameter not found".into())
     }
 
+    /// If `Some`, an `Action` button with this `key` gets `on_action`'s `output` freshly evaluated
+    /// from this node's socket-0 input at this resolution instead of the node's own current
+    /// output - e.g. an export action that needs a resolution decoupled from how the node is
+    /// normally (cheaply) previewed.
+    fn action_resolution(&self, _key: &str) -> Option<usize> {
+        None
+    }
+
     /// Called when an `NParamValue::Action` button is pressed in the node's UI; `key` identifies which one.
     fn on_action(
         &mut self,

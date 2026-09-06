@@ -12,7 +12,7 @@ use crate::{
     render::{
         chunk_array::{ChunkInstance, TerrainPreviewSync},
         generate_chunks::{TerrainPreview, queue_layer_write, set_chunk_data, sync_preview_state},
-        utils::{chunk_origin, padded_heightmap}
+        utils::{MAX_PREVIEW_MESH_SIZE, chunk_origin, padded_heightmap, resample_for_preview}
     }
 };
 
@@ -31,6 +31,7 @@ pub(super) fn update_render_chunks_local(
     let _span = debug_span!("update_render_chunks_local", selected_node = ?selected_node).entered();
     let chunk_grid = *terrain_graph.read().graph().chunk_grid();
     let tile_size = chunk_grid.tile_size();
+    let preview_size = tile_size.min(MAX_PREVIEW_MESH_SIZE);
     let chunks_x = chunk_grid.chunks_x();
     let all_chunks: HashSet<ChunkCoord> = chunk_grid.coords().collect();
 
@@ -48,7 +49,8 @@ pub(super) fn update_render_chunks_local(
                 let Some(heightmap) = tiles.first() else {
                     continue;
                 };
-                set_chunk_data(terrain_preview, chunk, heightmap.to_vec(), false);
+                let data = resample_for_preview(heightmap, tile_size, preview_size);
+                set_chunk_data(terrain_preview, chunk, data, false);
                 changed_chunks.insert(chunk);
             }
         }
@@ -79,7 +81,7 @@ pub(super) fn update_render_chunks_local(
                     set_chunk_data(
                         terrain_preview,
                         chunk,
-                        vec![0.0; tile_size * tile_size],
+                        vec![0.0; preview_size * preview_size],
                         true
                     );
                     changed_chunks.insert(chunk);
@@ -107,7 +109,7 @@ pub(super) fn update_render_chunks_local(
         let writes: Vec<(u32, Vec<f32>)> = chunks_to_upload
             .par_iter()
             .map(|chunk| {
-                let padded = padded_heightmap(*chunk, tile_size, &terrain_preview.chunks);
+                let padded = padded_heightmap(*chunk, preview_size, &terrain_preview.chunks);
                 (chunk.1 as u32 * chunks_x + chunk.0 as u32, padded)
             })
             .collect();
@@ -136,7 +138,7 @@ pub(super) fn update_render_chunks_local(
             let offset = chunk_origin(chunk, &chunk_grid);
             ChunkInstance {
                 world_offset: [offset.x, offset.z],
-                cell_size: chunk_grid.world_scale(),
+                cell_size: chunk_grid.world_scale() * (tile_size as f32 / preview_size as f32),
                 layer: chunk.1 as u32 * chunks_x + chunk.0 as u32
             }
         })
@@ -148,7 +150,7 @@ pub(super) fn update_render_chunks_local(
         terrain_preview,
         terrain_preview_sync,
         material_handle,
-        tile_size,
+        preview_size,
         instances,
         |chunk| chunk.1 as u32 * chunks_x + chunk.0 as u32
     );

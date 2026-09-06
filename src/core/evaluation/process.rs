@@ -75,6 +75,26 @@ impl Processor {
         }
     }
 
+    /// One-off, synchronous, uncached evaluation of `node_id` at an arbitrary `resolution` -
+    /// the same machinery a `Global` node uses to bake a `Local` ancestor into its own pass,
+    /// exposed directly for a caller that needs a node's output at a resolution decoupled from
+    /// its own locality (e.g. an export action, independent of how the node is normally previewed).
+    pub fn evaluate_once(
+        &self,
+        topology: &Topology,
+        chunk_grid: &ChunkGrid,
+        cache: &Cache,
+        node_id: GraphNodeId,
+        resolution: usize
+    ) -> Result<Vec<TileHandle>, NodeError> {
+        let working_size = required_working_size(topology, node_id, resolution)?;
+        let margin = (working_size - resolution) / 2;
+        let pool = TilePool::new(working_size);
+        let ctx = global_context_with_margin(chunk_grid, resolution, margin);
+        let tiles = evaluate_in_global_frame(topology, cache, chunk_grid, &pool, &ctx, node_id)?;
+        Ok(crop_tiles(&tiles, working_size, resolution))
+    }
+
     /// A node re-dirtied mid-flight loses its `Processing` cache entry - that's the cancellation signal.
     fn active_is_live(&self, cache: &Cache) -> bool {
         let Some(active) = &self.active else {

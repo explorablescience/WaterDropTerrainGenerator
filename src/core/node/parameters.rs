@@ -64,6 +64,8 @@ impl Hash for NParamDesc {
 pub enum NParamConstraints {
     /// The value must be an integer within the specified range (inclusive).
     IntRange { min: i32, max: i32 },
+    /// The value must be one of the specified integers (e.g. a fixed set of allowed resolutions).
+    IntList { values: Vec<i32> },
     /// The value must be a float within the specified range (inclusive).
     FloatRange { min: f32, max: f32 },
     /// The value must be a string with a maximum length.
@@ -87,6 +89,16 @@ impl NParamConstraints {
             (NParamConstraints::IntRange { min, max }, NParamValue::Int(v)) => {
                 if *v < *min || *v > *max {
                     Err(format!("Value {} is out of range [{}, {}]", v, min, max))
+                } else {
+                    Ok(())
+                }
+            }
+            (NParamConstraints::IntList { values }, NParamValue::Int(v)) => {
+                if !values.contains(v) {
+                    Err(format!(
+                        "Value {} is not one of the allowed values: {:?}",
+                        v, values
+                    ))
                 } else {
                     Ok(())
                 }

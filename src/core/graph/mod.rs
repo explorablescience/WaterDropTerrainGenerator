@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crate::core::evaluation::TilePool;
 use crate::core::node::{Node, NodeError};
 use crate::core::tiling::ChunkGrid;
-use crate::core::{Cache, CacheEntry, Processor};
+use crate::core::{Cache, CacheEntry, Processor, TileHandle};
 
 mod eval;
 mod topology;
@@ -121,6 +121,21 @@ impl NodeGraph {
         );
         self.set_is_processing(self.processor.is_active());
         result
+    }
+
+    /// One-off synchronous evaluation of `node_id` at `resolution`, independent of its own cache/locality.
+    pub fn evaluate_once(
+        &self,
+        node_id: GraphNodeId,
+        resolution: usize
+    ) -> Result<Vec<TileHandle>, NodeError> {
+        self.processor.evaluate_once(
+            &self.topology,
+            &self.chunk_grid,
+            &self.cache,
+            node_id,
+            resolution
+        )
     }
 
     // Usefull for UI feedback

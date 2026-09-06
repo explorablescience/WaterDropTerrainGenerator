@@ -9,10 +9,8 @@ const ICON: NodeIcon = NodeIcon {
     png_bytes: include_bytes!("../../../assets/icons/node_save.png")
 };
 
-/// Splits its input into a `chunks` x `chunks` grid of `resolution`-sided tiles - independent of
-/// the terrain's own chunk grid - and writes each as a 16-bit grayscale PNG into `folder_path`,
-/// named `{file_prefix}_{x}_{y}.png`. `[min_height, max_height]` maps to the PNG's full `0..65535`
-/// range; [`LoadFile`](crate::nodes::generation::LoadFile) reverses the same mapping on import.
+pub const EXPORT_RESOLUTIONS: &[u32] = &[16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
+
 #[derive(Debug, Clone)]
 pub struct ExportFile {
     folder_path: String,
@@ -27,8 +25,8 @@ impl Default for ExportFile {
         Self {
             folder_path: String::new(),
             file_prefix: "heightmap".to_string(),
-            chunks: 4,
-            resolution: 512,
+            chunks: 1,
+            resolution: EXPORT_RESOLUTIONS[7],
             min_height: 0.0,
             max_height: 10.0
         }
@@ -66,15 +64,17 @@ impl ExportFile {
                     key: "chunks",
                     label: "Chunks",
                     category: "Tiling",
-                    default: NParamValue::Int(4),
+                    default: NParamValue::Int(1),
                     constraints: Some(NParamConstraints::IntRange { min: 1, max: 16 })
                 },
                 NParamDesc {
                     key: "resolution",
                     label: "Resolution",
                     category: "Tiling",
-                    default: NParamValue::Int(512),
-                    constraints: Some(NParamConstraints::IntRange { min: 16, max: 1024 })
+                    default: NParamValue::Int(EXPORT_RESOLUTIONS[7] as i32),
+                    constraints: Some(NParamConstraints::IntList {
+                        values: EXPORT_RESOLUTIONS.iter().map(|&v| v as i32).collect()
+                    })
                 },
                 NParamDesc {
                     key: "min_height",
@@ -82,8 +82,8 @@ impl ExportFile {
                     category: "Range",
                     default: NParamValue::Float(0.0),
                     constraints: Some(NParamConstraints::FloatRange {
-                        min: -1000.0,
-                        max: 1000.0
+                        min: -100.0,
+                        max: 100.0
                     })
                 },
                 NParamDesc {
@@ -92,8 +92,8 @@ impl ExportFile {
                     category: "Range",
                     default: NParamValue::Float(10.0),
                     constraints: Some(NParamConstraints::FloatRange {
-                        min: -1000.0,
-                        max: 1000.0
+                        min: -100.0,
+                        max: 100.0
                     })
                 },
                 NParamDesc {
@@ -121,11 +121,6 @@ impl Node for ExportFile {
         ICON
     }
 
-    fn locality(&self) -> NodeLocality {
-        NodeLocality::Global {
-            native_resolution: (self.chunks * self.resolution) as usize
-        }
-    }
     fn inputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
@@ -167,20 +162,27 @@ impl Node for ExportFile {
         Ok(())
     }
 
-    /// A `Global` node's own pass only needs to hand the already-resampled input tile back to
-    /// [`Self::on_action`] (via the `output` it's given) - the actual disk write is a side effect
-    /// triggered by the "Export Terrain" button, not part of the (cached, pure) evaluation.
     fn process(
         &self,
         _pool: &Arc<TilePool>,
         inputs: &[TileHandle],
         _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
+        if inputs.len() != 1 {
+            return Err(format!("Expected 1 input but got {}", inputs.len()).into());
+        }
         Ok(vec![inputs[0].clone()])
     }
 
     fn clone_boxed(&self) -> Box<dyn Node> {
         Box::new(self.clone())
+    }
+
+    fn action_resolution(&self, key: &str) -> Option<usize> {
+        match key {
+            "export" => Some((self.chunks * self.resolution) as usize),
+            _ => None
+        }
     }
 
     fn on_action(

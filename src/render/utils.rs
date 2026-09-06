@@ -12,6 +12,25 @@ use crate::{
     render::generate_chunks::ChunkPreview
 };
 
+/// Caps the preview mesh/texture so `(size+1)²` real vertex buffers stay under wgpu's max buffer size.
+pub const MAX_PREVIEW_MESH_SIZE: usize = 2048;
+
+/// Nearest-neighbor resample for capping preview resolution; exported/computed data is untouched.
+pub(super) fn resample_for_preview(data: &[f32], src_size: usize, dst_size: usize) -> Vec<f32> {
+    if src_size == dst_size {
+        return data.to_vec();
+    }
+    let mut out = vec![0.0; dst_size * dst_size];
+    for z in 0..dst_size {
+        let sz = (z * src_size / dst_size).min(src_size - 1);
+        for x in 0..dst_size {
+            let sx = (x * src_size / dst_size).min(src_size - 1);
+            out[z * dst_size + x] = data[sz * src_size + sx];
+        }
+    }
+    out
+}
+
 /// Builds the single flat grid [`Mesh`] shared by every chunk instance.
 pub fn build_shared_chunk_mesh(size: usize) -> Mesh {
     let _span = debug_span!("build_shared_chunk_mesh", size = size).entered();
