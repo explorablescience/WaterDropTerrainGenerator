@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainSessionHolder,
+    TerrainInstanceHolder,
     core::{
         graph::{GraphNodeId, NodeGraph},
         node::{self, NParamValue},
@@ -61,7 +61,7 @@ struct SavedEdge {
 pub fn draw_project_menu(
     ctx: Res<UIContext>,
     mut ui_menu: ResMut<UIMenu>,
-    terrain_graph: Res<TerrainSessionHolder>,
+    terrain_graph: Res<TerrainInstanceHolder>,
     mut graph_instance: ResMut<GraphEditorState>
 ) {
     let save_clicked = ui_menu.clicked_mut("File/Save Project");
@@ -99,7 +99,7 @@ pub fn draw_project_menu(
 }
 
 fn save_project(
-    terrain_graph: &TerrainSessionHolder,
+    terrain_graph: &TerrainInstanceHolder,
     graph_instance: &GraphInstance,
     path: &Path
 ) -> Result<(), String> {
@@ -156,7 +156,7 @@ fn save_project(
 }
 
 fn load_project(
-    terrain_graph: &TerrainSessionHolder,
+    terrain_graph: &TerrainInstanceHolder,
     graph_instance: &mut GraphInstance,
     path: &Path
 ) -> Result<(), String> {

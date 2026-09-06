@@ -5,10 +5,10 @@ use bevy::prelude::*;
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainSessionHolder,
+    TerrainInstanceHolder,
     core::{
         node::{NParamConstraints, NParamDesc, NParamValue},
-        parallelism::TILE_RESOLUTIONS,
+        session::TILE_RESOLUTIONS,
         tiling::ChunkGrid
     },
     ui::{theme, widgets}
@@ -43,7 +43,7 @@ fn tile_resolution_options() -> Vec<String> {
 pub fn draw_terrain_settings(
     ctx: Res<UIContext>,
     mut ui_menu: ResMut<UIMenu>,
-    terrain_graph: Res<TerrainSessionHolder>,
+    terrain_graph: Res<TerrainInstanceHolder>,
     mut state: Local<TerrainSettingsState>
 ) {
     let open = ui_menu.clicked_mut("Terrain/Settings");

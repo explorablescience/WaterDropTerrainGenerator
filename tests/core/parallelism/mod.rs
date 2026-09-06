@@ -11,17 +11,17 @@ use waterdrop_terrain_generator::core::node::{
 };
 use waterdrop_terrain_generator::core::tiling::ChunkGrid;
 use waterdrop_terrain_generator::nodes::*;
-use waterdrop_terrain_generator::{TerrainSession, TerrainSessionHolder};
+use waterdrop_terrain_generator::{TerrainInstance, TerrainInstanceHolder};
 
 #[test]
 fn default_terrain_session_has_no_selection_and_no_messages() {
-    let terrain = TerrainSession::default();
+    let terrain = TerrainInstance::default();
     assert_eq!(terrain.selected_node, None);
 }
 
 #[test]
 fn action_result_ok_shows_as_an_info_message_that_can_be_cleared() {
-    let mut terrain = TerrainSession::default();
+    let mut terrain = TerrainInstance::default();
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
 
@@ -38,7 +38,7 @@ fn action_result_ok_shows_as_an_info_message_that_can_be_cleared() {
 
 #[test]
 fn action_result_err_shows_with_the_errors_own_severity() {
-    let mut terrain = TerrainSession::default();
+    let mut terrain = TerrainInstance::default();
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
 
@@ -55,13 +55,13 @@ fn action_result_err_shows_with_the_errors_own_severity() {
 
 #[test]
 fn a_persistent_error_message_never_expires_on_its_own() {
-    let mut terrain = TerrainSession::default();
+    let mut terrain = TerrainInstance::default();
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
 
     terrain.set_action_result(id, Err(NodeError::ProcessingFailed("boom".to_string())));
     assert_eq!(terrain.action_message_remaining(id), None);
-    terrain.prune_expired_messages();
+    terrain.drop_expired_messages();
     assert!(
         terrain.action_message(id).is_some(),
         "a persistent error should survive pruning"
@@ -70,7 +70,7 @@ fn a_persistent_error_message_never_expires_on_its_own() {
 
 #[test]
 fn setting_a_new_action_result_replaces_whatever_was_shown_before() {
-    let mut terrain = TerrainSession::default();
+    let mut terrain = TerrainInstance::default();
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
 
@@ -87,14 +87,14 @@ fn setting_a_new_action_result_replaces_whatever_was_shown_before() {
 
 #[test]
 fn terrain_session_holder_allows_shared_read_and_exclusive_write_access() {
-    let holder = TerrainSessionHolder::default();
+    let holder = TerrainInstanceHolder::default();
     let id = holder.write().graph_mut().add_node(Box::new(Flat));
     assert!(holder.read().graph().node(id).is_ok());
 }
 
 #[test]
 fn timed_action_message_expires_and_is_pruned() {
-    let mut terrain = TerrainSession::default();
+    let mut terrain = TerrainInstance::default();
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
 
@@ -138,8 +138,8 @@ fn run_with_timeout(timeout: Duration, f: impl FnOnce() + Send + 'static) -> boo
 /// Perlin -> Hydraulic Erosion (Global, uncached) -> Combine, with only Combine's first input
 /// wired - mirrors both bug reports: a fresh `Global` ancestor connected into a node with a
 /// dangling second input/output.
-fn build_perlin_erosion_combine_graph() -> (TerrainSessionHolder, GraphNodeId, GraphNodeId) {
-    let holder = TerrainSessionHolder::default();
+fn build_perlin_erosion_combine_graph() -> (TerrainInstanceHolder, GraphNodeId, GraphNodeId) {
+    let holder = TerrainInstanceHolder::default();
     let (perlin, combine) = {
         let mut session = holder.write();
         let graph = session.graph_mut();

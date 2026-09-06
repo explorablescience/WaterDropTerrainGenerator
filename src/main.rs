@@ -5,7 +5,7 @@ use bevy::{
     prelude::*,
     time::TimePlugin
 };
-use waterdrop_terrain_generator::{TerrainSessionHolder, render, ui};
+use waterdrop_terrain_generator::{TerrainInstanceHolder, render, ui};
 use wde::prelude::*;
 
 #[derive(Default)]
@@ -41,20 +41,14 @@ impl Plugin for CustomWdePlugins {
             wde::wde_editor::EditorPlugin
         ));
 
-        app.init_resource::<TerrainSessionHolder>()
+        app.init_resource::<TerrainInstanceHolder>()
             .add_plugins((render::RenderPlugin, ui::UIPlugin))
             .add_systems(Startup, default_scene);
     }
 }
 
 fn main() {
-    // Split the available CPU cores between Bevy's task pool and Rayon. `async_compute_threads` is
-    // sized directly (min == max) for concurrent per-chunk dispatch rather than left as leftover
-    // budget - `TaskPoolOptions` allocates IO, then async compute, then compute, each forced to at
-    // least its own `min_threads`, so a small shared `max_total_threads` used to let IO's forced
-    // thread eat into async compute's share and starve it down to a single thread on machines with
-    // few cores. Rayon gets whatever's left, for per-node internal parallelism (e.g. erosion, tile
-    // resampling).
+    // Split the available CPU cores between Bevy's task pool and Rayon.
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
     let async_compute_threads = (cores / 4).clamp(2, 8);
     let bevy_threads = async_compute_threads + 2; // + IO(1) + Compute(1)
@@ -62,8 +56,6 @@ fn main() {
 
     let _ = rayon::ThreadPoolBuilder::new()
         .num_threads(rayon_threads)
-        // Otherwise these threads inherit the main thread's OS name, and profilers like Tracy
-        // (which falls back to /proc/self/task/<tid>/comm) can't tell them apart from it.
         .thread_name(|i| format!("Rayon {i}"))
         .build_global();
     let bevy_task_pool = TaskPoolPlugin {

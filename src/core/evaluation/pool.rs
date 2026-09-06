@@ -15,10 +15,6 @@ impl TileBuffer {
     pub fn size(&self) -> usize {
         self.pool.tile_length()
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
-    }
 }
 impl std::ops::Deref for TileBuffer {
     type Target = [f32];
@@ -41,6 +37,8 @@ impl Drop for TileBuffer {
     }
 }
 
+const INITIAL_POOL_CAPACITY: usize = 16;
+
 #[derive(Debug)]
 pub struct TilePool {
     free: Mutex<Vec<Vec<f32>>>,
@@ -51,14 +49,19 @@ pub struct TilePool {
 impl TilePool {
     /// Pools are shared by nodes across the graph, so they're always handed out behind an [`Arc`].
     pub fn new(tile_length: usize) -> Arc<Self> {
+        let mut free = Vec::with_capacity(INITIAL_POOL_CAPACITY);
+        for _ in 0..INITIAL_POOL_CAPACITY {
+            free.push(vec![0.0; tile_length * tile_length]);
+        }
         Arc::new(Self {
-            free: Mutex::new(Vec::new()),
+            free: Mutex::new(free),
             tile_length,
             allocated_tiles: AtomicUsize::new(0)
         })
     }
 
     /// If the pool is empty, a new zero-filled tile is created.
+    /// When the returned [`TileBuffer`] is dropped, its buffer is returned to the pool for reuse.
     pub fn allocate(self: &Arc<Self>) -> TileBuffer {
         let tile = self.free.lock().unwrap().pop().unwrap_or_else(|| {
             self.allocated_tiles.fetch_add(1, Ordering::Relaxed);
@@ -72,5 +75,8 @@ impl TilePool {
 
     pub fn tile_length(&self) -> usize {
         self.tile_length
+    }
+    pub fn allocated_bytes(&self) -> usize {
+        self.allocated_tiles.load(Ordering::Relaxed) * self.tile_length * self.tile_length * std::mem::size_of::<f32>()
     }
 }

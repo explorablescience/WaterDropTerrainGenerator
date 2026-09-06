@@ -57,7 +57,7 @@ fn test_node_graph_cycle_detection() {
         .expect("Graph connections should succeed");
 
     // Run the graph and expect a cycle detection error
-    let result = graph.process(node_b);
+    let result = graph.get(node_b);
     assert!(result.is_err(), "Graph validation should fail due to cycle");
 }
 
@@ -77,7 +77,7 @@ fn test_node_graph_remove_node_disconnects_edges() {
         .expect("Removing an existing node should succeed");
 
     // The dangling input edge should be gone, so erosion now has an unconnected input.
-    let result = graph.process(erosion);
+    let result = graph.get(erosion);
     assert!(
         result.is_err(),
         "Processing should fail once the upstream node feeding erosion is removed"
@@ -106,7 +106,7 @@ fn test_node_graph_remove_node_resets_cached_topo() {
         .expect("Removing an existing node should succeed");
 
     // The cached topo order from before the removal must not be reused.
-    let result = graph.process(erosion);
+    let result = graph.get(erosion);
     assert!(
         result.is_err(),
         "Processing should require re-validation after a node is removed"
@@ -141,7 +141,7 @@ fn test_node_graph_process_grows_internal_tile_size_for_padding() {
         .expect("Graph connection should succeed");
 
     let outputs = graph
-        .process(erosion)
+        .get(erosion)
         .expect("Graph processing should succeed");
     let outputs = match outputs {
         NodeGraphProcessResult::Processed(_, outputs) => outputs,
@@ -189,14 +189,14 @@ fn mutating_a_node_invalidates_its_own_and_downstream_cached_output() {
     let sink = graph.add_node(Box::new(Erosion::default()));
     graph.connect(source, 0, sink, 0).unwrap();
 
-    let first = match graph.process(sink).unwrap() {
+    let first = match graph.get(sink).unwrap() {
         NodeGraphProcessResult::Processed(g, _) => g,
         _ => panic!("expected the graph to finish processing")
     };
 
     // Re-processing without any change should serve the cached result: the reported
     // generation must not have advanced.
-    let cached = match graph.process(sink).unwrap() {
+    let cached = match graph.get(sink).unwrap() {
         NodeGraphProcessResult::Processed(g, _) => g,
         _ => panic!("expected the graph to finish processing")
     };
@@ -215,7 +215,7 @@ fn mutating_a_node_invalidates_its_own_and_downstream_cached_output() {
         .unwrap()
         .set_param("frequency", NParamValue::Float(5.0))
         .unwrap();
-    let after_change = match graph.process(sink).unwrap() {
+    let after_change = match graph.get(sink).unwrap() {
         NodeGraphProcessResult::Processed(g, _) => g,
         _ => panic!("expected the graph to finish processing")
     };
@@ -241,7 +241,7 @@ fn is_processing_is_false_before_anything_has_been_computed() {
 fn is_processing_is_true_immediately_after_a_node_is_computed() {
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
-    graph.process(id).expect("processing should succeed");
+    graph.get(id).expect("processing should succeed");
     assert!(graph.is_processing());
 }
 
@@ -703,12 +703,12 @@ fn cached_bytes_totals_local_chunk_tiles_and_global_tiles_together() {
 
     graph.process_chunk(local, ChunkCoord(0, 0)).unwrap();
     let expected_local = 4 * 4 * std::mem::size_of::<f32>(); // tile_size = 4, no padding
-    assert_eq!(graph.cached_bytes(), expected_local);
+    assert_eq!(graph.allocated_bytes(), expected_local);
 
     graph.process_chunk(global, ChunkCoord(0, 0)).unwrap();
     let expected_global = 6 * 6 * std::mem::size_of::<f32>(); // native_resolution = 6
     assert_eq!(
-        graph.cached_bytes(),
+        graph.allocated_bytes(),
         expected_local + expected_global,
         "the global node's own whole-terrain buffer should add to the total alongside the local \
          chunk's, not replace it or be left out"
@@ -723,7 +723,7 @@ fn cached_bytes_reflects_current_cache_contents_after_a_pool_resizing_selection_
     graph.connect(flat, 0, erosion, 0).unwrap();
 
     graph.process_chunk(flat, ChunkCoord(0, 0)).unwrap();
-    assert_eq!(graph.cached_bytes(), 4 * 4 * std::mem::size_of::<f32>());
+    assert_eq!(graph.allocated_bytes(), 4 * 4 * std::mem::size_of::<f32>());
 
     // Selecting `erosion` needs a bigger padded pool, which discards the previous chunk-scoped
     // cache (including flat's now-stale entry from the smaller pool) and recomputes both nodes at
@@ -731,7 +731,7 @@ fn cached_bytes_reflects_current_cache_contents_after_a_pool_resizing_selection_
     // consumer) is itself fully cached, leaving just erosion's output live.
     graph.process_chunk(erosion, ChunkCoord(0, 0)).unwrap();
     assert_eq!(
-        graph.cached_bytes(),
+        graph.allocated_bytes(),
         8 * 8 * std::mem::size_of::<f32>(),
         "should reflect exactly what's cached now (erosion's output, at the new padded size) \
          rather than a stale or partial figure from before the pool was resized"

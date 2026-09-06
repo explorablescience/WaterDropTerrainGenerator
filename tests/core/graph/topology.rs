@@ -210,7 +210,7 @@ fn optional_unconnected_input_is_fed_a_neutral_zero_tile() {
     let sink = graph.add_node(Box::new(FakeOptionalSink));
 
     let result = graph
-        .process(sink)
+        .get(sink)
         .expect("processing with an unconnected optional input should succeed");
     let NodeGraphProcessResult::Processed(_, outputs) = result else {
         panic!("expected the graph to finish processing")
@@ -233,5 +233,5 @@ fn processing_an_unknown_node_id_fails() {
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let id = graph.add_node(Box::new(Flat));
     graph.remove_node(id).unwrap();
-    assert!(graph.process(id).is_err());
+    assert!(graph.get(id).is_err());
 }

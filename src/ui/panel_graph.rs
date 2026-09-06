@@ -9,7 +9,7 @@ use egui_snarl::{
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainSessionHolder,
+    TerrainInstanceHolder,
     core::{
         graph::GraphNodeId,
         node::{self, Node, NodeCategory, NodeError, NodeIcon}
@@ -62,7 +62,7 @@ pub struct SelectedNode {
 struct GraphViewer {
     selected: Option<SelectedNode>,
     pinned: Option<GraphNodeId>,
-    terrain_graph: TerrainSessionHolder
+    terrain_graph: TerrainInstanceHolder
 }
 impl SnarlViewer<GraphNode> for GraphViewer {
     fn title(&mut self, node: &GraphNode) -> String {
@@ -542,7 +542,7 @@ pub fn show_graph(
     id: egui::Id,
     ui: &mut egui::Ui,
     graph_instance: &mut GraphInstance,
-    terrain_graph: TerrainSessionHolder
+    terrain_graph: TerrainInstanceHolder
 ) -> (Option<SelectedNode>, Option<SelectedNode>) {
     let style = SnarlStyle {
         node_layout: Some(

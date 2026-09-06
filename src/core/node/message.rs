@@ -4,8 +4,7 @@ use std::time::{Duration, Instant};
 use crate::core::graph::GraphNodeId;
 use crate::core::node::error::NodeError;
 
-/// Severity of a message a [`Node`](crate::core::node::Node) reports about its own state, shown
-/// in the properties panel between the node's title and its parameters.
+/// Severity of a message a [`Node`](crate::core::node::Node) reports about its own state, shown in the properties panel between the node's title and its parameters.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeMessageSeverity {
     Error,
@@ -40,17 +39,15 @@ impl NodeMessage {
     }
 }
 
-/// How long a [`NodeMessage`] stays visible before it is dropped. Errors are `Persistent` - they
-/// stay until superseded by the next attempt on the same node - while a success confirmation
-/// times out on its own after a few seconds.
+/// How long a [`NodeMessage`] stays visible before it is dropped.
+/// `Persistent` messages stay until the node clears them, while `Timed` ones are automatically dropped after the given duration.
 #[derive(Debug, Clone, Copy)]
 pub enum MessageLifetime {
     Persistent,
     Timed(Duration)
 }
 
-/// A [`NodeMessage`] paired with when it was raised, so a timed one can be told apart from an
-/// expired one.
+/// A [`NodeMessage`] paired with when it was raised, so a timed one can be told apart from an expired one.
 #[derive(Debug, Clone)]
 pub struct TimedNodeMessage {
     pub message: NodeMessage,
@@ -73,9 +70,7 @@ impl TimedNodeMessage {
         }
     }
 
-    /// Time left before this message expires on its own, or `None` if it never does (already
-    /// expired, or persistent). Used to schedule a repaint so the UI updates the moment it should
-    /// disappear, instead of only on the next unrelated redraw.
+    /// Time left before this message expires on its own, or `None` if it never does.
     pub fn remaining(&self) -> Option<Duration> {
         match self.lifetime {
             MessageLifetime::Persistent => None,
@@ -84,9 +79,7 @@ impl TimedNodeMessage {
     }
 }
 
-/// Per-node feedback from the most recent `on_action`/`set_param` call, keyed by the node it came
-/// from: an error persists until the next call on that node, while a success confirmation fades
-/// out on its own.
+/// Keeps track of the most recent message for each node, and whether it has expired or not.
 #[derive(Default)]
 pub struct NodeMessageLog {
     messages: HashMap<GraphNodeId, TimedNodeMessage>
@@ -95,8 +88,7 @@ impl NodeMessageLog {
     /// How long a success confirmation stays visible before it fades out.
     pub const ACTION_MESSAGE_DURATION: Duration = Duration::from_secs(3);
 
-    /// Records the feedback of an `on_action`/`set_param` call on `node_id`, replacing whatever
-    /// was shown before it.
+    /// Records the feedback of an `on_action`/`set_param` call on `node_id`, replacing whatever was shown before it.
     pub fn set_result(&mut self, node_id: GraphNodeId, result: Result<String, NodeError>) {
         let timed = match result {
             Ok(text) => TimedNodeMessage::new(
@@ -135,7 +127,7 @@ impl NodeMessageLog {
     }
 
     /// Drops every message that has expired.
-    pub fn prune_expired(&mut self) {
+    pub fn drop_expired(&mut self) {
         self.messages.retain(|_, m| !m.is_expired());
     }
 }

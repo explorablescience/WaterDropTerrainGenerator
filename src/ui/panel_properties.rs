@@ -1,9 +1,9 @@
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainSessionHolder,
+    TerrainInstanceHolder,
     core::{
-        graph::{GraphNodeId, NodeGraphProcessResult},
+        graph::{GraphNodeId},
         node::{NParamConstraints, NParamValue, NodeError, NodeMessage}
     },
     ui::{theme, widgets}
@@ -11,7 +11,7 @@ use crate::{
 
 pub fn draw_properties(
     ui: &mut egui::Ui,
-    terrain_graph: &TerrainSessionHolder,
+    terrain_graph: &TerrainInstanceHolder,
     selected_node: Option<GraphNodeId>
 ) {
     egui::Frame::NONE
@@ -81,10 +81,10 @@ pub fn draw_properties(
 
 fn collect_node_messages(
     ui: &egui::Ui,
-    terrain_graph: &TerrainSessionHolder,
+    terrain_graph: &TerrainInstanceHolder,
     graph_id: GraphNodeId
 ) -> Vec<NodeMessage> {
-    terrain_graph.write().prune_expired_messages();
+    terrain_graph.write().drop_expired_messages();
 
     let terrain_graph = terrain_graph.read();
     let mut messages = Vec::new();
@@ -141,7 +141,7 @@ struct ParamSpec {
 /// Draws the UI for editing the parameters of a node, grouped into cards by [`NParamDesc::category`].
 fn show_node_params(
     ui: &mut egui::Ui,
-    terrain_graph: &TerrainSessionHolder,
+    terrain_graph: &TerrainInstanceHolder,
     graph_id: GraphNodeId
 ) {
     let param_specs: Vec<ParamSpec> = {
@@ -260,7 +260,7 @@ fn show_node_params(
 /// If the control was edited, writes the new value back into the graph.
 fn show_param_row(
     ui: &mut egui::Ui,
-    terrain_graph: &TerrainSessionHolder,
+    terrain_graph: &TerrainInstanceHolder,
     graph_id: GraphNodeId,
     spec: &ParamSpec
 ) {
@@ -371,26 +371,27 @@ fn show_param_row(
             changed.then_some(NParamValue::Enum(v))
         }
         NParamValue::Action {
-            show_success_message
+            show_success_message: _
         } => {
-            let color = {
-                let terrain_graph_read = terrain_graph.read();
-                let node = terrain_graph_read.graph().node(graph_id).unwrap();
-                theme::category_color(node.category())
-            };
-            let terrain_graph = terrain_graph.clone();
-            let key = spec.key;
-            let action_label = spec.label;
-            widgets::button(ui, spec.label, color, move || {
-                run_node_action(
-                    &terrain_graph,
-                    graph_id,
-                    key,
-                    action_label,
-                    show_success_message
-                );
-            });
-            None
+            // let color = {
+            //     let terrain_graph_read = terrain_graph.read();
+            //     let node = terrain_graph_read.graph().node(graph_id).unwrap();
+            //     theme::category_color(node.category())
+            // };
+            // let terrain_graph = terrain_graph.clone();
+            // let key = spec.key;
+            // let action_label = spec.label;
+            // widgets::button(ui, spec.label, color, move || {
+            //     run_node_action(
+            //         &terrain_graph,
+            //         graph_id,
+            //         key,
+            //         action_label,
+            //         show_success_message
+            //     );
+            // });
+            // None
+            todo!("Action buttons are not yet implemented in the UI");
         }
     };
 
@@ -414,41 +415,41 @@ fn show_param_row(
     }
 }
 
-/// Records the result in the terrain graph so it can be displayed in the UI.
-fn run_node_action(
-    terrain_graph: &TerrainSessionHolder,
-    graph_id: GraphNodeId,
-    key: &str,
-    action_label: &str,
-    show_success_message: bool
-) {
-    let output_size = terrain_graph.read().graph().tile_size();
+// /// Records the result in the terrain graph so it can be displayed in the UI.
+// fn run_node_action(
+//     terrain_graph: &TerrainSessionHolder,
+//     graph_id: GraphNodeId,
+//     key: &str,
+//     action_label: &str,
+//     show_success_message: bool
+// ) {
+//     let output_size = terrain_graph.read().graph().tile_size();
 
-    let mut terrain_graph = terrain_graph.write();
-    // Best-effort: runs with an empty `output` if the node's inputs aren't fully wired up yet, e.g. so a "browse for a folder" action works before the graph does.
-    let output = match terrain_graph.graph_mut().process(graph_id) {
-        Ok(NodeGraphProcessResult::Processed(_, tiles)) => tiles,
-        Ok(NodeGraphProcessResult::Processing) => Vec::new(),
-        Err(err) => {
-            trace!("Action '{}': node output unavailable ({})", key, err);
-            Vec::new()
-        }
-    };
+//     let mut terrain_graph = terrain_graph.write();
+//     // Best-effort: runs with an empty `output` if the node's inputs aren't fully wired up yet, e.g. so a "browse for a folder" action works before the graph does.
+//     let output = match terrain_graph.graph_mut().process(graph_id) {
+//         Ok(NodeGraphProcessResult::Processed(_, tiles)) => tiles,
+//         Ok(NodeGraphProcessResult::Processing) => Vec::new(),
+//         Err(err) => {
+//             trace!("Action '{}': node output unavailable ({})", key, err);
+//             Vec::new()
+//         }
+//     };
 
-    let (node_label, result) = {
-        let mut node = terrain_graph.graph_mut().node_mut(graph_id).unwrap();
-        let node_label = node.label().to_string();
-        let result = node.on_action(key, &output, output_size);
-        (node_label, result)
-    };
-    match result {
-        Ok(()) if show_success_message => {
-            terrain_graph.set_action_result(graph_id, Ok(format!("{} completed", action_label)));
-        }
-        Ok(()) => terrain_graph.clear_action_message(graph_id),
-        Err(err) => {
-            error!("Action '{}' failed on node {}: {}", key, node_label, err);
-            terrain_graph.set_action_result(graph_id, Err(err));
-        }
-    }
-}
+//     let (node_label, result) = {
+//         let mut node = terrain_graph.graph_mut().node_mut(graph_id).unwrap();
+//         let node_label = node.label().to_string();
+//         let result = node.on_action(key, &output, output_size);
+//         (node_label, result)
+//     };
+//     match result {
+//         Ok(()) if show_success_message => {
+//             terrain_graph.set_action_result(graph_id, Ok(format!("{} completed", action_label)));
+//         }
+//         Ok(()) => terrain_graph.clear_action_message(graph_id),
+//         Err(err) => {
+//             error!("Action '{}' failed on node {}: {}", key, node_label, err);
+//             terrain_graph.set_action_result(graph_id, Err(err));
+//         }
+//     }
+// }

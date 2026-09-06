@@ -2,64 +2,41 @@
 
 use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::core::{Cache, CacheEntry, Processor, TileBuffer};
+use crate::core::evaluation::TilePool;
 use crate::core::node::{Node, NodeError};
-use crate::core::tiling::{ChunkCoord, ChunkGrid, TileHandle, TilePool};
-
-mod eval;
-mod state;
-mod topology;
-
-pub use state::{CacheKey, NodeState};
-pub use topology::GraphNodeId;
-
-use state::{EvalCache, EvalScope};
+use crate::core::tiling::{ChunkGrid};
 use topology::Topology;
 
-pub enum NodeGraphProcessResult {
-    Processed(u32, Vec<TileHandle>),
-    Processing
-}
+mod eval;
+mod topology;
+
+pub use topology::GraphNodeId;
+
 
 pub struct NodeGraph {
     pool: Arc<TilePool>,
     chunk_grid: ChunkGrid,
     topology: Topology,
-    cache: EvalCache,
-    generation: AtomicU32,
-    last_activity: Mutex<Option<Instant>>,
-    last_dirty: Mutex<Option<Instant>>
+    cache: Cache,
+    processor: Processor,
+    is_processing: bool,
 }
 impl NodeGraph {
     const PROCESSING_INDICATOR_HOLD: Duration = Duration::from_millis(400);
-    const REPROCESS_COOLDOWN: Duration = Duration::from_millis(10);
 
     pub fn new(chunk_grid: ChunkGrid) -> Self {
         Self {
             pool: TilePool::new(chunk_grid.tile_size()),
             chunk_grid,
             topology: Topology::default(),
-            cache: EvalCache::default(),
-            generation: AtomicU32::new(0),
-            last_activity: Mutex::new(None),
-            last_dirty: Mutex::new(None)
+            cache: Cache::new(),
+            processor: Processor::new(),
+            is_processing: false,
         }
-    }
-
-    /// Returns whether the graph has been marked dirty since the last time it was processed, and is ready to be reprocessed.
-    pub fn should_reprocess_cooldown(&self) -> bool {
-        self.last_dirty
-            .lock()
-            .unwrap()
-            .is_some_and(|t| t.elapsed() < Self::REPROCESS_COOLDOWN)
-    }
-
-    // Generation management
-    pub(super) fn increment_generation(&self) -> u32 {
-        self.generation.fetch_add(1, Ordering::Relaxed) + 1
     }
 
     // Chunk grid management
@@ -69,7 +46,7 @@ impl NodeGraph {
     pub fn set_chunk_grid(&mut self, chunk_grid: ChunkGrid) {
         self.chunk_grid = chunk_grid;
         self.pool = TilePool::new(chunk_grid.tile_size());
-        self.cache = EvalCache::default();
+        self.cache = Cache::new();
     }
     pub fn tile_size(&self) -> usize {
         self.chunk_grid.tile_size()
@@ -82,9 +59,8 @@ impl NodeGraph {
         id
     }
     pub fn remove_node(&mut self, node_id: GraphNodeId) -> Result<(), NodeError> {
-        self.mark_dirty(node_id); // invalidate consumers before the node disappears
+        self.mark_dirty(node_id);
         self.topology.remove_node(node_id)?;
-        self.cache.remove(node_id);
         Ok(())
     }
     pub fn connect(
@@ -97,6 +73,7 @@ impl NodeGraph {
         self.topology
             .connect(from_node, from_socket, to_node, to_socket)?;
         self.mark_dirty(to_node);
+        self.mark_dirty(from_node);
         Ok(self)
     }
     pub fn disconnect(
@@ -109,77 +86,60 @@ impl NodeGraph {
         self.topology
             .disconnect(from_node, from_socket, to_node, to_socket)?;
         self.mark_dirty(to_node);
+        self.mark_dirty(from_node);
         Ok(self)
     }
     pub fn node(&self, id: GraphNodeId) -> Result<&dyn Node, NodeError> {
         self.topology.node(id)
     }
-    /// Every edge currently in the graph, as `(from_node, from_socket, to_node, to_socket)`.
-    pub fn edges(&self) -> impl Iterator<Item = (GraphNodeId, usize, GraphNodeId, usize)> + '_ {
-        self.topology.edges()
-    }
     pub fn node_mut(&mut self, id: GraphNodeId) -> Result<NodeMutGuard<'_>, NodeError> {
         self.topology.node(id)?;
         Ok(NodeMutGuard { graph: self, id })
     }
+    /// Every edge currently in the graph, as `(from_node, from_socket, to_node, to_socket)`.
+    pub fn edges(&self) -> impl Iterator<Item = (GraphNodeId, usize, GraphNodeId, usize)> + '_ {
+        self.topology.edges()
+    }
 
-    /// Propagates downstream, stopping at baked nodes.
+    /// Marks a node and all its descendants as dirty, indicating that they need to be re-evaluated.
     fn mark_dirty(&mut self, id: GraphNodeId) {
-        *self.last_dirty.lock().unwrap() = Some(Instant::now());
         let mut stack = vec![id];
         let mut visited = HashSet::new();
         while let Some(n) = stack.pop() {
             if !visited.insert(n) {
                 continue;
             }
-            if self.cache.is_baked(n) {
-                continue; // opaque to invalidation
-            }
-            self.cache.mark_all_dirty(n);
+            self.cache.mark_dirty(n);
             if let Ok(outputs) = self.topology.outputs(n) {
                 stack.extend(outputs.iter().copied());
             }
         }
     }
-    fn is_dirty(&self, id: GraphNodeId) -> bool {
-        self.cache.is_dirty(id)
-    }
-    /// Whether `node_id`'s output for `chunk` is already cached and up to date.
-    pub fn is_chunk_cached(&self, node_id: GraphNodeId, chunk: ChunkCoord) -> bool {
-        matches!(
-            self.cache.state(node_id, EvalScope::Chunk(chunk)),
-            NodeState::Cached(_)
-        )
-    }
-    pub fn is_or_ancestor_dirty(&self, id: GraphNodeId) -> bool {
-        if self.is_dirty(id) {
-            return true;
+    pub fn get(&mut self, node_id: GraphNodeId) -> Result<Option<CacheEntry>, NodeError> {
+        // If the node is not dirty, return the cached entry
+        if !self.cache.is_dirty(node_id) {
+            return Ok(self.cache.get(node_id));
         }
-        if let Ok(inputs) = self.topology.inputs(id) {
-            for input in inputs {
-                if input.is_none() {
-                    continue;
-                }
-                if self.is_or_ancestor_dirty(input.unwrap().0) {
-                    return true;
-                }
-            }
+
+        let result = self.processor.process(self.topology, node_id);
+        match result {
+            Ok(_) => Ok(None), // Return None to indicate that the node is being processed
+            Err(e) => Err(e),
         }
-        false
+    }
+    fn set(&mut self, node_id: GraphNodeId, entry: Arc<TileBuffer>) {
+        self.cache.set(node_id, entry);
     }
 
     // Usefull for UI feedback
-    pub(super) fn set_is_processing(&self) {
-        *self.last_activity.lock().unwrap() = Some(Instant::now());
+    pub(super) fn set_is_processing(&mut self, is_processing: bool) {
+        self.is_processing = is_processing;
     }
     pub fn is_processing(&self) -> bool {
-        self.last_activity
-            .lock()
-            .unwrap()
-            .is_some_and(|t| t.elapsed() < Self::PROCESSING_INDICATOR_HOLD)
+        self.is_processing
     }
-    pub fn cached_bytes(&self) -> usize {
-        self.cache.cached_bytes()
+    pub fn allocated_bytes(&self) -> usize {
+        self.pool.allocated_bytes()
     }
 }
 

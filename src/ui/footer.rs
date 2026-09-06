@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainSessionHolder,
+    TerrainInstanceHolder,
     ui::theme::{self, palette}
 };
 
@@ -40,7 +40,7 @@ struct FpsDisplay {
 fn draw_footer(
     ctx: Res<UIContext>,
     diagnostics: Res<DiagnosticsStore>,
-    terrain_graph: Res<TerrainSessionHolder>,
+    terrain_graph: Res<TerrainInstanceHolder>,
     mut fps_display: Local<FpsDisplay>
 ) {
     if fps_display
@@ -57,7 +57,7 @@ fn draw_footer(
     let (is_processing, tile_bytes) = {
         let terrain_graph = terrain_graph.read();
         let graph = terrain_graph.graph();
-        (graph.is_processing(), graph.cached_bytes())
+        (graph.is_processing(), graph.allocated_bytes())
     };
 
     let frame = egui::Frame::NONE

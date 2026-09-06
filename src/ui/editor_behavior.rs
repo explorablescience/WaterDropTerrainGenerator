@@ -2,7 +2,7 @@ use egui_tiles::{Behavior, TabState, Tiles, UiResponse};
 use wde::prelude::ui::egui;
 
 use crate::{
-    TerrainSessionHolder,
+    TerrainInstanceHolder,
     ui::{
         editor::EditorPanels,
         panel_graph::{self, GraphInstance},
@@ -14,7 +14,7 @@ pub struct EditorBehavior<'a> {
     pub graph_id: egui::Id,
     pub graph_instance: &'a mut GraphInstance,
 
-    pub terrain_graph: TerrainSessionHolder,
+    pub terrain_graph: TerrainInstanceHolder,
 
     /// Used to tell a tile's outer edges (which get the full border inset) apart from edges shared with a neighboring tile (which get half of it).
     pub outer_rect: egui::Rect
@@ -64,11 +64,12 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
                         self.graph_instance,
                         self.terrain_graph.clone()
                     );
-                    let old_selected_node = self.terrain_graph.read().selected_node;
+                    let old_selected_node = self.terrain_graph.read().selected_node();
                     let render_node = pinned_node.or(selected_node);
                     if old_selected_node != render_node.map(|node| node.graph_id) {
-                        self.terrain_graph.write().selected_node =
-                            render_node.map(|node| node.graph_id);
+                        self.terrain_graph.write().set_selected_node(
+                            render_node.map(|node| node.graph_id)
+                        );
                     }
                 }
                 EditorPanels::Properties => {
@@ -108,7 +109,7 @@ impl<'a> EditorBehavior<'a> {
     pub fn new(
         generation_id: &u64,
         graph_instance: &'a mut GraphInstance,
-        terrain_graph: TerrainSessionHolder,
+        terrain_graph: TerrainInstanceHolder,
         outer_rect: egui::Rect
     ) -> Self {
         EditorBehavior {

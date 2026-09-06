@@ -1,6 +1,27 @@
 use bevy::prelude::*;
 use wde::prelude::*;
 
+use crate::{
+    core::parallelism::{ChunkJobs, GlobalPassJobs},
+    render::{
+        chunk_array::{
+            TerrainPreviewArrayBg, TerrainPreviewGpu, TerrainPreviewInstances,
+            TerrainPreviewInstancesBinding, TerrainPreviewSync, sync_terrain_preview_gpu
+        },
+        generate_chunks::{TerrainPreview, create_material, update_render_chunks},
+        render_pipeline::TerrainPreviewRenderPipeline,
+        render_subpass::SubRenderPassTerrainPreview
+    }
+};
+
+mod chunk_array;
+mod generate_chunks;
+mod generate_chunks_global;
+mod generate_chunks_local;
+mod render_pipeline;
+mod render_subpass;
+mod utils;
+
 /// Handles the generation and rendering of the terrain preview mesh in the editor.
 pub struct RenderPlugin;
 impl Plugin for RenderPlugin {

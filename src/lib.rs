@@ -5,4 +5,4 @@ pub mod nodes;
 pub mod render;
 pub mod ui;
 
-pub use core::parallelism::{TerrainSession, TerrainSessionHolder};
+pub use core::session::{TerrainInstance, TerrainInstanceHolder};

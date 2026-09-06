@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use wde::prelude::{ui::egui, *};
 
 use crate::{
-    TerrainSessionHolder,
+    TerrainInstanceHolder,
     core::node,
     ui::{
         editor::EditorPanelsPlugin,
@@ -36,7 +36,7 @@ impl Plugin for UIPlugin {
 
 fn initialize_default_graph(
     mut graph_instance: ResMut<GraphEditorState>,
-    terrain_graph: Res<TerrainSessionHolder>
+    terrain_graph: Res<TerrainInstanceHolder>
 ) {
     let descriptor = node::registered_nodes()
         .find(|descriptor| descriptor.label == "Perlin")

@@ -6,8 +6,6 @@ use std::hash::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use crate::core::tiling::{TileContext, TileHandle, TilePool};
-
 mod error;
 mod message;
 mod parameters;
@@ -19,7 +17,10 @@ pub use message::{
 };
 pub use parameters::{NParamConstraints, NParamDesc, NParamValidator, NParamValue};
 pub use registry::{NodeDescriptor, registered_nodes};
+use crate::core::*;
 
+/// A node is a single operation in the terrain graph, which can be connected to other nodes to form a directed graph (DAG) of terrain operations.
+/// This is the core element of the terrain graph system, and is used to define the behavior of the graph editor and the terrain generation pipeline.
 pub trait Node: Debug + Send + Sync {
     fn label(&self) -> &str;
 
@@ -86,11 +87,14 @@ pub trait Node: Debug + Send + Sync {
     }
 }
 
+/// A node's input or output port, which can be connected to other nodes in the graph.
 pub struct NodeSocket {
     pub name: &'static str,
     pub dtype: NodePortType,
     pub required: bool
 }
+
+/// A node's input or output port type, which determines what kind of data can flow through it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodePortType {
     Height, // Scalar heightfield (f32 per texel)
@@ -100,16 +104,12 @@ pub enum NodePortType {
     Scalar  // Scalar value (f32) - used for parameters, not textures
 }
 
+/// `Local` nodes can be computed independently for each chunk, while `Global` nodes need to be evaluated once over the terrain's whole real-world extent.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeLocality {
     /// Given just that chunk's (padded) tile and a world-space coordinate frame to sample consistently across chunk borders.
     Local,
-    /// Evaluated once over the terrain's whole real-world extent (see
-    /// [`ChunkGrid::world_extent`](crate::core::tiling::ChunkGrid::world_extent)) at
-    /// `native_resolution` texels per axis, instead of per chunk - for operations whose effect
-    /// isn't bounded by any fixed kernel radius (e.g. erosion transport), so no per-chunk padding
-    /// could express it. Any ancestor or descendant at a different resolution (or `Local` scope)
-    /// is bilinearly resampled into/out of this frame automatically by the graph engine.
+    /// Evaluated once over the terrain's whole real-world extent.
     Global { native_resolution: usize }
 }
 
