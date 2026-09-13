@@ -96,6 +96,20 @@ impl NodeGraph {
     pub fn node(&self, id: GraphNodeId) -> Result<&dyn Node, NodeError> {
         self.topology.node(id)
     }
+    /// The user-facing name shown in the UI: a custom name if one was set via [`Self::set_custom_name`], else the node type's label.
+    pub fn display_name(&self, id: GraphNodeId) -> Result<String, NodeError> {
+        self.topology.display_name(id)
+    }
+    pub fn custom_name(&self, id: GraphNodeId) -> Result<Option<&str>, NodeError> {
+        self.topology.custom_name(id)
+    }
+    pub fn set_custom_name(
+        &mut self,
+        id: GraphNodeId,
+        name: Option<String>
+    ) -> Result<(), NodeError> {
+        self.topology.set_custom_name(id, name)
+    }
     pub fn node_mut(&mut self, id: GraphNodeId) -> Result<NodeMutGuard<'_>, NodeError> {
         self.topology.node(id)?;
         Ok(NodeMutGuard { graph: self, id })

@@ -7,6 +7,7 @@ pub struct GraphNodeId(pub usize);
 
 struct NodeEntry {
     instance: Box<dyn Node>,
+    custom_name: Option<String>,
     inputs: Vec<Option<(GraphNodeId, usize)>>, // indexed by input socket
     outputs: Vec<GraphNodeId>
 }
@@ -31,6 +32,7 @@ impl Topology {
         let id = GraphNodeId(self.nodes.len());
         self.nodes.push(Some(NodeEntry {
             instance: node,
+            custom_name: None,
             inputs,
             outputs: Vec::new()
         }));
@@ -149,6 +151,28 @@ impl Topology {
 
     pub fn node_mut(&mut self, id: GraphNodeId) -> Result<&mut (dyn Node + 'static), NodeError> {
         Ok(self.entry_mut(id)?.instance.as_mut())
+    }
+
+    /// The user-facing name shown in the UI: the custom name if one was set, else the node type's label.
+    pub fn display_name(&self, id: GraphNodeId) -> Result<String, NodeError> {
+        let entry = self.entry(id)?;
+        Ok(entry
+            .custom_name
+            .clone()
+            .unwrap_or_else(|| entry.instance.label().to_string()))
+    }
+
+    pub fn custom_name(&self, id: GraphNodeId) -> Result<Option<&str>, NodeError> {
+        Ok(self.entry(id)?.custom_name.as_deref())
+    }
+
+    pub fn set_custom_name(
+        &mut self,
+        id: GraphNodeId,
+        name: Option<String>
+    ) -> Result<(), NodeError> {
+        self.entry_mut(id)?.custom_name = name;
+        Ok(())
     }
 
     pub fn inputs(&self, id: GraphNodeId) -> Result<&[Option<(GraphNodeId, usize)>], NodeError> {

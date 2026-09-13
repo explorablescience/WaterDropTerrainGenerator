@@ -222,6 +222,17 @@ fn generic_sockets_on_the_same_node_must_all_resolve_to_the_same_dtype() {
 }
 
 #[test]
+fn a_masks_slope_output_connects_into_satmaps_generic_input() {
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
+    let height = graph.add_node(Box::new(FakeHeightSource));
+    let slope = graph.add_node(Box::new(Slope));
+    let satmap = graph.add_node(Box::new(SatMap::default()));
+
+    assert!(graph.connect(height, 0, slope, 0).is_ok());
+    assert!(graph.connect(slope, 0, satmap, 0).is_ok());
+}
+
+#[test]
 fn connecting_to_an_out_of_range_output_socket_fails() {
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let source = graph.add_node(Box::new(FakeHeightSource));

@@ -4,3 +4,4 @@
 
 mod combine;
 mod satmap;
+mod slope;

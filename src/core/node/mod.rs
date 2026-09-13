@@ -149,20 +149,18 @@ pub enum NodeCategory {
     Simulation,
     DataExtraction,
     Texturing,
-    Utility,
-    Export
+    Utility
 }
 impl NodeCategory {
     /// Every category, in the order they should be listed in the "Add Node" menu.
-    pub const ALL: [NodeCategory; 8] = [
+    pub const ALL: [NodeCategory; 7] = [
         NodeCategory::Generation,
         NodeCategory::Modification,
         NodeCategory::Surface,
         NodeCategory::Simulation,
         NodeCategory::DataExtraction,
         NodeCategory::Texturing,
-        NodeCategory::Utility,
-        NodeCategory::Export
+        NodeCategory::Utility
     ];
 
     pub fn display_name(&self) -> &'static str {
@@ -173,8 +171,7 @@ impl NodeCategory {
             NodeCategory::Simulation => "Simulation",
             NodeCategory::DataExtraction => "Data Extraction",
             NodeCategory::Texturing => "Texturing",
-            NodeCategory::Utility => "Utility",
-            NodeCategory::Export => "Export"
+            NodeCategory::Utility => "Utility"
         }
     }
 
@@ -208,8 +205,7 @@ impl NodeCategory {
             }
             NodeCategory::DataExtraction => &["Topographic Analysis", "Texture Masks"],
             NodeCategory::Texturing => &["Color Maps", "Color Blends"],
-            NodeCategory::Utility => &["Compositing", "Data Operations", "Logic"],
-            NodeCategory::Export => &["Production Export"]
+            NodeCategory::Utility => &["Compositing", "Data Operations", "Logic"]
         }
     }
 }

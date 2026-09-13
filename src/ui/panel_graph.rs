@@ -38,6 +38,10 @@ fn pinned_nodes_id() -> egui::Id {
     egui::Id::new("panel-graph-pinned-nodes")
 }
 
+fn renaming_node_id() -> egui::Id {
+    egui::Id::new("panel-graph-renaming-node")
+}
+
 /// Clears the persisted graph-editor selection - used after a project load replaces every node id,
 /// so a stale selection left over from before the load can't be looked up against the new graph.
 pub fn clear_selection(ctx: &egui::Context) {
@@ -62,6 +66,11 @@ pub struct SelectedNode {
 struct GraphViewer {
     selected: Option<SelectedNode>,
     pinned: Option<GraphNodeId>,
+    /// Node currently being renamed via double-click on its header label, the in-progress edit
+    /// buffer, and whether the text edit still needs its one-time initial focus request - only
+    /// requested once, since re-requesting on a later frame would clobber the focus loss that
+    /// `TextEdit` itself triggers on Enter, right before `lost_focus()` is checked.
+    renaming: Option<(NodeId, String, bool)>,
     terrain_graph: TerrainInstanceHolder
 }
 impl SnarlViewer<GraphNode> for GraphViewer {
@@ -70,8 +79,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         self.terrain_graph
             .read()
             .graph()
-            .node(*graph_id)
-            .map(|n| n.label().to_string())
+            .display_name(*graph_id)
             .unwrap_or_default()
     }
     fn inputs(&mut self, node: &GraphNode) -> usize {
@@ -157,11 +165,58 @@ impl SnarlViewer<GraphNode> for GraphViewer {
                 );
                 widgets::paint_node_icon(ui, rect, icon, color);
             }
-            ui.label(
-                egui::RichText::new(label)
-                    .color(color)
-                    .font(theme::heading_font(theme::fonts::FONT_SIZE_NODE_TITLE))
-            );
+            if self.renaming.as_ref().is_some_and(|(id, _, _)| *id == node) {
+                let needs_focus = self.renaming.as_ref().expect("checked above").2;
+                let buffer = &mut self.renaming.as_mut().expect("checked above").1;
+                let response = ui.add(
+                    egui::TextEdit::singleline(buffer)
+                        .font(theme::heading_font(theme::fonts::FONT_SIZE_NODE_TITLE))
+                        .text_color(color)
+                        .desired_width(120.0)
+                );
+                if needs_focus {
+                    response.request_focus();
+                    self.renaming.as_mut().expect("checked above").2 = false;
+                }
+                if response.lost_focus() {
+                    let escaped = ui.input(|i| i.key_pressed(egui::Key::Escape));
+                    if let Some((_, text, _)) = self.renaming.take()
+                        && !escaped
+                    {
+                        let GraphNode::Main(graph_id) = instance[node];
+                        let type_label = self
+                            .terrain_graph
+                            .read()
+                            .graph()
+                            .node(graph_id)
+                            .map(|n| n.label().to_string())
+                            .unwrap_or_default();
+                        let trimmed = text.trim();
+                        let new_name = (!trimmed.is_empty() && trimmed != type_label)
+                            .then(|| trimmed.to_string());
+                        if let Err(e) = self
+                            .terrain_graph
+                            .write()
+                            .graph_mut()
+                            .set_custom_name(graph_id, new_name)
+                        {
+                            error!("Failed to rename node: {}", e);
+                        }
+                    }
+                }
+            } else {
+                let response = ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(label)
+                            .color(color)
+                            .font(theme::heading_font(theme::fonts::FONT_SIZE_NODE_TITLE))
+                    )
+                    .sense(egui::Sense::click())
+                );
+                if response.double_clicked() {
+                    self.renaming = Some((node, self.title(&instance[node]), true));
+                }
+            }
 
             let pinned = self.is_pinned(node, instance);
             let (pin_rect, pin_response) =
@@ -300,6 +355,82 @@ impl SnarlViewer<GraphNode> for GraphViewer {
         }
     }
 
+    fn has_node_menu(&mut self, _node: &GraphNode) -> bool {
+        true
+    }
+    fn show_node_menu(
+        &mut self,
+        node: NodeId,
+        _inputs: &[InPin],
+        _outputs: &[OutPin],
+        ui: &mut egui::Ui,
+        snarl: &mut Snarl<GraphNode>
+    ) {
+        // Match the styling of the graph's "Add Node" menu so this popup isn't inconsistent.
+        ui.set_style(theme::menu_style());
+
+        let label = self.title(&snarl[node]);
+        ui.label(
+            egui::RichText::new(label)
+                .color(theme::palette::TEXT_MUTED)
+                .font(theme::heading_font(theme::fonts::FONT_SIZE_SMALL))
+        );
+        ui.add_space(2.0);
+        ui.separator();
+        ui.add_space(2.0);
+
+        let pinned = self.is_pinned(node, snarl);
+        if ui
+            .button(if pinned { "Unpin Node" } else { "Pin Node" })
+            .clicked()
+        {
+            self.toggle_pin(node, snarl);
+            ui.close();
+        }
+
+        if self.outputs_height(&snarl[node]) {
+            let pinned_mesh = self.is_pinned_mesh(node, snarl);
+            if ui
+                .button(if pinned_mesh {
+                    "Unpin Mesh Shape"
+                } else {
+                    "Pin Mesh Shape"
+                })
+                .clicked()
+            {
+                self.toggle_pin_mesh(node, snarl);
+                ui.close();
+            }
+        }
+
+        if self.has_any_output(&snarl[node]) {
+            let marked = self.is_marked_for_export(node, snarl);
+            if ui
+                .button(if marked {
+                    "Remove from Export"
+                } else {
+                    "Mark for Export"
+                })
+                .clicked()
+            {
+                self.toggle_marked_for_export(node, snarl);
+                ui.close();
+            }
+        }
+
+        ui.add_space(2.0);
+        ui.separator();
+        ui.add_space(2.0);
+
+        if ui
+            .button(egui::RichText::new("Delete Node").color(theme::palette::HIGHLIGHT_ERROR))
+            .clicked()
+        {
+            self.remove_node(node, snarl);
+            ui.close();
+        }
+    }
+
     fn node_frame(
         &mut self,
         default: egui::Frame,
@@ -334,6 +465,7 @@ impl SnarlViewer<GraphNode> for GraphViewer {
     ) {
         let GraphNode::Main(graph_id) = snarl[node];
         self.draw_pinned_frame(node, rect, ui, snarl);
+        self.draw_export_frame(node, rect, ui, snarl);
 
         let to_global = ui
             .ctx()
@@ -384,6 +516,17 @@ impl GraphViewer {
             .is_some_and(|s| s.dtype == node::SocketDtype::Fixed(node::NodePortType::Height))
     }
 
+    /// Whether `node` has any output at all - the "Mark for Export" menu entry's eligibility:
+    /// Height, Mask and Color outputs are all exportable (see `panel_export`).
+    fn has_any_output(&self, node: &GraphNode) -> bool {
+        let GraphNode::Main(graph_id) = node;
+        self.terrain_graph
+            .read()
+            .graph()
+            .node(*graph_id)
+            .is_ok_and(|n| !n.outputs().is_empty())
+    }
+
     fn is_pinned_mesh(&self, node: NodeId, snarl: &GraphInstance) -> bool {
         let GraphNode::Main(graph_id) = &snarl[node];
         self.terrain_graph.read().pinned_mesh_node() == Some(*graph_id)
@@ -394,6 +537,18 @@ impl GraphViewer {
         let mut terrain = self.terrain_graph.write();
         let new_value = (terrain.pinned_mesh_node() != Some(*graph_id)).then_some(*graph_id);
         terrain.set_pinned_mesh_node(new_value);
+    }
+
+    fn is_marked_for_export(&self, node: NodeId, snarl: &GraphInstance) -> bool {
+        let GraphNode::Main(graph_id) = &snarl[node];
+        self.terrain_graph.read().is_marked_for_export(*graph_id)
+    }
+
+    fn toggle_marked_for_export(&self, node: NodeId, snarl: &GraphInstance) {
+        let GraphNode::Main(graph_id) = &snarl[node];
+        self.terrain_graph
+            .write()
+            .toggle_marked_for_export(*graph_id);
     }
 
     fn draw_pinned_frame(
@@ -416,6 +571,27 @@ impl GraphViewer {
             .map(|node| theme::category_color(node.category()))
             .unwrap_or(theme::palette::TEXT_MUTED);
         draw_dashed_rect(ui, rect.expand(1.5), color, 1.5, 5.0, 3.0);
+    }
+
+    /// Solid border (as opposed to `draw_pinned_frame`'s dashed one) so the two states read as
+    /// visually distinct at a glance.
+    fn draw_export_frame(
+        &self,
+        node: NodeId,
+        rect: egui::Rect,
+        ui: &egui::Ui,
+        snarl: &GraphInstance
+    ) {
+        if !self.is_marked_for_export(node, snarl) {
+            return;
+        }
+
+        ui.painter().rect_stroke(
+            rect.expand(1.5),
+            egui::CornerRadius::ZERO,
+            egui::Stroke::new(1.5, theme::palette::EXPORT_ACCENT),
+            egui::StrokeKind::Outside
+        );
     }
 
     /// Applies the selection highlight stroke only when `node` is selected.
@@ -478,12 +654,20 @@ impl GraphViewer {
             if self.terrain_graph.read().pinned_mesh_node() == Some(*graph_id) {
                 self.terrain_graph.write().set_pinned_mesh_node(None);
             }
+            if self.terrain_graph.read().is_marked_for_export(*graph_id) {
+                self.terrain_graph
+                    .write()
+                    .set_marked_for_export(*graph_id, false);
+            }
             snarl.remove_node(node);
             if self
                 .selected
                 .is_some_and(|selected| selected.snarl_id == node)
             {
                 self.selected = None;
+            }
+            if self.renaming.as_ref().is_some_and(|(id, _, _)| *id == node) {
+                self.renaming = None;
             }
         } else {
             error!("Failed to remove node.");
@@ -656,6 +840,9 @@ pub fn show_graph(
         pinned: ui
             .ctx()
             .data(|d| d.get_temp::<GraphNodeId>(pinned_nodes_id())),
+        renaming: ui
+            .ctx()
+            .data(|d| d.get_temp::<(NodeId, String, bool)>(renaming_node_id())),
         terrain_graph
     };
     if viewer.selected.is_none()
@@ -689,6 +876,10 @@ pub fn show_graph(
             .ctx()
             .data_mut(|d| d.remove::<SelectedNode>(selected_node_id))
     }
+    ui.ctx().data_mut(|d| match viewer.renaming.clone() {
+        Some(renaming) => d.insert_temp(renaming_node_id(), renaming),
+        None => d.remove::<(NodeId, String, bool)>(renaming_node_id())
+    });
     ui.ctx().data_mut(|d| match viewer.pinned {
         Some(graph_id) => d.insert_temp(pinned_nodes_id(), graph_id),
         None => d.remove::<GraphNodeId>(pinned_nodes_id())

@@ -36,7 +36,14 @@ pub fn draw_properties(
                             .graph()
                             .node(graph_id)
                             .expect("Selected node should exist in the graph");
-                        (node.label().to_string(), node.category(), node.icon())
+                        (
+                            terrain_graph_read
+                                .graph()
+                                .display_name(graph_id)
+                                .unwrap_or_default(),
+                            node.category(),
+                            node.icon()
+                        )
                     };
                     let color = theme::category_color(category);
 

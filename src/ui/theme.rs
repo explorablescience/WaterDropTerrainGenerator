@@ -59,7 +59,11 @@ pub mod palette {
     pub const CATEGORY_DATA_EXTRACTION: Color32 = Color32::from_rgb(187, 157, 205);
     pub const CATEGORY_TEXTURING: Color32 = Color32::from_rgb(209, 153, 192);
     pub const CATEGORY_UTILITY: Color32 = Color32::from_rgb(173, 169, 164);
-    pub const CATEGORY_EXPORT: Color32 = Color32::from_rgb(199, 202, 119);
+
+    /// Accent for the "Terrain / Export" panel and the graph's export-mark indicator - kept
+    /// separate from the category colors above since export is a cross-cutting action, not a
+    /// `NodeCategory`.
+    pub const EXPORT_ACCENT: Color32 = Color32::from_rgb(199, 202, 119);
 
     // Neutral default fill for graph pins before a category color is applied.
     pub const PIN_DEFAULT: Color32 = Color32::from_rgb(120, 120, 120);
@@ -110,8 +114,7 @@ pub fn category_color(category: NodeCategory) -> egui::Color32 {
         NodeCategory::Simulation => palette::CATEGORY_SIMULATION,
         NodeCategory::DataExtraction => palette::CATEGORY_DATA_EXTRACTION,
         NodeCategory::Texturing => palette::CATEGORY_TEXTURING,
-        NodeCategory::Utility => palette::CATEGORY_UTILITY,
-        NodeCategory::Export => palette::CATEGORY_EXPORT
+        NodeCategory::Utility => palette::CATEGORY_UTILITY
     }
 }
 

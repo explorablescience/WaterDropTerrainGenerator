@@ -231,10 +231,12 @@ impl Node for SatMap {
         ICON
     }
 
+    /// Generic: accepts a Height or a Mask (e.g. a `Slope` output) alike - either is just a
+    /// scalar remapped onto the gradient by `t = (v - min_height) / (max_height - min_height)`.
     fn inputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
-            name: "Height",
-            dtype: SocketDtype::Fixed(NodePortType::Height),
+            name: "Input",
+            dtype: SocketDtype::Generic,
             required: true
         }]
     }

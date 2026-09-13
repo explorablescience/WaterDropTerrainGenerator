@@ -7,6 +7,7 @@ use crate::{
     ui::{
         editor::EditorPanelsPlugin,
         footer::FooterPlugin,
+        panel_export::draw_export_panel,
         panel_graph::{GraphEditorState, GraphNode},
         panel_tasks::draw_active_tasks,
         panel_terrain_settings::draw_terrain_settings
@@ -16,6 +17,7 @@ use crate::{
 mod editor;
 mod editor_behavior;
 mod footer;
+mod panel_export;
 mod panel_graph;
 mod panel_properties;
 mod panel_tasks;
@@ -34,7 +36,8 @@ impl Plugin for UIPlugin {
             .add_systems(Startup, (install_theme, initialize_default_graph))
             .add_systems(
                 Update,
-                (draw_terrain_settings, draw_active_tasks).after(EditorMenuBarSet)
+                (draw_terrain_settings, draw_active_tasks, draw_export_panel)
+                    .after(EditorMenuBarSet)
             );
     }
 }

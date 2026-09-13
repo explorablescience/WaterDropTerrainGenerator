@@ -8,9 +8,7 @@ fn every_expected_node_type_is_registered() {
         "Flat",
         "Perlin",
         "Combine",
-        "Load File",
-        "Mountain",
-        "Export"
+        "Mountain"
     ] {
         assert!(
             labels.contains(&expected),

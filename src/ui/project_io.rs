@@ -49,7 +49,13 @@ struct SavedNode {
     /// sync - see the node's own `inventory::submit!`.
     type_label: String,
     position: (f32, f32),
-    params: Vec<(String, NParamValue)>
+    params: Vec<(String, NParamValue)>,
+    #[serde(default)]
+    custom_name: Option<String>,
+    /// Whether this node is marked for the "Terrain / Export" panel. Defaulted for project files
+    /// saved before this field existed.
+    #[serde(default)]
+    marked_for_export: bool
 }
 
 #[derive(Serialize, Deserialize)]
@@ -127,7 +133,13 @@ fn save_project(
                 id: graph_id.0,
                 type_label: n.label().to_string(),
                 position: (pos.x, pos.y),
-                params
+                params,
+                custom_name: graph
+                    .custom_name(*graph_id)
+                    .ok()
+                    .flatten()
+                    .map(str::to_string),
+                marked_for_export: session.is_marked_for_export(*graph_id)
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -189,7 +201,13 @@ fn load_project(
                 );
             }
         }
-        graph_ids.insert(saved.id, graph.add_node(instance));
+        let graph_id = graph.add_node(instance);
+        if saved.custom_name.is_some() {
+            graph
+                .set_custom_name(graph_id, saved.custom_name.clone())
+                .map_err(|e| e.to_string())?;
+        }
+        graph_ids.insert(saved.id, graph_id);
     }
     for edge in &file.edges {
         let (Some(&from), Some(&to)) =
@@ -229,6 +247,12 @@ fn load_project(
         );
     }
 
-    terrain_graph.write().reset_graph(graph);
+    let mut session = terrain_graph.write();
+    session.reset_graph(graph);
+    for saved in &file.nodes {
+        if saved.marked_for_export {
+            session.set_marked_for_export(graph_ids[&saved.id], true);
+        }
+    }
     Ok(())
 }
