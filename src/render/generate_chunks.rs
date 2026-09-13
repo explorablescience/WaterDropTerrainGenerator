@@ -5,7 +5,12 @@ use wde::prelude::*;
 
 use crate::{
     TerrainInstanceHolder,
-    core::{CacheUuid, graph::GraphNodeId, node::NodeLocality, tiling::ChunkCoord},
+    core::{
+        CacheUuid,
+        graph::GraphNodeId,
+        node::{NodeLocality, NodePortType},
+        tiling::ChunkCoord
+    },
     render::{
         chunk_array::{ChunkInstance, TerrainPreviewSync},
         generate_chunks_global::update_render_chunks_global,
@@ -14,10 +19,29 @@ use crate::{
     }
 };
 
+/// Which node drives the preview's mesh shape vs. its colormap overlay - bundled together to keep
+/// `update_render_chunks_local`/`_global`'s argument count down.
+pub(super) struct RenderTarget {
+    pub(super) render_node: GraphNodeId,
+    pub(super) render_dtype: Option<NodePortType>,
+    pub(super) mesh_node: Option<GraphNodeId>
+}
+impl RenderTarget {
+    pub(super) fn renders_color(&self) -> bool {
+        matches!(
+            self.render_dtype,
+            Some(NodePortType::Color) | Some(NodePortType::Mask)
+        )
+    }
+}
+
 pub(super) struct ChunkPreview {
     pub(super) core_data: Vec<f32>,
     /// Whether `core_data` is the flat fallback shown when this chunk's node can't be evaluated.
-    pub(super) is_flat: bool
+    pub(super) is_flat: bool,
+    /// RGBA (alpha always 1.0), present only when the rendered node's output is Color/Mask - `None`
+    /// uploads as flat white, leaving Height-only rendering visually unchanged.
+    pub(super) color_data: Option<Vec<f32>>
 }
 
 #[derive(Resource, Default)]
@@ -35,7 +59,12 @@ pub struct TerrainPreview {
     heightmap_array: Option<Handle<Texture>>,
     /// `(padded texel size, layer count)` the current `heightmap_array` was built with.
     array_dims: Option<(u32, u32)>,
-    pending_layer_writes: Vec<(u32, Vec<f32>)>
+    pending_layer_writes: Vec<(u32, Vec<f32>)>,
+    colormap_array: Option<Handle<Texture>>,
+    /// `(unpadded texel size, layer count)` the current `colormap_array` was built with - the
+    /// colormap array needs no border padding since it isn't used for normal computation.
+    color_array_dims: Option<(u32, u32)>,
+    pending_color_writes: Vec<(u32, Vec<f32>)>
 }
 impl TerrainPreview {
     pub(super) fn has_mesh(&self) -> bool {
@@ -64,16 +93,36 @@ pub(crate) fn update_render_chunks(
     mut terrain_preview: ResMut<TerrainPreview>,
     mut terrain_preview_sync: ResMut<TerrainPreviewSync>,
     terrain: Res<TerrainInstanceHolder>,
-    mut old_selected_node: Local<Option<GraphNodeId>>
+    mut old_selected_node: Local<Option<GraphNodeId>>,
+    mut old_mesh_node: Local<Option<GraphNodeId>>
 ) {
-    let Some(selected_node) = terrain.read().selected_node() else {
+    let Some(render_node) = terrain.read().selected_node() else {
         return;
     };
 
-    // Switching to a different node makes every previously-tracked uuid meaningless - clearing
-    // them forces a full re-stitch/re-upload once the new node's data is ready.
-    if *old_selected_node != Some(selected_node) {
-        *old_selected_node = Some(selected_node);
+    // A Height-output node always drives its own mesh, as before. Otherwise (Color/Mask), the
+    // pinned mesh node supplies the shape instead - but only if it shares the rendered node's
+    // locality, since a Local/Global mismatch can't be reconciled without a real graph connection.
+    let (render_dtype, mesh_node) = {
+        let terrain = terrain.read();
+        let graph = terrain.graph();
+        let render_dtype = graph.output_dtype(render_node, 0);
+        let mesh_node = if render_dtype == Some(NodePortType::Height) {
+            Some(render_node)
+        } else {
+            terrain.pinned_mesh_node().filter(|&mesh_node| {
+                graph.node(mesh_node).ok().map(|n| n.locality())
+                    == graph.node(render_node).ok().map(|n| n.locality())
+            })
+        };
+        (render_dtype, mesh_node)
+    };
+
+    // Switching the rendered node or its mesh source makes every previously-tracked uuid
+    // meaningless - clearing them forces a full re-stitch/re-upload once new data is ready.
+    if *old_selected_node != Some(render_node) || *old_mesh_node != mesh_node {
+        *old_selected_node = Some(render_node);
+        *old_mesh_node = mesh_node;
         terrain_preview.chunk_uuids.clear();
         terrain_preview.global_uuid = None;
     }
@@ -82,9 +131,14 @@ pub(crate) fn update_render_chunks(
         Some(handle) => handle.clone(),
         None => return // Material not created yet
     };
-    let node_locality = match terrain.read().graph().node(selected_node) {
+    let node_locality = match terrain.read().graph().node(render_node) {
         Ok(node) => node.locality(),
         Err(_) => return // Selected node no longer exists
+    };
+    let target = RenderTarget {
+        render_node,
+        render_dtype,
+        mesh_node
     };
     match node_locality {
         NodeLocality::Global { native_resolution } => update_render_chunks_global(
@@ -93,7 +147,7 @@ pub(crate) fn update_render_chunks(
             &mut terrain_preview_sync,
             &terrain,
             material_handle,
-            selected_node,
+            &target,
             native_resolution
         ),
         NodeLocality::Local => update_render_chunks_local(
@@ -102,7 +156,7 @@ pub(crate) fn update_render_chunks(
             &mut terrain_preview_sync,
             &terrain,
             material_handle,
-            selected_node
+            &target
         )
     }
 }
@@ -124,7 +178,29 @@ pub(super) fn set_chunk_data(
                 chunk,
                 ChunkPreview {
                     core_data: data,
-                    is_flat
+                    is_flat,
+                    color_data: None
+                }
+            );
+        }
+    }
+}
+
+/// Sets (or clears, with `None`) `chunk`'s RGBA overlay data - `None` uploads as flat white.
+pub(super) fn set_chunk_color_data(
+    terrain_preview: &mut TerrainPreview,
+    chunk: ChunkCoord,
+    color_data: Option<Vec<f32>>
+) {
+    match terrain_preview.chunks.get_mut(&chunk) {
+        Some(preview) => preview.color_data = color_data,
+        None => {
+            terrain_preview.chunks.insert(
+                chunk,
+                ChunkPreview {
+                    core_data: Vec::new(),
+                    is_flat: false,
+                    color_data
                 }
             );
         }
@@ -135,6 +211,11 @@ pub(super) fn set_chunk_data(
 /// array. Actually uploaded next render frame by [`crate::render::chunk_array::sync_terrain_preview_gpu`].
 pub(super) fn queue_layer_write(terrain_preview: &mut TerrainPreview, layer: u32, data: Vec<f32>) {
     terrain_preview.pending_layer_writes.push((layer, data));
+}
+
+/// Queues `chunk`'s RGBA colormap data for upload into `layer` of the colormap texture array.
+pub(super) fn queue_color_write(terrain_preview: &mut TerrainPreview, layer: u32, data: Vec<f32>) {
+    terrain_preview.pending_color_writes.push((layer, data));
 }
 
 /// Ensures the shared chunk mesh and heightmap texture array match `size`/`instances.len()`,
@@ -195,9 +276,40 @@ pub(super) fn sync_preview_state(
         }
     }
 
+    // Recreate the colormap array in lockstep with the heightmap one - no padding needed since it
+    // isn't used for normal computation, so its per-layer size is the unpadded `size`.
+    if terrain_preview.color_array_dims != Some((size as u32, layer_count)) {
+        terrain_preview.colormap_array = Some(asset_server.add(Texture {
+            label: "terrain-preview-colormap-array".to_string(),
+            size: (size as u32, size as u32),
+            format: TextureFormat::Rgba32Float,
+            usages: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::STORAGE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::COPY_SRC,
+            layer_count,
+            filterable: false,
+            ..Default::default()
+        }));
+        terrain_preview.color_array_dims = Some((size as u32, layer_count));
+
+        for (&chunk, preview) in &terrain_preview.chunks {
+            let data = preview
+                .color_data
+                .clone()
+                .unwrap_or_else(|| vec![1.0; size * size * 4]);
+            terrain_preview
+                .pending_color_writes
+                .push((layer_of(chunk), data));
+        }
+    }
+
     terrain_preview_sync.heightmap_array = terrain_preview.heightmap_array.clone();
+    terrain_preview_sync.colormap_array = terrain_preview.colormap_array.clone();
     terrain_preview_sync.mesh = terrain_preview.mesh.clone();
     terrain_preview_sync.material = Some(material_handle);
     terrain_preview_sync.instances = instances;
     terrain_preview_sync.pending_writes = std::mem::take(&mut terrain_preview.pending_layer_writes);
+    terrain_preview_sync.pending_color_writes =
+        std::mem::take(&mut terrain_preview.pending_color_writes);
 }

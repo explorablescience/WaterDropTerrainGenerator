@@ -11,6 +11,7 @@ struct VertexOutput {
     @location(2) tangent_world: vec4<f32>,
     @location(3) bitangent_world: vec3<f32>,
     @location(4) ndc_z: f32,
+    @location(5) @interpolate(flat) layer: u32,
 };
 
 struct Material3dUniform {
@@ -30,6 +31,10 @@ struct Material3dUniform {
 @group(1) @binding(7) var in_occlusion_texture: texture_2d<f32>;
 @group(1) @binding(8) var in_occlusion_sampler: sampler;
 
+// Colormap preview overlay: unpadded, one layer per chunk, defaults to flat white so a Height-only
+// node's rendering is untouched (see `TerrainPreview::color_array_dims` on the Rust side).
+@group(3) @binding(1) var in_colormap: texture_2d_array<f32>;
+
 @fragment
 fn main(in: VertexOutput) -> FragOutput {
     var out: FragOutput;
@@ -41,6 +46,14 @@ fn main(in: VertexOutput) -> FragOutput {
     if (in_pbr_material.flags.x == 1.0) {
         albedo_color = textureSample(in_albedo_texture, in_albedo_sampler, in.tex_coord).rgb;
     }
+
+    let colormap_size = i32(textureDimensions(in_colormap).x);
+    let colormap_texel = clamp(
+        vec2<i32>(round(in.tex_coord * f32(colormap_size))),
+        vec2<i32>(0),
+        vec2<i32>(colormap_size - 1)
+    );
+    albedo_color *= textureLoad(in_colormap, colormap_texel, i32(in.layer), 0).rgb;
     if (in_pbr_material.flags.y == 1.0) {
         metallic_value = textureSample(in_metallic_roughness_texture, in_metallic_roughness_sampler, in.tex_coord).b;
     }

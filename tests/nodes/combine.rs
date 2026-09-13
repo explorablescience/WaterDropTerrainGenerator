@@ -23,6 +23,14 @@ fn tile(pool: &Arc<TilePool>, values: &[f32]) -> TileHandle {
     Arc::new(t)
 }
 
+fn color_tile(pool: &Arc<TilePool>, r: &[f32], g: &[f32], b: &[f32]) -> TileHandle {
+    let mut t = pool.allocate_channels(3);
+    t.plane_mut(0).copy_from_slice(r);
+    t.plane_mut(1).copy_from_slice(g);
+    t.plane_mut(2).copy_from_slice(b);
+    Arc::new(t)
+}
+
 fn set_method(node: &mut Combine, method: &str) {
     node.set_param("method", NParamValue::Enum(method.to_string()))
         .unwrap();
@@ -111,6 +119,19 @@ fn difference_is_the_absolute_gap() {
     set_method(&mut node, "Difference");
     let out = node.process(&pool, &[a, b], &cpu_ctx()).unwrap();
     assert_close(&out[0], &[3.0, 3.0, 0.0, 3.0]);
+}
+
+#[test]
+fn combines_multi_channel_color_tiles_elementwise_per_channel() {
+    let pool = TilePool::new(1);
+    let a = color_tile(&pool, &[1.0], &[2.0], &[3.0]);
+    let b = color_tile(&pool, &[5.0], &[6.0], &[7.0]);
+    let mut node = Combine::default();
+    set_method(&mut node, "Add");
+    let out = node.process(&pool, &[a, b], &cpu_ctx()).unwrap();
+    assert_close(out[0].plane(0), &[6.0]);
+    assert_close(out[0].plane(1), &[8.0]);
+    assert_close(out[0].plane(2), &[10.0]);
 }
 
 #[test]

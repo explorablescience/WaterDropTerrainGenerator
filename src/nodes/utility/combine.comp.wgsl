@@ -1,6 +1,6 @@
 struct Params {
     strength: vec4<f32>,
-    method: vec4<u32>, // [method_id, tile_size, unused, unused]
+    method: vec4<u32>, // [method_id, tile_size, channels, unused]
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -32,6 +32,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
 
-    let idx = gid.y * size + gid.x;
-    output[idx] = combine_val(input_a[idx], input_b[idx], params.method.x, params.strength.x);
+    let plane = size * size;
+    let texel = gid.y * size + gid.x;
+    for (var c = 0u; c < params.method.z; c = c + 1u) {
+        let idx = c * plane + texel;
+        output[idx] = combine_val(input_a[idx], input_b[idx], params.method.x, params.strength.x);
+    }
 }

@@ -56,10 +56,13 @@ impl RenderBinding for TerrainPreviewInstancesBinding {
     }
 }
 
-/// Bind group exposing the heightmap texture array to the vertex shader.
+/// Bind group exposing the heightmap and colormap texture arrays to the vertex/fragment shaders
+/// (`@group(3) @binding(0)`/`@binding(1)` respectively - binding index is just the position each
+/// is added at below).
 #[derive(Asset, Clone, TypePath, Default)]
 pub(crate) struct TerrainPreviewArrayBg {
-    pub heightmap_array: Option<Handle<Texture>>
+    pub heightmap_array: Option<Handle<Texture>>,
+    pub colormap_array: Option<Handle<Texture>>
 }
 impl RenderBinding for TerrainPreviewArrayBg {
     type Params = ();
@@ -70,6 +73,7 @@ impl RenderBinding for TerrainPreviewArrayBg {
         builder: &mut RenderBindingBuilder
     ) {
         builder.add_texture_array_view_from_id(self.heightmap_array.as_ref().map(|h| h.id()));
+        builder.add_texture_array_view_from_id(self.colormap_array.as_ref().map(|h| h.id()));
     }
 
     fn label(&self) -> &str {
@@ -81,11 +85,14 @@ impl RenderBinding for TerrainPreviewArrayBg {
 #[derive(Resource, Default, Clone, ExtractResource)]
 pub(crate) struct TerrainPreviewSync {
     pub heightmap_array: Option<Handle<Texture>>,
+    pub colormap_array: Option<Handle<Texture>>,
     pub mesh: Option<Handle<Mesh>>,
     pub material: Option<Handle<PbrMaterial>>,
     pub instances: Vec<ChunkInstance>,
     /// `(layer, padded heightmap data)` pairs queued since the last sync
-    pub pending_writes: Vec<(u32, Vec<f32>)>
+    pub pending_writes: Vec<(u32, Vec<f32>)>,
+    /// `(layer, RGBA colormap data)` pairs queued since the last sync
+    pub pending_color_writes: Vec<(u32, Vec<f32>)>
 }
 
 /// Render-world-only state that persists across frames.
@@ -93,10 +100,12 @@ pub(crate) struct TerrainPreviewSync {
 pub(crate) struct TerrainPreviewGpu {
     pub ready: bool,
     pub heightmap_array: Option<Handle<Texture>>,
+    pub colormap_array: Option<Handle<Texture>>,
     pub bind_group: Option<Handle<TerrainPreviewArrayBg>>,
     pub chunk_count: u32,
     /// Writes not yet applied to the GPU texture, retried each frame until it succeeds.
-    pub pending_writes: Vec<(u32, Vec<f32>)>
+    pub pending_writes: Vec<(u32, Vec<f32>)>,
+    pub pending_color_writes: Vec<(u32, Vec<f32>)>
 }
 
 /// Uploads dirty heightmap layers, rewrites the instance buffer, and (re)creates the array bind
@@ -119,26 +128,36 @@ pub(crate) fn sync_terrain_preview_gpu(
         );
     }
 
-    // Recreate the bind group whenever the heightmap array's handle changed
-    if sync.heightmap_array != gpu.heightmap_array {
+    // Recreate the bind group whenever either array's handle changed
+    if sync.heightmap_array != gpu.heightmap_array || sync.colormap_array != gpu.colormap_array {
         gpu.heightmap_array = sync.heightmap_array.clone();
+        gpu.colormap_array = sync.colormap_array.clone();
         gpu.bind_group = None;
         gpu.ready = false;
         gpu.pending_writes.clear();
+        gpu.pending_color_writes.clear();
     }
     if gpu.bind_group.is_none()
         && let Some(heightmap_array) = &gpu.heightmap_array
+        && let Some(colormap_array) = &gpu.colormap_array
     {
         gpu.bind_group = Some(asset_server.add(TerrainPreviewArrayBg {
-            heightmap_array: Some(heightmap_array.clone())
+            heightmap_array: Some(heightmap_array.clone()),
+            colormap_array: Some(colormap_array.clone())
         }));
     }
     gpu.ready = gpu.bind_group.is_some();
 
     // Queue this frame's new writes
-    if sync.is_changed() && !sync.pending_writes.is_empty() {
-        gpu.pending_writes
-            .extend(sync.pending_writes.iter().cloned());
+    if sync.is_changed() {
+        if !sync.pending_writes.is_empty() {
+            gpu.pending_writes
+                .extend(sync.pending_writes.iter().cloned());
+        }
+        if !sync.pending_color_writes.is_empty() {
+            gpu.pending_color_writes
+                .extend(sync.pending_color_writes.iter().cloned());
+        }
     }
 
     // Flush as much of the queue as the GPU texture will currently accept
@@ -148,6 +167,20 @@ pub(crate) fn sync_terrain_preview_gpu(
     {
         let render_instance = render_instance.0.read().unwrap();
         for (layer, data) in gpu.pending_writes.drain(..) {
+            tex.texture.copy_from_buffer_layered(
+                &render_instance,
+                tex.texture.format,
+                layer,
+                bytemuck::cast_slice(&data)
+            );
+        }
+    }
+    if !gpu.pending_color_writes.is_empty()
+        && let Some(colormap_array) = &gpu.colormap_array
+        && let Some(tex) = textures.get(colormap_array)
+    {
+        let render_instance = render_instance.0.read().unwrap();
+        for (layer, data) in gpu.pending_color_writes.drain(..) {
             tex.texture.copy_from_buffer_layered(
                 &render_instance,
                 tex.texture.format,

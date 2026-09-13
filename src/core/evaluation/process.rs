@@ -675,13 +675,17 @@ fn resample_tile(
     src_size: usize,
     src_ctx: &TileContext
 ) -> TileHandle {
-    let mut output = dst_pool.allocate();
+    let mut output = dst_pool.allocate_channels(src.channels());
     let s = output.size();
-    for y in 0..s {
-        for x in 0..s {
-            let world = dst_ctx.world_pos(x, y);
-            let (sx, sy) = src_ctx.to_texel(world);
-            output[y * s + x] = bilinear_sample(src, src_size, sx, sy);
+    for c in 0..src.channels() {
+        let src_plane = src.plane(c);
+        let dst_plane = output.plane_mut(c);
+        for y in 0..s {
+            for x in 0..s {
+                let world = dst_ctx.world_pos(x, y);
+                let (sx, sy) = src_ctx.to_texel(world);
+                dst_plane[y * s + x] = bilinear_sample(src_plane, src_size, sx, sy);
+            }
         }
     }
     Arc::new(output)
@@ -696,9 +700,11 @@ fn crop_tile_into(
     if full_size == target_size {
         return Arc::clone(tile);
     }
-    let cropped = crop_padding(tile, full_size, target_size);
-    let mut out = pool.allocate();
-    out.copy_from_slice(&cropped);
+    let mut out = pool.allocate_channels(tile.channels());
+    for c in 0..tile.channels() {
+        let cropped = crop_padding(tile.plane(c), full_size, target_size);
+        out.plane_mut(c).copy_from_slice(&cropped);
+    }
     Arc::new(out)
 }
 

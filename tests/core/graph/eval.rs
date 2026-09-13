@@ -3,7 +3,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use waterdrop_terrain_generator::core::graph::{GraphNodeId, NodeGraph};
 use waterdrop_terrain_generator::core::node::{
-    NParamValue, Node, NodeCategory, NodeError, NodeIcon, NodeLocality, NodePortType, NodeSocket
+    NParamValue, Node, NodeCategory, NodeError, NodeIcon, NodeLocality, NodePortType, NodeSocket,
+    SocketDtype
 };
 use waterdrop_terrain_generator::core::tiling::{
     ChunkCoord, ChunkGrid, ComputeTarget, TileContext
@@ -286,7 +287,7 @@ impl Node for FakeSlowSource {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }
@@ -340,7 +341,7 @@ impl Node for FakeGlobalSource {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }
@@ -379,7 +380,7 @@ impl Node for FakeCountingSource {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }
@@ -449,14 +450,14 @@ impl Node for FakePassthroughSink {
     fn inputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }
@@ -538,7 +539,7 @@ impl Node for FakeLocalWorldXMarker {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }
@@ -707,7 +708,7 @@ impl Node for FakeGlobalWorldXMarker {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }

@@ -20,6 +20,7 @@ struct VertexOutput {
     @location(2) tangent_world: vec4<f32>,        // Tangent in world space
     @location(3) bitangent_world: vec3<f32>,      // Bitangent in world space
     @location(4) ndc_z: f32,                      // Linear view-space depth (-view_z, always positive)
+    @location(5) @interpolate(flat) layer: u32,   // Colormap array layer - instance_index isn't available in the fragment stage
 };
 
 @group(0) @binding(0) var<uniform> in_camera: Camera;
@@ -60,6 +61,7 @@ fn main(@builtin(instance_index) instance: u32, in: VertexInput) -> VertexOutput
     out.ndc_z = -view_pos4.z;
 
     out.tex_coord = in.uv;
+    out.layer = chunk.layer;
 
     // Central-difference slope -> smooth per-vertex normal (same formula as the old CPU bake).
     let dx = h_r - h_l;

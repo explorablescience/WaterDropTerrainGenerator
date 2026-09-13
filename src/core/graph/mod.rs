@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use crate::core::evaluation::{TileArena, TilePool};
-use crate::core::node::{Node, NodeError};
+use crate::core::node::{Node, NodeError, NodePortType};
 use crate::core::tiling::ChunkGrid;
 use crate::core::{Cache, CacheEntry, Processor, TaskSnapshot, TileHandle};
 
@@ -103,6 +103,9 @@ impl NodeGraph {
     /// Every edge currently in the graph, as `(from_node, from_socket, to_node, to_socket)`.
     pub fn edges(&self) -> impl Iterator<Item = (GraphNodeId, usize, GraphNodeId, usize)> + '_ {
         self.topology.edges()
+    }
+    pub fn output_dtype(&self, node_id: GraphNodeId, socket: usize) -> Option<NodePortType> {
+        self.topology.output_dtype(node_id, socket)
     }
 
     /// Marks a node and all its descendants as dirty, indicating that they need to be re-evaluated.

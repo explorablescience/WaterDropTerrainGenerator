@@ -102,18 +102,33 @@ pub trait Node: Debug + Send + Sync {
 /// A node's input or output port, which can be connected to other nodes in the graph.
 pub struct NodeSocket {
     pub name: &'static str,
-    pub dtype: NodePortType,
+    pub dtype: SocketDtype,
     pub required: bool
+}
+
+/// `Generic` resolves at connect-time from whatever's wired into the node's other `Generic`
+/// sockets, which must all agree (see `Topology::connect`) - e.g. `Combine` works on any of
+/// Height, Mask or Color.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SocketDtype {
+    Fixed(NodePortType),
+    Generic
 }
 
 /// A node's input or output port type, which determines what kind of data can flow through it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodePortType {
     Height, // Scalar heightfield (f32 per texel)
-    Mask,   // Same as Height, but used for masks
-    Color,  // RGBA texture
-    Vector, // Vector field (f32x3 per texel)
-    Scalar  // Scalar value (f32) - used for parameters, not textures
+    Mask,   // Scalar mask (f32 per texel)
+    Color   // RGB color (f32 per channel per texel)
+}
+impl NodePortType {
+    pub fn channels(self) -> usize {
+        match self {
+            NodePortType::Height | NodePortType::Mask => 1,
+            NodePortType::Color => 3
+        }
+    }
 }
 
 /// `Local` nodes can be computed independently for each chunk, while `Global` nodes need to be evaluated once over the terrain's whole real-world extent.

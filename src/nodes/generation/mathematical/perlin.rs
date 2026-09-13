@@ -234,7 +234,7 @@ impl Node for Perlin {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }

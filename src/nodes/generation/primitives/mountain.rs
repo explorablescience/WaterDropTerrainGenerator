@@ -90,7 +90,7 @@ impl Node for Mountain {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }

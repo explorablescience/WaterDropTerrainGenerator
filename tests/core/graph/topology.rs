@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use waterdrop_terrain_generator::core::graph::NodeGraph;
 use waterdrop_terrain_generator::core::node::{
-    Node, NodeCategory, NodeError, NodeIcon, NodeLocality, NodePortType, NodeSocket
+    Node, NodeCategory, NodeError, NodeIcon, NodeLocality, NodePortType, NodeSocket, SocketDtype
 };
 use waterdrop_terrain_generator::core::tiling::{ChunkCoord, ChunkGrid};
 use waterdrop_terrain_generator::core::{CacheEntry, TileContext, TileHandle, TilePool};
@@ -32,7 +32,7 @@ impl Node for FakeHeightSource {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }
@@ -66,7 +66,7 @@ impl Node for FakeMaskSink {
     fn inputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Mask",
-            dtype: NodePortType::Mask,
+            dtype: SocketDtype::Fixed(NodePortType::Mask),
             required: true
         }]
     }
@@ -92,14 +92,14 @@ impl Node for FakeOptionalSink {
     fn inputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: false
         }]
     }
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }
@@ -140,7 +140,7 @@ impl Node for FakeGlobalHeightSource {
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }
@@ -193,6 +193,31 @@ fn connecting_mismatched_socket_types_fails() {
     let sink = graph.add_node(Box::new(FakeMaskSink));
 
     let result = graph.connect(source, 0, sink, 0);
+    assert!(matches!(result, Err(NodeError::SocketTypeMismatch { .. })));
+}
+
+#[test]
+fn generic_sockets_accept_whatever_dtype_is_wired_in() {
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
+    let a = graph.add_node(Box::new(FakeHeightSource));
+    let b = graph.add_node(Box::new(FakeHeightSource));
+    let combine = graph.add_node(Box::new(Combine::default()));
+
+    assert!(graph.connect(a, 0, combine, 0).is_ok());
+    assert!(graph.connect(b, 0, combine, 1).is_ok());
+}
+
+#[test]
+fn generic_sockets_on_the_same_node_must_all_resolve_to_the_same_dtype() {
+    let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
+    let height_source = graph.add_node(Box::new(FakeHeightSource));
+    let satmap_height = graph.add_node(Box::new(FakeHeightSource));
+    let color_source = graph.add_node(Box::new(SatMap::default()));
+    graph.connect(satmap_height, 0, color_source, 0).unwrap();
+    let combine = graph.add_node(Box::new(Combine::default()));
+    graph.connect(height_source, 0, combine, 0).unwrap();
+
+    let result = graph.connect(color_source, 0, combine, 1);
     assert!(matches!(result, Err(NodeError::SocketTypeMismatch { .. })));
 }
 

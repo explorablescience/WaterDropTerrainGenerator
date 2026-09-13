@@ -5,7 +5,7 @@ use std::sync::Arc;
 use bevy::tasks::{AsyncComputeTaskPool, TaskPool};
 use waterdrop_terrain_generator::core::node::{
     NParamConstraints, NParamDesc, NParamValue, Node, NodeCategory, NodeError, NodeIcon,
-    NodePortType, NodeSocket
+    NodePortType, NodeSocket, SocketDtype
 };
 use waterdrop_terrain_generator::core::{TileContext, TileHandle, TilePool};
 
@@ -52,14 +52,14 @@ impl Node for FakeKernelNode {
     fn inputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Height",
-            dtype: NodePortType::Height,
+            dtype: SocketDtype::Fixed(NodePortType::Height),
             required: true
         }]
     }

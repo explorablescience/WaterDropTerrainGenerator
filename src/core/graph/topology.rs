@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::core::node::{Node, NodeError, NodeLocality};
+use crate::core::node::{Node, NodeError, NodeLocality, NodePortType, SocketDtype};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GraphNodeId(pub usize);
@@ -68,30 +68,35 @@ impl Topology {
                 node: format!("{:?}", from_node),
                 socket: from_socket
             })?;
-        let from_dtype = from_socket_desc.dtype;
         let from_label = from_socket_desc.name;
 
-        let to_entry = self.entry(to_node)?;
-        let to_socket_desc =
-            to_entry
-                .instance
-                .inputs()
-                .get(to_socket)
-                .ok_or(NodeError::InputSocketNotFound {
-                    node: format!("{:?}", to_node),
-                    socket: to_socket
-                })?;
-        if to_socket_desc.dtype != from_dtype {
+        let to_socket_desc = self
+            .entry(to_node)?
+            .instance
+            .inputs()
+            .get(to_socket)
+            .ok_or(NodeError::InputSocketNotFound {
+                node: format!("{:?}", to_node),
+                socket: to_socket
+            })?;
+        let to_label = to_socket_desc.name;
+
+        let from_dtype =
+            self.resolve_socket_dtype(from_node, from_socket, false, &mut HashSet::new());
+        let to_dtype = self.resolve_socket_dtype(to_node, to_socket, true, &mut HashSet::new());
+        if let (Some(f), Some(t)) = (from_dtype, to_dtype)
+            && f != t
+        {
             return Err(NodeError::SocketTypeMismatch {
                 from_node: format!("{:?}", from_node),
                 from_socket: from_label.to_string(),
                 to_node: format!("{:?}", to_node),
-                to_socket: to_socket_desc.name.to_string()
+                to_socket: to_label.to_string()
             });
         }
         // No locality check needed here
         // An input pin can only ever hold one connection: replace whatever was already plugged into it.
-        let existing = to_entry.inputs[to_socket];
+        let existing = self.entry(to_node)?.inputs[to_socket];
         if let Some((old_from_node, old_from_socket)) = existing {
             self.disconnect(old_from_node, old_from_socket, to_node, to_socket)?;
         }
@@ -198,6 +203,71 @@ impl Topology {
             .and_then(|entry| entry.instance.inputs().get(socket))
             .map(|s| s.name.to_string())
             .unwrap_or_else(|| socket.to_string())
+    }
+
+    /// The concrete `NodePortType` an output socket resolves to - immediate for `Fixed`, or
+    /// derived from wiring for `Generic` (e.g. `Combine`'s output once both its inputs are wired).
+    pub fn output_dtype(&self, node_id: GraphNodeId, socket: usize) -> Option<NodePortType> {
+        self.resolve_socket_dtype(node_id, socket, false, &mut HashSet::new())
+    }
+
+    /// `visited` guards against infinite recursion through a cycle of all-`Generic` nodes.
+    fn resolve_socket_dtype(
+        &self,
+        node_id: GraphNodeId,
+        socket: usize,
+        is_input: bool,
+        visited: &mut HashSet<(GraphNodeId, bool, usize)>
+    ) -> Option<NodePortType> {
+        let entry = self.entry(node_id).ok()?;
+        let dtype = if is_input {
+            entry.instance.inputs().get(socket)?.dtype
+        } else {
+            entry.instance.outputs().get(socket)?.dtype
+        };
+        match dtype {
+            SocketDtype::Fixed(t) => Some(t),
+            SocketDtype::Generic => {
+                if !visited.insert((node_id, is_input, socket)) {
+                    return None;
+                }
+                self.resolve_generic_group_dtype(node_id, visited)
+            }
+        }
+    }
+
+    fn resolve_generic_group_dtype(
+        &self,
+        node_id: GraphNodeId,
+        visited: &mut HashSet<(GraphNodeId, bool, usize)>
+    ) -> Option<NodePortType> {
+        let entry = self.entry(node_id).ok()?;
+        for (i, socket) in entry.instance.inputs().iter().enumerate() {
+            if socket.dtype != SocketDtype::Generic {
+                continue;
+            }
+            if let Some((from_node, from_socket)) = entry.inputs[i]
+                && let Some(t) = self.resolve_socket_dtype(from_node, from_socket, false, visited)
+            {
+                return Some(t);
+            }
+        }
+        for (i, socket) in entry.instance.outputs().iter().enumerate() {
+            if socket.dtype != SocketDtype::Generic {
+                continue;
+            }
+            let downstream = self
+                .edges
+                .iter()
+                .filter(|e| e.from_node == node_id && e.from_socket == i)
+                .map(|e| (e.to_node, e.to_socket));
+            for (to_node, to_socket) in downstream {
+                if let Some(t) = self.resolve_socket_dtype(to_node, to_socket, true, visited) {
+                    return Some(t);
+                }
+            }
+        }
+        None
     }
 
     fn entry(&self, id: GraphNodeId) -> Result<&NodeEntry, NodeError> {

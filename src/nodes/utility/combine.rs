@@ -98,7 +98,7 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct CombineParams {
     strength: [f32; 4],
-    /// `[method_id, tile_size, unused, unused]`.
+    /// `[method_id, tile_size, channels, unused]`.
     method: [u32; 4]
 }
 
@@ -161,17 +161,16 @@ impl Combine {
         cell.get_or_init(|| vec![Self::method_desc(), Self::strength_desc(method)])
     }
 
+    /// Flat elementwise loop works across multi-channel/planar tiles too since `a`/`b`/`output`
+    /// always share the same channel count.
     fn process_tile(&self, pool: &Arc<TilePool>, inputs: &[TileHandle]) -> TileHandle {
-        let mut output = pool.allocate();
-        let s = output.size();
+        let mut output = pool.allocate_channels(inputs[0].channels());
         let (a, b) = (&inputs[0], &inputs[1]);
         let (method, strength) = (self.method, self.strength);
-        output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
-            for (x, texel) in row.iter_mut().enumerate() {
-                let idx = y * s + x;
-                *texel = method.combine(a[idx], b[idx], strength);
-            }
-        });
+        output
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(idx, texel)| *texel = method.combine(a[idx], b[idx], strength));
         Arc::new(output)
     }
 }
@@ -190,21 +189,21 @@ impl Node for Combine {
     fn inputs(&self) -> &[NodeSocket] {
         &[
             NodeSocket {
-                name: "Height A",
-                dtype: NodePortType::Height,
+                name: "A",
+                dtype: SocketDtype::Generic,
                 required: true
             },
             NodeSocket {
-                name: "Height B",
-                dtype: NodePortType::Height,
+                name: "B",
+                dtype: SocketDtype::Generic,
                 required: true
             }
         ]
     }
     fn outputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
-            name: "Height",
-            dtype: NodePortType::Height,
+            name: "Output",
+            dtype: SocketDtype::Generic,
             required: true
         }]
     }
@@ -244,11 +243,12 @@ impl Node for Combine {
             return Ok(vec![self.process_tile(pool, inputs)]);
         }
 
-        let mut output = pool.allocate();
+        let channels = inputs[0].channels();
+        let mut output = pool.allocate_channels(channels);
         let size = output.size() as u32;
         let params = CombineParams {
             strength: [self.strength, 0.0, 0.0, 0.0],
-            method: [self.method.gpu_id(), size, 0, 0]
+            method: [self.method.gpu_id(), size, channels as u32, 0]
         };
         let workgroups = size.div_ceil(WORKGROUP_SIZE);
         let result = gpu::dispatch_f32(
@@ -256,7 +256,7 @@ impl Node for Combine {
             SHADER,
             &params,
             &[&inputs[0][..], &inputs[1][..]],
-            (size * size) as usize,
+            output.len(),
             (workgroups, workgroups, 1)
         )?;
         output.copy_from_slice(&result);

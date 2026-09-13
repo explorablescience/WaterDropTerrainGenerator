@@ -8,7 +8,10 @@ use wde::wde_renderer::{
 };
 
 use crate::{
-    core::tiling::{ChunkCoord, ChunkGrid},
+    core::{
+        TileHandle,
+        tiling::{ChunkCoord, ChunkGrid}
+    },
     render::generate_chunks::ChunkPreview
 };
 
@@ -26,6 +29,30 @@ pub(super) fn resample_for_preview(data: &[f32], src_size: usize, dst_size: usiz
         for x in 0..dst_size {
             let sx = (x * src_size / dst_size).min(src_size - 1);
             out[z * dst_size + x] = data[sz * src_size + sx];
+        }
+    }
+    out
+}
+
+/// Like [`resample_for_preview`], but for a Color (3-plane) or Mask (1-plane) tile: resamples
+/// each plane and interleaves into RGBA (alpha always 1.0), broadcasting a 1-plane Mask into R=G=B.
+pub(super) fn resample_color_for_preview(
+    tile: &TileHandle,
+    src_size: usize,
+    dst_size: usize
+) -> Vec<f32> {
+    let mut out = vec![1.0; dst_size * dst_size * 4];
+    let channels = tile.channels().min(3);
+    for c in 0..channels {
+        let plane = resample_for_preview(tile.plane(c), src_size, dst_size);
+        for (i, &v) in plane.iter().enumerate() {
+            out[i * 4 + c] = v;
+        }
+    }
+    if tile.channels() == 1 {
+        for i in 0..dst_size * dst_size {
+            out[i * 4 + 1] = out[i * 4];
+            out[i * 4 + 2] = out[i * 4];
         }
     }
     out

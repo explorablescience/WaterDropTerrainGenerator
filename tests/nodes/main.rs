@@ -3,3 +3,4 @@
 //! `wde_renderer::compute::ComputeDispatcher`, which a plain `#[test]` doesn't have.
 
 mod combine;
+mod satmap;

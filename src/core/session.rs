@@ -26,6 +26,10 @@ impl TerrainInstanceHolder {
 pub struct TerrainInstance {
     graph: NodeGraph,
     selected_node: Option<GraphNodeId>,
+    /// Locks the Height source driving the preview mesh's shape when the rendered node itself
+    /// outputs Color/Mask, so its texture can be draped over a fixed shape instead of a flat
+    /// plane - independent of the graph viewport's own "render this node" pin.
+    pinned_mesh_node: Option<GraphNodeId>,
     messages: NodeMessageLog
 }
 impl Default for TerrainInstance {
@@ -33,6 +37,7 @@ impl Default for TerrainInstance {
         Self {
             graph: NodeGraph::new(ChunkGrid::new(2, 2, TILE_RESOLUTIONS[4], 0.5)),
             selected_node: None,
+            pinned_mesh_node: None,
             messages: NodeMessageLog::default()
         }
     }
@@ -67,6 +72,7 @@ impl TerrainInstance {
     pub fn reset_graph(&mut self, graph: NodeGraph) {
         self.graph = graph;
         self.selected_node = None;
+        self.pinned_mesh_node = None;
         self.messages = NodeMessageLog::default();
     }
 
@@ -82,5 +88,12 @@ impl TerrainInstance {
     }
     pub fn set_selected_node(&mut self, node_id: Option<GraphNodeId>) {
         self.selected_node = node_id;
+    }
+
+    pub fn pinned_mesh_node(&self) -> Option<GraphNodeId> {
+        self.pinned_mesh_node
+    }
+    pub fn set_pinned_mesh_node(&mut self, node_id: Option<GraphNodeId>) {
+        self.pinned_mesh_node = node_id;
     }
 }

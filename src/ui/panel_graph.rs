@@ -171,6 +171,21 @@ impl SnarlViewer<GraphNode> for GraphViewer {
             }
             pin_response.on_hover_text(if pinned { "Unpin node" } else { "Pin node" });
             paint_pin_icon(ui, pin_rect, color, pinned);
+
+            if self.outputs_height(&instance[node]) {
+                let pinned_mesh = self.is_pinned_mesh(node, instance);
+                let (mesh_pin_rect, mesh_pin_response) =
+                    ui.allocate_exact_size(egui::Vec2::splat(12.0), egui::Sense::click());
+                if mesh_pin_response.clicked() {
+                    self.toggle_pin_mesh(node, instance);
+                }
+                mesh_pin_response.on_hover_text(if pinned_mesh {
+                    "Unpin mesh shape"
+                } else {
+                    "Pin mesh shape (drapes other selected nodes' textures over it)"
+                });
+                paint_mesh_pin_icon(ui, mesh_pin_rect, color, pinned_mesh);
+            }
         });
     }
     fn show_input(
@@ -356,6 +371,31 @@ impl GraphViewer {
         }
     }
 
+    /// Whether `node`'s first output socket is a `Height`, i.e. whether it can serve as the
+    /// pinned mesh source.
+    fn outputs_height(&self, node: &GraphNode) -> bool {
+        let GraphNode::Main(graph_id) = node;
+        self.terrain_graph
+            .read()
+            .graph()
+            .node(*graph_id)
+            .ok()
+            .and_then(|n| n.outputs().first())
+            .is_some_and(|s| s.dtype == node::SocketDtype::Fixed(node::NodePortType::Height))
+    }
+
+    fn is_pinned_mesh(&self, node: NodeId, snarl: &GraphInstance) -> bool {
+        let GraphNode::Main(graph_id) = &snarl[node];
+        self.terrain_graph.read().pinned_mesh_node() == Some(*graph_id)
+    }
+
+    fn toggle_pin_mesh(&mut self, node: NodeId, snarl: &GraphInstance) {
+        let GraphNode::Main(graph_id) = &snarl[node];
+        let mut terrain = self.terrain_graph.write();
+        let new_value = (terrain.pinned_mesh_node() != Some(*graph_id)).then_some(*graph_id);
+        terrain.set_pinned_mesh_node(new_value);
+    }
+
     fn draw_pinned_frame(
         &self,
         node: NodeId,
@@ -435,6 +475,9 @@ impl GraphViewer {
             if self.pinned == Some(*graph_id) {
                 self.pinned = None;
             }
+            if self.terrain_graph.read().pinned_mesh_node() == Some(*graph_id) {
+                self.terrain_graph.write().set_pinned_mesh_node(None);
+            }
             snarl.remove_node(node);
             if self
                 .selected
@@ -506,6 +549,29 @@ fn paint_pin_icon(ui: &egui::Ui, rect: egui::Rect, color: egui::Color32, pinned:
         [center + egui::vec2(0.0, 0.0), center + egui::vec2(0.0, 3.5)],
         egui::Stroke::new(1.2, color)
     );
+}
+
+/// A small mountain glyph, distinct from [`paint_pin_icon`]'s pin glyph - marks a node's "pin mesh
+/// shape" toggle.
+fn paint_mesh_pin_icon(ui: &egui::Ui, rect: egui::Rect, color: egui::Color32, pinned: bool) {
+    let color = if pinned {
+        color.gamma_multiply(1.4)
+    } else {
+        theme::palette::TEXT_DISABLED
+    };
+    let center = rect.center();
+    let painter = ui.painter();
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            center + egui::vec2(-3.5, 3.0),
+            center + egui::vec2(-0.5, -3.0),
+            center + egui::vec2(1.0, -1.0),
+            center + egui::vec2(2.0, -3.0),
+            center + egui::vec2(3.5, 3.0),
+        ],
+        egui::Color32::TRANSPARENT,
+        egui::Stroke::new(1.2, color)
+    ));
 }
 
 fn draw_dashed_rect(
