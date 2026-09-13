@@ -1,5 +1,9 @@
 use waterdrop_terrain_generator::core::tiling::{ChunkCoord, ChunkGrid};
 
+/// `ChunkGrid::new`'s `world_scale` is a user-facing setting scaled down internally - pass this
+/// instead of `1.0` to get exactly 1 effective world unit per texel.
+const WORLD_UNIT_PER_TEXEL: f32 = 20.0;
+
 #[test]
 fn coords_count_is_the_product_of_both_axes() {
     let grid = ChunkGrid::new(3, 2, 16, 1.0);
@@ -23,7 +27,7 @@ fn coords_are_listed_in_row_major_order() {
 
 #[test]
 fn world_extent_scales_with_chunk_count_tile_size_and_world_scale() {
-    let grid = ChunkGrid::new(4, 2, 32, 0.5);
+    let grid = ChunkGrid::new(4, 2, 32, WORLD_UNIT_PER_TEXEL * 0.5);
     assert_eq!(grid.world_extent(), (4.0 * 32.0 * 0.5, 2.0 * 32.0 * 0.5));
 }
 
@@ -31,7 +35,7 @@ fn world_extent_scales_with_chunk_count_tile_size_and_world_scale() {
 fn world_space_is_centered_on_the_whole_grid_not_a_corner() {
     // An odd chunk count has a single, unambiguous center chunk - its core should span
     // symmetrically around world (0, 0).
-    let grid = ChunkGrid::new(3, 3, 8, 1.0);
+    let grid = ChunkGrid::new(3, 3, 8, WORLD_UNIT_PER_TEXEL);
     let ctx = grid.chunk_context(ChunkCoord(1, 1), 0);
     assert_eq!(
         ctx.world_origin,
@@ -40,7 +44,7 @@ fn world_space_is_centered_on_the_whole_grid_not_a_corner() {
     );
 
     // An even chunk count centers on the shared corner of the four middle chunks instead.
-    let grid = ChunkGrid::new(2, 2, 8, 1.0);
+    let grid = ChunkGrid::new(2, 2, 8, WORLD_UNIT_PER_TEXEL);
     let ctx = grid.chunk_context(ChunkCoord(1, 1), 0);
     assert_eq!(
         ctx.world_origin,
@@ -51,12 +55,12 @@ fn world_space_is_centered_on_the_whole_grid_not_a_corner() {
 
 #[test]
 fn chunk_context_offsets_the_origin_by_the_requested_margin() {
-    let grid = ChunkGrid::new(2, 1, 8, 1.0);
+    let grid = ChunkGrid::new(2, 1, 8, WORLD_UNIT_PER_TEXEL);
     let ctx = grid.chunk_context(ChunkCoord(1, 0), 2);
     // World extent is 16x8; chunk 1's core starts at world x = 8 before centering, which becomes
     // x = 0 once centered (extent_x / 2 = 8); y centers the same way, to -4. A 2-texel margin at
-    // world_scale 1.0 then pulls the buffer's own (0, 0) texel two world units further back on
-    // each axis.
+    // an effective world_scale of 1.0 then pulls the buffer's own (0, 0) texel two world units
+    // further back on each axis.
     assert_eq!(ctx.world_origin, (-2.0, -6.0));
     assert_eq!(ctx.world_step, (1.0, 1.0));
 }

@@ -4,9 +4,10 @@ use waterdrop_terrain_generator::core::node;
 fn every_expected_node_type_is_registered() {
     let labels: Vec<&str> = node::registered_nodes().map(|d| d.label).collect();
     for expected in [
-        "Erosion",
+        "Hydraulic Erosion (Demo)",
         "Flat",
         "Perlin",
+        "Combine",
         "Load File",
         "Mountain",
         "Export"

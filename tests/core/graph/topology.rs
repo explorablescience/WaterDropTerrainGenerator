@@ -8,7 +8,7 @@ use waterdrop_terrain_generator::core::tiling::{ChunkCoord, ChunkGrid};
 use waterdrop_terrain_generator::core::{CacheEntry, TileContext, TileHandle, TilePool};
 use waterdrop_terrain_generator::nodes::*;
 
-use crate::support::{init_task_pool, poll_until_ready};
+use crate::support::{FakeKernelNode, init_task_pool, poll_until_ready};
 
 const TEST_ICON: NodeIcon = NodeIcon {
     id: "test-icon",
@@ -157,7 +157,7 @@ fn connecting_a_global_node_directly_into_a_local_socket_succeeds() {
     let source = graph.add_node(Box::new(FakeGlobalHeightSource {
         native_resolution: 8
     }));
-    let sink = graph.add_node(Box::new(Erosion::default()));
+    let sink = graph.add_node(Box::new(FakeKernelNode::default()));
 
     assert!(graph.connect(source, 0, sink, 0).is_ok());
 }
@@ -200,7 +200,7 @@ fn connecting_mismatched_socket_types_fails() {
 fn connecting_to_an_out_of_range_output_socket_fails() {
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let source = graph.add_node(Box::new(FakeHeightSource));
-    let sink = graph.add_node(Box::new(Erosion::default()));
+    let sink = graph.add_node(Box::new(FakeKernelNode::default()));
 
     let result = graph.connect(source, 5, sink, 0);
     assert!(matches!(
@@ -213,7 +213,7 @@ fn connecting_to_an_out_of_range_output_socket_fails() {
 fn connecting_to_an_out_of_range_input_socket_fails() {
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let source = graph.add_node(Box::new(FakeHeightSource));
-    let sink = graph.add_node(Box::new(Erosion::default()));
+    let sink = graph.add_node(Box::new(FakeKernelNode::default()));
 
     let result = graph.connect(source, 0, sink, 5);
     assert!(matches!(result, Err(NodeError::InputSocketNotFound { .. })));
@@ -224,11 +224,12 @@ fn optional_unconnected_input_is_fed_a_neutral_zero_tile() {
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let sink = graph.add_node(Box::new(FakeOptionalSink));
 
-    let result = graph
-        .get(sink)
+    init_task_pool();
+    let entry = poll_until_ready(|| graph.get(sink))
         .expect("processing with an unconnected optional input should succeed");
-    let NodeGraphProcessResult::Processed(_, outputs) = result else {
-        panic!("expected the graph to finish processing")
+    let outputs = match entry {
+        CacheEntry::Local(mut map) => map.remove(&ChunkCoord(0, 0)).expect("chunk (0, 0)").1,
+        CacheEntry::Global(_, tiles) => tiles
     };
     assert!(outputs[0].iter().all(|&v| v == 0.0));
 }
@@ -237,7 +238,7 @@ fn optional_unconnected_input_is_fed_a_neutral_zero_tile() {
 fn disconnecting_an_edge_that_does_not_exist_fails() {
     let mut graph = NodeGraph::new(ChunkGrid::new(1, 1, 4, 1.0 / 4.0));
     let source = graph.add_node(Box::new(Flat));
-    let sink = graph.add_node(Box::new(Erosion::default()));
+    let sink = graph.add_node(Box::new(FakeKernelNode::default()));
 
     let result = graph.disconnect(source, 0, sink, 0);
     assert!(matches!(result, Err(NodeError::NotConnected { .. })));
