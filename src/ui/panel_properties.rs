@@ -5,7 +5,7 @@ use crate::{
     core::{
         CacheEntry, TileHandle,
         graph::GraphNodeId,
-        node::{NParamConstraints, NParamValue, NodeError, NodeMessage}
+        node::{NParamConstraints, NParamValue, NodeError, NodeLocality, NodeMessage}
     },
     ui::{theme, widgets}
 };
@@ -145,10 +145,11 @@ fn show_node_params(
     terrain_graph: &TerrainInstanceHolder,
     graph_id: GraphNodeId
 ) {
-    let param_specs: Vec<ParamSpec> = {
+    let (param_specs, node_locality): (Vec<ParamSpec>, NodeLocality) = {
         let terrain_graph_read = terrain_graph.read();
         let node = terrain_graph_read.graph().node(graph_id).unwrap();
-        node.desc_params()
+        let specs = node
+            .desc_params()
             .iter()
             .map(|desc| {
                 let range = match &desc.constraints {
@@ -171,21 +172,30 @@ fn show_node_params(
                     range
                 }
             })
-            .collect()
+            .collect();
+        (specs, node.locality())
     };
     if param_specs.is_empty() {
         return;
     }
 
-    let action_output: Vec<TileHandle> = match terrain_graph.write().get(graph_id) {
-        Ok(Some(CacheEntry::Global(_, tiles))) => tiles,
-        Ok(Some(CacheEntry::Local(_))) | Ok(None) => Vec::new(),
-        Err(NodeError::InputNotConnected { .. }) => Vec::new(), // already shown via has_valid_connections
-        Err(err) => {
-            terrain_graph.write().set_action_result(graph_id, Err(err));
+    let has_action_param = param_specs
+        .iter()
+        .any(|spec| matches!(spec.default, NParamValue::Action { .. }));
+    let action_output: Vec<TileHandle> =
+        if has_action_param && matches!(node_locality, NodeLocality::Global { .. }) {
+            match terrain_graph.write().get(graph_id) {
+                Ok(Some(CacheEntry::Global(_, tiles))) => tiles,
+                Ok(Some(CacheEntry::Local(_))) | Ok(None) => Vec::new(),
+                Err(NodeError::InputNotConnected { .. }) => Vec::new(), // already shown via has_valid_connections
+                Err(err) => {
+                    terrain_graph.write().set_action_result(graph_id, Err(err));
+                    Vec::new()
+                }
+            }
+        } else {
             Vec::new()
-        }
-    };
+        };
 
     // Group parameters by category, preserving the order in which each category first appears.
     let mut categories: Vec<(&'static str, Vec<usize>)> = Vec::new();
