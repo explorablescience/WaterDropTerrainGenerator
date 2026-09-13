@@ -39,7 +39,9 @@ impl Node for Flat {
         _inputs: &[TileHandle],
         _ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
-        Ok(vec![Arc::new(pool.allocate())])
+        let mut output = pool.allocate();
+        output.fill(0.0);
+        Ok(vec![Arc::new(output)])
     }
 }
 
