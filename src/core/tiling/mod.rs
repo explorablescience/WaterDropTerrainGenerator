@@ -6,5 +6,5 @@ mod grid;
 mod sampling;
 
 pub use context::TileContext;
-pub use grid::{ChunkCoord, ChunkGrid};
+pub use grid::{ChunkCoord, ChunkGrid, ComputeTarget};
 pub use sampling::{bilinear_sample, crop_padding};

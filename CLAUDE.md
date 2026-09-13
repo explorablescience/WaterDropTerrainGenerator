@@ -96,3 +96,4 @@ Two non-obvious gotchas from getting this working, both fixed at the point they'
 - Edition 2024, `cargo +nightly fmt` (own `rustfmt.toml`: `unstable_features = true`, no trailing commas, Unix newlines, field-init shorthand). Not inherited from WaterDropEngine — this crate has its own copy.
 - Clippy run with `-D warnings`.
 - No unit tests in `src/`; integration tests live in `tests/core/`, mirroring `core/`'s module layout 1:1. Coverage is scoped to `core/` only — `nodes/`, `render/`, `ui/` have no automated tests.
+- Comments: terse, one line, only when the *why* isn't obvious from the code (a hidden constraint, a subtle invariant, a workaround). Never a multi-line rationale or a paragraph explaining what the code does — that belongs in a commit message, not the source.

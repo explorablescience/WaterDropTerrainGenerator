@@ -6,6 +6,15 @@ use crate::core::tiling::context::TileContext;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkCoord(pub i32, pub i32);
 
+/// User-facing project setting: whether GPU-capable nodes are allowed to dispatch to the GPU.
+/// `Global`-locality work always stays on the CPU regardless (see `TileContext::chunk`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum ComputeTarget {
+    #[default]
+    Gpu,
+    Cpu
+}
+
 /// A grid of chunks, each with a square tile of texels, that together cover the whole terrain.
 #[derive(Debug, Clone, Copy)]
 pub struct ChunkGrid {
@@ -13,10 +22,14 @@ pub struct ChunkGrid {
     chunks_y: u32,
     /// Core (non-margin) texels per chunk edge.
     tile_size: usize,
-    /// World units covered by one texel.
-    world_scale: f32
+    /// World units covered by one texel - `new`'s input scaled by [`Self::WORLD_SCALE_FACTOR`].
+    world_scale: f32,
+    compute_target: ComputeTarget
 }
 impl ChunkGrid {
+    /// Converts `new`'s user-facing `world_scale` (slider range `0..=2`, default `1`) to actual world units per texel.
+    const WORLD_SCALE_FACTOR: f32 = 0.05;
+
     pub fn new(chunks_x: u32, chunks_y: u32, tile_size: usize, world_scale: f32) -> Self {
         assert!(
             chunks_x > 0 && chunks_y > 0,
@@ -26,8 +39,14 @@ impl ChunkGrid {
             chunks_x,
             chunks_y,
             tile_size,
-            world_scale: world_scale * 0.05
+            world_scale: world_scale * Self::WORLD_SCALE_FACTOR,
+            compute_target: ComputeTarget::default()
         }
+    }
+
+    pub fn with_compute_target(mut self, compute_target: ComputeTarget) -> Self {
+        self.compute_target = compute_target;
+        self
     }
 
     pub fn chunks_x(&self) -> u32 {
@@ -41,6 +60,13 @@ impl ChunkGrid {
     }
     pub fn world_scale(&self) -> f32 {
         self.world_scale
+    }
+    /// Inverse of [`Self::world_scale`]'s scaling - the raw setting to show/save in the UI.
+    pub fn world_scale_setting(&self) -> f32 {
+        self.world_scale / Self::WORLD_SCALE_FACTOR
+    }
+    pub fn compute_target(&self) -> ComputeTarget {
+        self.compute_target
     }
 
     /// Every chunk coordinate in the grid, in row-major order.
@@ -76,7 +102,8 @@ impl ChunkGrid {
             chunk: Some(chunk),
             world_origin: (ox - margin as f32 * step, oy - margin as f32 * step),
             world_step: (step, step),
-            world_extent: self.world_extent()
+            world_extent: self.world_extent(),
+            compute_target: self.compute_target
         }
     }
 }

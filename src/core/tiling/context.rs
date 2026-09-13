@@ -1,7 +1,7 @@
 //! Spatial context handed to a node's `process` call, letting it sample a coordinate frame that's
 //! consistent across chunk boundaries (see [`crate::core::tiling::ChunkGrid`]).
 
-use crate::core::tiling::grid::{ChunkCoord, ChunkGrid};
+use crate::core::tiling::grid::{ChunkCoord, ChunkGrid, ComputeTarget};
 
 /// Position-aware nodes (noise generators, world-space masks) use this to sample consistently across chunk borders; kernel-only nodes can ignore it entirely.
 #[derive(Debug, Clone, Copy)]
@@ -13,7 +13,9 @@ pub struct TileContext {
     /// World units covered by one texel, per axis.
     pub world_step: (f32, f32),
     /// World-space size of the tile being produced, per axis.
-    pub world_extent: (f32, f32)
+    pub world_extent: (f32, f32),
+    /// The project's GPU/CPU preference. A GPU dispatch also needs `chunk.is_some()` - see `Node::process`.
+    pub compute_target: ComputeTarget
 }
 impl TileContext {
     /// Creates a `TileContext` for a `Global` node, covering the entire terrain.
@@ -23,8 +25,14 @@ impl TileContext {
             chunk: None,
             world_origin: (-ex * 0.5, -ey * 0.5),
             world_step: (ex / native_resolution as f32, ey / native_resolution as f32),
-            world_extent: (ex, ey)
+            world_extent: (ex, ey),
+            compute_target: chunk_grid.compute_target()
         }
+    }
+
+    /// Is a global context
+    pub fn is_global(&self) -> bool {
+        self.chunk.is_none()
     }
 
     /// World-space position of texel `(x, y)` of the tile being produced.

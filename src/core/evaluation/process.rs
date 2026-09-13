@@ -663,7 +663,8 @@ fn global_context_with_margin(
         world_extent: (
             base.world_extent.0 + 2.0 * margin as f32 * sx,
             base.world_extent.1 + 2.0 * margin as f32 * sy
-        )
+        ),
+        compute_target: base.compute_target
     }
 }
 

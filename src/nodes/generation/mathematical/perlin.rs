@@ -10,6 +10,19 @@ const ICON: NodeIcon = NodeIcon {
     png_bytes: include_bytes!("../../../../assets/icons/node_perlin.png")
 };
 
+const SHADER: &str = include_str!("perlin.comp.wgsl");
+const WORKGROUP_SIZE: u32 = 8;
+
+/// Layout must match `perlin.comp.wgsl`'s `Params` struct exactly (vec4-aligned fields).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct PerlinParams {
+    origin_step: [f32; 4],
+    amp_freq_hurst_warpamp: [f32; 4],
+    warpfreq_seed: [f32; 4],
+    counts: [u32; 4]
+}
+
 // Precision-adjusted variations of https://www.shadertoy.com/view/4djSRW
 fn hash1(p: f32) -> f32 {
     let mut p = frac(p * 0.011);
@@ -257,13 +270,46 @@ impl Node for Perlin {
         Ok(())
     }
 
+    /// GPU per chunk when the user allows it; CPU otherwise.
     fn process(
         &self,
         pool: &Arc<TilePool>,
         _inputs: &[TileHandle],
         ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
-        Ok(vec![self.process_tile(pool, ctx)])
+        if ctx.is_global() || ctx.compute_target == ComputeTarget::Cpu {
+            return Ok(vec![self.process_tile(pool, ctx)]);
+        }
+
+        let mut output = pool.allocate();
+        let size = output.size() as u32;
+        let params = PerlinParams {
+            origin_step: [
+                ctx.world_origin.0,
+                ctx.world_origin.1,
+                ctx.world_step.0,
+                ctx.world_step.1
+            ],
+            amp_freq_hurst_warpamp: [
+                self.amplitude,
+                self.frequency,
+                self.hurst_exponent,
+                self.warp_amplitude
+            ],
+            warpfreq_seed: [self.warp_frequency, self.seed as f32, 0.0, 0.0],
+            counts: [self.octaves, self.warp_octaves, size, 0]
+        };
+        let workgroups = size.div_ceil(WORKGROUP_SIZE);
+        let result = gpu::dispatch_f32(
+            "perlin",
+            SHADER,
+            &params,
+            &[],
+            (size * size) as usize,
+            (workgroups, workgroups, 1)
+        )?;
+        output.copy_from_slice(&result);
+        Ok(vec![Arc::new(output)])
     }
 
     fn clone_boxed(&self) -> Box<dyn Node> {

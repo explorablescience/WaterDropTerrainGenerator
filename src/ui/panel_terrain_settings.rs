@@ -9,7 +9,7 @@ use crate::{
     core::{
         node::{NParamConstraints, NParamDesc, NParamValue},
         session::TILE_RESOLUTIONS,
-        tiling::ChunkGrid
+        tiling::{ChunkGrid, ComputeTarget}
     },
     ui::{theme, widgets}
 };
@@ -22,7 +22,8 @@ pub(super) struct TerrainSettingsState {
     chunks_x: f32,
     chunks_y: f32,
     tile_size: String,
-    world_scale: f32
+    world_scale: f32,
+    gpu_enabled: bool
 }
 
 /// Built fresh each frame just to drive [`widgets::slider`]'s display - not a real node parameter.
@@ -56,7 +57,8 @@ pub fn draw_terrain_settings(
         state.chunks_x = grid.chunks_x() as f32;
         state.chunks_y = grid.chunks_y() as f32;
         state.tile_size = grid.tile_size().to_string();
-        state.world_scale = grid.world_scale();
+        state.world_scale = grid.world_scale_setting();
+        state.gpu_enabled = grid.compute_target() == ComputeTarget::Gpu;
         state.was_open = true;
     }
 
@@ -110,13 +112,10 @@ pub fn draw_terrain_settings(
                 ui,
                 &NParamDesc {
                     key: "world_scale",
-                    label: "World Scale (units/texel)",
+                    label: "World Scale",
                     category: "Chunk Grid",
-                    default: NParamValue::Float(state.world_scale),
-                    constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.001,
-                        max: 1.0
-                    })
+                    default: NParamValue::Float(1.0),
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 2.0 })
                 },
                 theme::palette::ACCENT,
                 &mut state.world_scale
@@ -139,14 +138,30 @@ pub fn draw_terrain_settings(
                 chunks_y.round() as u64,
                 tile_size as u64
             );
+            ui.add_space(10.0);
+
+            section_label(ui, "Compute");
+            widgets::toggle_switch(
+                ui,
+                "Enable GPU Compute",
+                theme::palette::ACCENT,
+                &mut state.gpu_enabled
+            );
             ui.add_space(4.0);
+
+            let gpu_enabled = state.gpu_enabled;
             widgets::button(ui, "Apply", theme::palette::ACCENT, || {
                 let grid = ChunkGrid::new(
                     chunks_x.round() as u32,
                     chunks_y.round() as u32,
                     tile_size,
                     world_scale
-                );
+                )
+                .with_compute_target(if gpu_enabled {
+                    ComputeTarget::Gpu
+                } else {
+                    ComputeTarget::Cpu
+                });
                 terrain_graph.write().graph_mut().set_chunk_grid(grid);
             });
         });

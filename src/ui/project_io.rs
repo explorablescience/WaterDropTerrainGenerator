@@ -15,7 +15,7 @@ use crate::{
     core::{
         graph::{GraphNodeId, NodeGraph},
         node::{self, NParamValue},
-        tiling::ChunkGrid
+        tiling::{ChunkGrid, ComputeTarget}
     },
     ui::panel_graph::{self, GraphEditorState, GraphInstance, GraphNode}
 };
@@ -34,7 +34,9 @@ struct SavedChunkGrid {
     chunks_x: u32,
     chunks_y: u32,
     tile_size: usize,
-    world_scale: f32
+    world_scale: f32,
+    #[serde(default)]
+    compute_target: ComputeTarget
 }
 
 /// `id` is only used to remap edges (`SavedEdge::from_node`/`to_node`) on load - it isn't
@@ -145,7 +147,8 @@ fn save_project(
             chunks_x: chunk_grid.chunks_x(),
             chunks_y: chunk_grid.chunks_y(),
             tile_size: chunk_grid.tile_size(),
-            world_scale: chunk_grid.world_scale()
+            world_scale: chunk_grid.world_scale_setting(),
+            compute_target: chunk_grid.compute_target()
         },
         nodes,
         edges
@@ -168,7 +171,8 @@ fn load_project(
         file.chunk_grid.chunks_y,
         file.chunk_grid.tile_size,
         file.chunk_grid.world_scale
-    );
+    )
+    .with_compute_target(file.chunk_grid.compute_target);
     let mut graph = NodeGraph::new(chunk_grid);
 
     let mut graph_ids: HashMap<usize, GraphNodeId> = HashMap::new();

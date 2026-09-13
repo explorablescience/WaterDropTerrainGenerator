@@ -74,6 +74,7 @@ pub trait Node: Debug + Send + Sync {
     }
 
     /// `ctx` describes where in the terrain this call is computing - only position-aware nodes need to use it.
+    /// For GPU work, only dispatch (via [`crate::core::gpu::dispatch_f32`]) when `ctx.chunk.is_some() && ctx.compute_target == ComputeTarget::Gpu`; otherwise stay on CPU.
     fn process(
         &self,
         _pool: &Arc<TilePool>,
