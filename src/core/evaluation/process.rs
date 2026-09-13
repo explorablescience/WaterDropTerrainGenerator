@@ -48,6 +48,7 @@ impl Processor {
         topology: &Topology,
         chunk_grid: &ChunkGrid,
         pool: &mut Arc<TilePool>,
+        global_arena: &Arc<TileArena>,
         cache: &mut Cache,
         node_id: GraphNodeId
     ) -> Result<Option<CacheEntry>, NodeError> {
@@ -67,10 +68,19 @@ impl Processor {
 
             match next_to_spawn(topology, chunk_grid, cache, node_id)? {
                 Some(candidate) => {
-                    self.spawn(topology, chunk_grid, pool, cache, candidate)?;
+                    self.spawn(topology, chunk_grid, pool, global_arena, cache, candidate)?;
                     continue;
                 }
-                None => return Ok(Some(gather(topology, chunk_grid, cache, node_id)?))
+                None => {
+                    return Ok(Some(gather(
+                        topology,
+                        chunk_grid,
+                        pool.arena(),
+                        global_arena,
+                        cache,
+                        node_id
+                    )?));
+                }
             }
         }
     }
@@ -83,16 +93,17 @@ impl Processor {
         &self,
         topology: &Topology,
         chunk_grid: &ChunkGrid,
+        global_arena: &Arc<TileArena>,
         cache: &Cache,
         node_id: GraphNodeId,
         resolution: usize
     ) -> Result<Vec<TileHandle>, NodeError> {
         let working_size = required_working_size(topology, node_id, resolution)?;
         let margin = (working_size - resolution) / 2;
-        let pool = TilePool::new(working_size);
+        let pool = TilePool::from_arena(global_arena, working_size);
         let ctx = global_context_with_margin(chunk_grid, resolution, margin);
         let tiles = evaluate_in_global_frame(topology, cache, chunk_grid, &pool, &ctx, node_id)?;
-        Ok(crop_tiles(&tiles, working_size, resolution))
+        Ok(crop_tiles(&tiles, working_size, resolution, global_arena))
     }
 
     /// A node re-dirtied mid-flight loses its `Processing` cache entry - that's the cancellation signal.
@@ -172,14 +183,22 @@ impl Processor {
         topology: &Topology,
         chunk_grid: &ChunkGrid,
         pool: &mut Arc<TilePool>,
+        global_arena: &Arc<TileArena>,
         cache: &mut Cache,
         node_id: GraphNodeId
     ) -> Result<(), NodeError> {
         match topology.node(node_id)?.locality() {
-            NodeLocality::Local => self.spawn_local(topology, chunk_grid, pool, cache, node_id),
-            NodeLocality::Global { native_resolution } => {
-                self.spawn_global(topology, chunk_grid, cache, node_id, native_resolution)
+            NodeLocality::Local => {
+                self.spawn_local(topology, chunk_grid, pool, global_arena, cache, node_id)
             }
+            NodeLocality::Global { native_resolution } => self.spawn_global(
+                topology,
+                chunk_grid,
+                global_arena,
+                cache,
+                node_id,
+                native_resolution
+            )
         }
     }
 
@@ -188,6 +207,7 @@ impl Processor {
         topology: &Topology,
         chunk_grid: &ChunkGrid,
         pool: &Arc<TilePool>,
+        global_arena: &Arc<TileArena>,
         cache: &mut Cache,
         node_id: GraphNodeId
     ) -> Result<(), NodeError> {
@@ -225,7 +245,12 @@ impl Processor {
                             .ok_or(NodeError::NodeNotEvaluated(*ancestor))?;
                         resolved.push(Resolved::Global {
                             ancestor: *ancestor,
-                            cropped: crop_tiles(&tiles, working_size, native_resolution),
+                            cropped: crop_tiles(
+                                &tiles,
+                                working_size,
+                                native_resolution,
+                                global_arena
+                            ),
                             native_resolution,
                             socket: *ancestor_socket,
                             src_ctx: TileContext::for_global(chunk_grid, native_resolution)
@@ -308,25 +333,20 @@ impl Processor {
         &mut self,
         topology: &Topology,
         chunk_grid: &ChunkGrid,
+        global_arena: &Arc<TileArena>,
         cache: &mut Cache,
         node_id: GraphNodeId,
         native_resolution: usize
     ) -> Result<(), NodeError> {
         let working_size = required_working_size(topology, node_id, native_resolution)?;
         let margin = (working_size - native_resolution) / 2;
-        let ephemeral_pool = TilePool::new(working_size);
+        let pass_pool = TilePool::from_arena(global_arena, working_size);
         let ctx = global_context_with_margin(chunk_grid, native_resolution, margin);
 
-        let inputs = resolve_inputs_in_global_frame(
-            topology,
-            cache,
-            chunk_grid,
-            &ephemeral_pool,
-            &ctx,
-            node_id
-        )?;
+        let inputs =
+            resolve_inputs_in_global_frame(topology, cache, chunk_grid, &pass_pool, &ctx, node_id)?;
         let snapshot: Arc<dyn Node> = Arc::from(topology.node(node_id)?.clone_boxed());
-        let task_pool = Arc::clone(&ephemeral_pool);
+        let task_pool = Arc::clone(&pass_pool);
         let task = AsyncComputeTaskPool::get()
             .spawn(async move { snapshot.process(&task_pool, &inputs, &ctx) });
 
@@ -357,7 +377,7 @@ fn sync_pool_size(
     }
     let required = required_working_size(topology, node_id, chunk_grid.tile_size())?;
     if required != pool.tile_length() {
-        *pool = TilePool::new(required);
+        *pool = TilePool::from_arena(pool.arena(), required);
         cache.clear_all_chunks();
     }
     Ok(())
@@ -455,6 +475,8 @@ fn topological_order(
 fn gather(
     topology: &Topology,
     chunk_grid: &ChunkGrid,
+    local_arena: &Arc<TileArena>,
+    global_arena: &Arc<TileArena>,
     cache: &Cache,
     node_id: GraphNodeId
 ) -> Result<CacheEntry, NodeError> {
@@ -466,13 +488,14 @@ fn gather(
                 .ok_or(NodeError::NodeNotEvaluated(node_id))?;
             Ok(CacheEntry::Global(
                 uuid,
-                crop_tiles(&tiles, working_size, native_resolution)
+                crop_tiles(&tiles, working_size, native_resolution, global_arena)
             ))
         }
         NodeLocality::Local => {
             let target_size = chunk_grid.tile_size();
             let working_size = required_working_size(topology, node_id, target_size)?;
-            let crop_pool = (working_size != target_size).then(|| TilePool::new(target_size));
+            let crop_pool = (working_size != target_size)
+                .then(|| TilePool::from_arena(local_arena, target_size));
 
             let mut per_chunk = HashMap::new();
             for chunk in chunk_grid.coords() {
@@ -509,7 +532,7 @@ fn evaluate_in_global_frame(
         let (_, tiles) = cache
             .get(node_id, EvalScope::Global(native_resolution))
             .ok_or(NodeError::NodeNotEvaluated(node_id))?;
-        let cropped = crop_tiles(&tiles, working_size, native_resolution);
+        let cropped = crop_tiles(&tiles, working_size, native_resolution, pool.arena());
         let src_ctx = TileContext::for_global(chunk_grid, native_resolution);
         return Ok(cropped
             .iter()
@@ -618,11 +641,16 @@ fn crop_tile_into(
     Arc::new(out)
 }
 
-fn crop_tiles(tiles: &[TileHandle], full_size: usize, target_size: usize) -> Vec<TileHandle> {
+fn crop_tiles(
+    tiles: &[TileHandle],
+    full_size: usize,
+    target_size: usize,
+    arena: &Arc<TileArena>
+) -> Vec<TileHandle> {
     if full_size == target_size {
         return tiles.to_vec();
     }
-    let pool = TilePool::new(target_size);
+    let pool = TilePool::from_arena(arena, target_size);
     tiles
         .iter()
         .map(|t| crop_tile_into(&pool, t, full_size, target_size))

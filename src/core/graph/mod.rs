@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use crate::core::evaluation::TilePool;
+use crate::core::evaluation::{TileArena, TilePool};
 use crate::core::node::{Node, NodeError};
 use crate::core::tiling::ChunkGrid;
 use crate::core::{Cache, CacheEntry, Processor, TileHandle};
@@ -15,6 +15,11 @@ mod topology;
 pub use topology::{GraphNodeId, Topology};
 
 pub struct NodeGraph {
+    /// Backs every chunk-scoped (`Local`) tile in the graph - the only arena `pool` is ever a view of.
+    local_arena: Arc<TileArena>,
+    /// Backs every whole-terrain (`Global`) tile - `Processor` builds its own [`TilePool`] views over
+    /// this as needed. Exactly these two arenas exist for the graph's lifetime; see [`Self::allocated_bytes`].
+    global_arena: Arc<TileArena>,
     pool: Arc<TilePool>,
     chunk_grid: ChunkGrid,
     topology: Topology,
@@ -24,8 +29,12 @@ pub struct NodeGraph {
 }
 impl NodeGraph {
     pub fn new(chunk_grid: ChunkGrid) -> Self {
+        let local_arena = TileArena::new();
+        let global_arena = TileArena::new();
         Self {
-            pool: TilePool::new(chunk_grid.tile_size()),
+            pool: TilePool::from_arena(&local_arena, chunk_grid.tile_size()),
+            local_arena,
+            global_arena,
             chunk_grid,
             topology: Topology::default(),
             cache: Cache::new(),
@@ -40,7 +49,7 @@ impl NodeGraph {
     }
     pub fn set_chunk_grid(&mut self, chunk_grid: ChunkGrid) {
         self.chunk_grid = chunk_grid;
-        self.pool = TilePool::new(chunk_grid.tile_size());
+        self.pool = TilePool::from_arena(&self.local_arena, chunk_grid.tile_size());
         self.cache = Cache::new();
     }
     pub fn tile_size(&self) -> usize {
@@ -116,6 +125,7 @@ impl NodeGraph {
             &self.topology,
             &self.chunk_grid,
             &mut self.pool,
+            &self.global_arena,
             &mut self.cache,
             node_id
         );
@@ -132,6 +142,7 @@ impl NodeGraph {
         self.processor.evaluate_once(
             &self.topology,
             &self.chunk_grid,
+            &self.global_arena,
             &self.cache,
             node_id,
             resolution
@@ -145,8 +156,10 @@ impl NodeGraph {
     pub fn is_processing(&self) -> bool {
         self.is_processing
     }
+    /// Total heap footprint of the graph's two tile arenas - the chunk-scoped one and the
+    /// whole-terrain one - covering every tile size either has ever needed.
     pub fn allocated_bytes(&self) -> usize {
-        self.cache.allocated_bytes()
+        self.local_arena.allocated_bytes() + self.global_arena.allocated_bytes()
     }
 }
 
