@@ -8,6 +8,7 @@ use crate::{
         editor::EditorPanelsPlugin,
         footer::FooterPlugin,
         panel_graph::{GraphEditorState, GraphNode},
+        panel_tasks::draw_active_tasks,
         panel_terrain_settings::draw_terrain_settings
     }
 };
@@ -17,6 +18,7 @@ mod editor_behavior;
 mod footer;
 mod panel_graph;
 mod panel_properties;
+mod panel_tasks;
 mod panel_terrain_settings;
 mod project_io;
 pub mod theme;
@@ -30,7 +32,10 @@ impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((EditorPanelsPlugin, FooterPlugin))
             .add_systems(Startup, (install_theme, initialize_default_graph))
-            .add_systems(Update, draw_terrain_settings.after(EditorMenuBarSet));
+            .add_systems(
+                Update,
+                (draw_terrain_settings, draw_active_tasks).after(EditorMenuBarSet)
+            );
     }
 }
 

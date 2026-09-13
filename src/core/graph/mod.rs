@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crate::core::evaluation::{TileArena, TilePool};
 use crate::core::node::{Node, NodeError};
 use crate::core::tiling::ChunkGrid;
-use crate::core::{Cache, CacheEntry, Processor, TileHandle};
+use crate::core::{Cache, CacheEntry, Processor, TaskSnapshot, TileHandle};
 
 mod eval;
 mod topology;
@@ -155,6 +155,11 @@ impl NodeGraph {
     }
     pub fn is_processing(&self) -> bool {
         self.is_processing
+    }
+    /// Every task currently in flight (one per chunk for a `Local` node, or the single pass for
+    /// a `Global` one), for UI display.
+    pub fn active_tasks(&self) -> Vec<TaskSnapshot> {
+        self.processor.active_tasks(&self.topology)
     }
     /// Total heap footprint of the graph's two tile arenas - the chunk-scoped one and the
     /// whole-terrain one - covering every tile size either has ever needed.

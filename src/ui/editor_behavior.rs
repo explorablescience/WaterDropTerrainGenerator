@@ -67,9 +67,9 @@ impl<'a> Behavior<EditorPanels> for EditorBehavior<'a> {
                     let old_selected_node = self.terrain_graph.read().selected_node();
                     let render_node = pinned_node.or(selected_node);
                     if old_selected_node != render_node.map(|node| node.graph_id) {
-                        self.terrain_graph.write().set_selected_node(
-                            render_node.map(|node| node.graph_id)
-                        );
+                        self.terrain_graph
+                            .write()
+                            .set_selected_node(render_node.map(|node| node.graph_id));
                     }
                 }
                 EditorPanels::Properties => {

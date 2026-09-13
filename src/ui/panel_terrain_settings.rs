@@ -133,7 +133,12 @@ pub fn draw_terrain_settings(
                 state.world_scale
             );
 
-            total_points_row(ui, chunks_x.round() as u64, chunks_y.round() as u64, tile_size as u64);
+            total_points_row(
+                ui,
+                chunks_x.round() as u64,
+                chunks_y.round() as u64,
+                tile_size as u64
+            );
             ui.add_space(4.0);
             widgets::button(ui, "Apply", theme::palette::ACCENT, || {
                 let grid = ChunkGrid::new(

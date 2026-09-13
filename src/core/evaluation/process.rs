@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, poll_once};
 
@@ -15,13 +16,16 @@ struct ActiveNode {
     work: ActiveWork
 }
 
+type ChunkTask = Task<Result<Vec<TileHandle>, NodeError>>;
+
 enum ActiveWork {
     Local {
-        pending: HashMap<ChunkCoord, Task<Result<Vec<TileHandle>, NodeError>>>,
+        pending: HashMap<ChunkCoord, (Instant, ChunkTask)>,
         done: HashMap<ChunkCoord, Vec<TileHandle>>
     },
     Global {
         native_resolution: usize,
+        started_at: Instant,
         task: Task<Result<Vec<TileHandle>, NodeError>>
     }
 }
@@ -29,6 +33,24 @@ enum ActiveWork {
 enum PollOutcome {
     Pending,
     Advanced
+}
+
+/// Where a single in-flight task's tile lives in the terrain: one `Chunk` for a `Local` node's
+/// per-chunk job, or the whole domain for a `Global` node's one pass.
+#[derive(Debug, Clone, Copy)]
+pub enum TaskScope {
+    Local(ChunkCoord),
+    Global { native_resolution: usize }
+}
+
+/// A snapshot of one currently in-flight [`AsyncComputeTaskPool`] job, for UI display (see the
+/// "Active Tasks" panel) - not live-updating, just a point-in-time read of [`Processor::active`].
+#[derive(Debug, Clone)]
+pub struct TaskSnapshot {
+    pub node_id: GraphNodeId,
+    pub node_label: String,
+    pub scope: TaskScope,
+    pub started_at: Instant
 }
 
 impl Processor {
@@ -130,7 +152,8 @@ impl Processor {
         match &mut active.work {
             ActiveWork::Global {
                 native_resolution,
-                task
+                task,
+                ..
             } => match block_on(poll_once(task)) {
                 None => {
                     self.active = Some(active);
@@ -148,7 +171,7 @@ impl Processor {
             ActiveWork::Local { pending, done } => {
                 let ready: Vec<ChunkCoord> = pending.keys().copied().collect();
                 for chunk in ready {
-                    if let Some(task) = pending.get_mut(&chunk)
+                    if let Some((_, task)) = pending.get_mut(&chunk)
                         && let Some(result) = block_on(poll_once(task))
                     {
                         pending.remove(&chunk);
@@ -316,7 +339,7 @@ impl Processor {
             let task = AsyncComputeTaskPool::get()
                 .spawn(async move { task_node.process(&task_pool, &inputs, &ctx) });
             cache.mark_processing(node_id, EvalScope::Chunk(chunk));
-            pending.insert(chunk, task);
+            pending.insert(chunk, (Instant::now(), task));
         }
 
         self.active = Some(ActiveNode {
@@ -355,10 +378,47 @@ impl Processor {
             node_id,
             work: ActiveWork::Global {
                 native_resolution,
+                started_at: Instant::now(),
                 task
             }
         });
         Ok(())
+    }
+
+    /// Every task currently in flight for the node being processed - empty when idle. Chunk tasks
+    /// already handed off to `done` (finished, awaiting the whole batch) aren't included, since
+    /// they're no longer doing anything.
+    pub fn active_tasks(&self, topology: &Topology) -> Vec<TaskSnapshot> {
+        let Some(active) = &self.active else {
+            return Vec::new();
+        };
+        let node_label = topology
+            .node(active.node_id)
+            .map(|n| n.label().to_string())
+            .unwrap_or_else(|_| "<removed>".to_string());
+        match &active.work {
+            ActiveWork::Local { pending, .. } => pending
+                .iter()
+                .map(|(&chunk, (started_at, _))| TaskSnapshot {
+                    node_id: active.node_id,
+                    node_label: node_label.clone(),
+                    scope: TaskScope::Local(chunk),
+                    started_at: *started_at
+                })
+                .collect(),
+            ActiveWork::Global {
+                native_resolution,
+                started_at,
+                ..
+            } => vec![TaskSnapshot {
+                node_id: active.node_id,
+                node_label,
+                scope: TaskScope::Global {
+                    native_resolution: *native_resolution
+                },
+                started_at: *started_at
+            }]
+        }
     }
 }
 
