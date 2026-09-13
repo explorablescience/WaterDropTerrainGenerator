@@ -26,7 +26,7 @@ impl ChunkGrid {
             chunks_x,
             chunks_y,
             tile_size,
-            world_scale
+            world_scale: world_scale * 0.05
         }
     }
 

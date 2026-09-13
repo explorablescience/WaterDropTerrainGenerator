@@ -31,7 +31,7 @@ pub struct TerrainInstance {
 impl Default for TerrainInstance {
     fn default() -> Self {
         Self {
-            graph: NodeGraph::new(ChunkGrid::new(1, 1, TILE_RESOLUTIONS[4], 0.05)),
+            graph: NodeGraph::new(ChunkGrid::new(2, 2, TILE_RESOLUTIONS[3], 1.0)),
             selected_node: None,
             messages: NodeMessageLog::default(),
         }
