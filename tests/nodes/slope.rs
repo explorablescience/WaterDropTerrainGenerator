@@ -11,6 +11,7 @@ fn cpu_ctx() -> TileContext {
         world_origin: (0.0, 0.0),
         world_step: (1.0, 1.0),
         world_extent: (3.0, 3.0),
+        terrain_height: 1.0,
         compute_target: ComputeTarget::Cpu
     }
 }

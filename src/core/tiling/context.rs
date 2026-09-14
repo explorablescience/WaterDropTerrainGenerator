@@ -14,6 +14,9 @@ pub struct TileContext {
     pub world_step: (f32, f32),
     /// World-space size of the tile being produced, per axis.
     pub world_extent: (f32, f32),
+    /// The project's overall terrain height (world units) - percent-based "Scale" params (e.g.
+    /// `Perlin::amplitude`) multiply against this to turn a `0..1` fraction into a world-space value.
+    pub terrain_height: f32,
     /// The project's GPU/CPU preference. A GPU dispatch also needs `chunk.is_some()` - see `Node::process`.
     pub compute_target: ComputeTarget
 }
@@ -26,6 +29,7 @@ impl TileContext {
             world_origin: (-ex * 0.5, -ey * 0.5),
             world_step: (ex / native_resolution as f32, ey / native_resolution as f32),
             world_extent: (ex, ey),
+            terrain_height: chunk_grid.height(),
             compute_target: chunk_grid.compute_target()
         }
     }

@@ -23,7 +23,7 @@ pub(super) struct TerrainSettingsState {
     chunks_y: f32,
     tile_size: String,
     world_scale: f32,
-    max_height: f32,
+    height: f32,
     gpu_enabled: bool
 }
 
@@ -60,7 +60,7 @@ pub fn draw_terrain_settings(
         state.chunks_y = grid.chunks_y() as f32;
         state.tile_size = grid.tile_size().to_string();
         state.world_scale = grid.world_scale_setting();
-        state.max_height = grid.max_height();
+        state.height = grid.height();
         state.gpu_enabled = grid.compute_target() == ComputeTarget::Gpu;
         state.was_open = true;
     }
@@ -127,10 +127,10 @@ pub fn draw_terrain_settings(
             widgets::slider(
                 ui,
                 &NParamDesc {
-                    key: "max_height",
-                    label: "Terrain Max Height",
+                    key: "height",
+                    label: "Terrain Height",
                     category: "Chunk Grid",
-                    default: NParamValue::Float(ChunkGrid::DEFAULT_MAX_HEIGHT),
+                    default: NParamValue::Float(ChunkGrid::DEFAULT_HEIGHT),
                     constraints: Some(NParamConstraints::FloatRange {
                         min: 1.0,
                         max: 50.0
@@ -138,11 +138,11 @@ pub fn draw_terrain_settings(
                     unit: ParamUnit::None
                 },
                 theme::palette::ACCENT,
-                &mut state.max_height
+                &mut state.height
             );
             ui.add_space(4.0);
 
-            let (chunks_x, chunks_y, tile_size, world_scale, max_height) = (
+            let (chunks_x, chunks_y, tile_size, world_scale, height) = (
                 state.chunks_x,
                 state.chunks_y,
                 state
@@ -150,7 +150,7 @@ pub fn draw_terrain_settings(
                     .parse::<usize>()
                     .unwrap_or(TILE_RESOLUTIONS[0]),
                 state.world_scale,
-                state.max_height
+                state.height
             );
 
             total_points_row(
@@ -183,7 +183,7 @@ pub fn draw_terrain_settings(
                 } else {
                     ComputeTarget::Cpu
                 })
-                .with_max_height(max_height);
+                .with_height(height);
                 terrain_graph.write().graph_mut().set_chunk_grid(grid);
             });
         });

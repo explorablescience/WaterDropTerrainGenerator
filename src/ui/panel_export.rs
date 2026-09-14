@@ -84,7 +84,7 @@ pub fn draw_export_panel(
         state.chunks = 1.0;
         state.resolution = EXPORT_RESOLUTIONS[7].to_string();
         state.min_value = 0.0;
-        state.max_value = terrain_graph.read().graph().chunk_grid().max_height();
+        state.max_value = terrain_graph.read().graph().chunk_grid().height();
         state.was_open = true;
     }
 

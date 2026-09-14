@@ -120,7 +120,7 @@ impl Default for Perlin {
     fn default() -> Self {
         Self {
             seed: 0,
-            amplitude: 1.0,
+            amplitude: 0.5,
             frequency: 0.05,
             octaves: 6,
             hurst_exponent: 0.7,
@@ -140,11 +140,8 @@ impl Perlin {
                     label: "Scale",
                     category: "Noise",
                     default: NParamValue::Float(1.0),
-                    constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.0,
-                        max: 25.0
-                    }),
-                    unit: ParamUnit::None
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 }),
+                    unit: ParamUnit::Percent
                 },
                 NParamDesc {
                     key: "seed",
@@ -220,13 +217,18 @@ impl Perlin {
         let mut output = pool.allocate();
         let s = output.size();
         let offset = seed_offset(self.seed);
+        // `amplitude` is a `0..1` fraction of the terrain's overall height (see "Scale"'s `ParamUnit::Percent`).
+        let scaled = Self {
+            amplitude: self.amplitude * ctx.terrain_height,
+            ..*self
+        };
         output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
             for (x, texel) in row.iter_mut().enumerate() {
                 let (nx, ny) = ctx.world_pos(x, y);
-                if self.warp_amplitude > 0.0 {
-                    *texel = fbm_with_warp([nx, ny].into(), self, offset);
+                if scaled.warp_amplitude > 0.0 {
+                    *texel = fbm_with_warp([nx, ny].into(), &scaled, offset);
                 } else {
-                    *texel = fbm([nx, ny].into(), self, offset);
+                    *texel = fbm([nx, ny].into(), &scaled, offset);
                 }
             }
         });
@@ -305,7 +307,8 @@ impl Node for Perlin {
                 ctx.world_step.1
             ],
             amp_freq_hurst_warpamp: [
-                self.amplitude,
+                // `amplitude` is a `0..1` fraction of the terrain's overall height (see "Scale"'s `ParamUnit::Percent`).
+                self.amplitude * ctx.terrain_height,
                 self.frequency,
                 self.hurst_exponent,
                 self.warp_amplitude
