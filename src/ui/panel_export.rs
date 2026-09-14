@@ -19,7 +19,7 @@ use crate::{
     core::{
         EXPORT_RESOLUTIONS, TileHandle,
         graph::GraphNodeId,
-        node::{NParamConstraints, NParamDesc, NParamValue, NodeMessage, NodePortType}
+        node::{NParamConstraints, NParamDesc, NParamValue, NodeMessage, NodePortType, ParamUnit}
     },
     ui::{theme, widgets}
 };
@@ -46,7 +46,8 @@ fn chunks_desc() -> NParamDesc {
         label: "Chunks",
         category: "Export",
         default: NParamValue::Int(1),
-        constraints: Some(NParamConstraints::IntRange { min: 1, max: 16 })
+        constraints: Some(NParamConstraints::IntRange { min: 1, max: 8 }),
+        unit: ParamUnit::None
     }
 }
 
@@ -57,9 +58,10 @@ fn value_desc(key: &'static str, label: &'static str) -> NParamDesc {
         category: "Export",
         default: NParamValue::Float(0.0),
         constraints: Some(NParamConstraints::FloatRange {
-            min: -1000.0,
-            max: 1000.0
-        })
+            min: -50.0,
+            max: 50.0
+        }),
+        unit: ParamUnit::None
     }
 }
 
@@ -82,7 +84,7 @@ pub fn draw_export_panel(
         state.chunks = 1.0;
         state.resolution = EXPORT_RESOLUTIONS[7].to_string();
         state.min_value = 0.0;
-        state.max_value = 10.0;
+        state.max_value = terrain_graph.read().graph().chunk_grid().max_height();
         state.was_open = true;
     }
 

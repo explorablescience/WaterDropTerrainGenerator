@@ -7,11 +7,15 @@ use crate::core::tiling::ChunkCoord;
 
 pub type CacheUuid = u64;
 
-/// Resolution is part of the key so a `Global` node re-evaluated at a new `native_resolution`
-/// can't reuse a stale-sized entry (`mark_dirty` never reaches ancestors, only descendants).
+/// Resolution/working-size is part of the key so a node re-evaluated at a new size can't reuse a
+/// stale-sized entry (`mark_dirty` never reaches ancestors, only descendants). For `Chunk`, the
+/// working size is whatever the querying node's own ancestor-padding sum required at computation
+/// time (see `required_working_size`) - the same node can be pulled in by two different downstream
+/// queries needing different total padding (e.g. a pinned mesh node queried both directly and as a
+/// higher-padding node's ancestor), and both results need to coexist rather than clobber each other.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EvalScope {
-    Chunk(ChunkCoord),
+    Chunk(ChunkCoord, usize),
     Global(usize)
 }
 
@@ -73,12 +77,6 @@ impl Cache {
         self.entries
             .insert((node_id, scope), CacheState::Cached(self.last_uuid, tiles));
         self.last_uuid
-    }
-
-    /// Drops every `Chunk`-scoped entry graph-wide; `Global`-scoped ones are untouched.
-    pub fn clear_all_chunks(&mut self) {
-        self.entries
-            .retain(|(_, scope), _| matches!(scope, EvalScope::Global(_)));
     }
 
     /// Heap bytes held by every distinct cached tile.

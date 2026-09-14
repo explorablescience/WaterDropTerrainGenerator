@@ -44,13 +44,42 @@ impl Hash for NParamValue {
     }
 }
 
+/// Unit suffix shown on the right of a slider's value, alongside the plain number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ParamUnit {
+    #[default]
+    None,
+    /// Displayed and edited as `value * 100` - the underlying stored value stays a `0..1`-ish ratio.
+    Percent,
+    /// Suffix only - the underlying value is already in degrees, no scaling applied.
+    Degrees
+}
+impl ParamUnit {
+    pub fn suffix(self) -> &'static str {
+        match self {
+            ParamUnit::None => "",
+            ParamUnit::Percent => "%",
+            ParamUnit::Degrees => "°"
+        }
+    }
+
+    /// Multiplier from the stored value to the displayed/edited one.
+    pub fn display_scale(self) -> f32 {
+        match self {
+            ParamUnit::Percent => 100.0,
+            ParamUnit::None | ParamUnit::Degrees => 1.0
+        }
+    }
+}
+
 /// Describes a node parameter, including its name, type, default value, and optional constraints.
 pub struct NParamDesc {
     pub key: &'static str,
     pub label: &'static str,
     pub category: &'static str,
     pub default: NParamValue,
-    pub constraints: Option<NParamConstraints>
+    pub constraints: Option<NParamConstraints>,
+    pub unit: ParamUnit
 }
 impl Hash for NParamDesc {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {

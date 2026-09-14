@@ -64,7 +64,13 @@ pub struct TerrainPreview {
     /// `(unpadded texel size, layer count)` the current `colormap_array` was built with - the
     /// colormap array needs no border padding since it isn't used for normal computation.
     color_array_dims: Option<(u32, u32)>,
-    pending_color_writes: Vec<(u32, Vec<f32>)>
+    pending_color_writes: Vec<(u32, Vec<f32>)>,
+    /// Bumped every [`sync_preview_state`] call, so the render world (`sync_terrain_preview_gpu`)
+    /// can tell "genuinely new writes were queued" apart from "this frame's `ExtractResource`
+    /// re-clone of an unchanged `TerrainPreviewSync`" - extracted resources report `is_changed()`
+    /// every frame regardless of content, so gating on that used to re-queue the same already-applied
+    /// writes forever.
+    pending_writes_generation: u64
 }
 impl TerrainPreview {
     pub(super) fn has_mesh(&self) -> bool {
@@ -304,6 +310,8 @@ pub(super) fn sync_preview_state(
         }
     }
 
+    terrain_preview.pending_writes_generation += 1;
+
     terrain_preview_sync.heightmap_array = terrain_preview.heightmap_array.clone();
     terrain_preview_sync.colormap_array = terrain_preview.colormap_array.clone();
     terrain_preview_sync.mesh = terrain_preview.mesh.clone();
@@ -312,4 +320,5 @@ pub(super) fn sync_preview_state(
     terrain_preview_sync.pending_writes = std::mem::take(&mut terrain_preview.pending_layer_writes);
     terrain_preview_sync.pending_color_writes =
         std::mem::take(&mut terrain_preview.pending_color_writes);
+    terrain_preview_sync.pending_writes_generation = terrain_preview.pending_writes_generation;
 }

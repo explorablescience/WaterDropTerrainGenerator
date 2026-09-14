@@ -91,6 +91,7 @@ pub(crate) struct TerrainPreviewSync {
     pub instances: Vec<ChunkInstance>,
     /// `(layer, padded heightmap data)` pairs queued since the last sync
     pub pending_writes: Vec<(u32, Vec<f32>)>,
+    pub pending_writes_generation: u64,
     /// `(layer, RGBA colormap data)` pairs queued since the last sync
     pub pending_color_writes: Vec<(u32, Vec<f32>)>
 }
@@ -105,6 +106,7 @@ pub(crate) struct TerrainPreviewGpu {
     pub chunk_count: u32,
     /// Writes not yet applied to the GPU texture, retried each frame until it succeeds.
     pub pending_writes: Vec<(u32, Vec<f32>)>,
+    pub queued_writes_generation: Option<u64>,
     pub pending_color_writes: Vec<(u32, Vec<f32>)>
 }
 
@@ -135,6 +137,7 @@ pub(crate) fn sync_terrain_preview_gpu(
         gpu.bind_group = None;
         gpu.ready = false;
         gpu.pending_writes.clear();
+        gpu.queued_writes_generation = None;
         gpu.pending_color_writes.clear();
     }
     if gpu.bind_group.is_none()
@@ -149,11 +152,14 @@ pub(crate) fn sync_terrain_preview_gpu(
     gpu.ready = gpu.bind_group.is_some();
 
     // Queue this frame's new writes
-    if sync.is_changed() {
+    if sync.pending_writes_generation != gpu.queued_writes_generation.unwrap_or(0)
+        && (!sync.pending_writes.is_empty() || !sync.pending_color_writes.is_empty())
+    {
         if !sync.pending_writes.is_empty() {
             gpu.pending_writes
                 .extend(sync.pending_writes.iter().cloned());
         }
+        gpu.queued_writes_generation = Some(sync.pending_writes_generation);
         if !sync.pending_color_writes.is_empty() {
             gpu.pending_color_writes
                 .extend(sync.pending_color_writes.iter().cloned());

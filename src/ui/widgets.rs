@@ -1,5 +1,5 @@
 use crate::{
-    core::node::{NParamConstraints, NParamDesc, NParamValue, NodeIcon, NodeMessage},
+    core::node::{NParamConstraints, NParamDesc, NParamValue, NodeIcon, NodeMessage, ParamUnit},
     ui::theme::{
         self,
         palette::{self, BG_CARD}
@@ -46,7 +46,9 @@ pub fn slider(
     };
     let is_int = matches!(desc.default, NParamValue::Int(_));
     let width = ui.available_width();
-    let response = value_pill(ui, id, width, desc.label, color, value, min, max, is_int);
+    let response = value_pill(
+        ui, id, width, desc.label, color, value, min, max, is_int, desc.unit
+    );
 
     ui.add_space(2.0);
 
@@ -89,7 +91,8 @@ pub fn vector2(
                 &mut value.0,
                 min.0,
                 max.0,
-                is_int
+                is_int,
+                desc.unit
             );
             let y_response = value_pill(
                 ui,
@@ -100,7 +103,8 @@ pub fn vector2(
                 &mut value.1,
                 min.1,
                 max.1,
-                is_int
+                is_int,
+                desc.unit
             );
             x_response | y_response
         })
@@ -122,9 +126,17 @@ fn value_pill(
     value: &mut f32,
     min: f32,
     max: f32,
-    is_int: bool
+    is_int: bool,
+    unit: ParamUnit
 ) -> egui::Response {
-    let decimals = if is_int { 0 } else { 2 };
+    let scale = unit.display_scale();
+    let decimals = if is_int {
+        0
+    } else if unit == ParamUnit::Percent {
+        1
+    } else {
+        2
+    };
     let has_range = min.is_finite() && max.is_finite();
 
     let padding = 5.0;
@@ -133,7 +145,7 @@ fn value_pill(
 
     let mut editing = ui.data_mut(|d| d.get_temp::<String>(id));
     if response.double_clicked() {
-        editing = Some(format!("{value:.decimals$}"));
+        editing = Some(format!("{:.decimals$}", *value * scale));
         ui.data_mut(|d| d.insert_temp(id, editing.clone().unwrap()));
         ui.memory_mut(|m| m.request_focus(id));
     }
@@ -213,7 +225,7 @@ fn value_pill(
         painter.text(
             rect.right_center() - egui::Vec2::new(padding, 0.0),
             egui::Align2::RIGHT_CENTER,
-            format!("{value:.decimals$}"),
+            format!("{:.decimals$}{}", *value * scale, unit.suffix()),
             theme::body_font(theme::fonts::FONT_SIZE_BODY),
             text_color
         );
@@ -229,7 +241,12 @@ fn value_pill(
         );
 
         if text_response.lost_focus() {
-            if let Ok(parsed) = text.trim().parse::<f32>() {
+            let mut trimmed = text.trim();
+            if !unit.suffix().is_empty() {
+                trimmed = trimmed.trim_end_matches(unit.suffix()).trim_end();
+            }
+            if let Ok(parsed) = trimmed.parse::<f32>() {
+                let parsed = parsed / scale;
                 let parsed = if is_int { parsed.round() } else { parsed };
                 *value = parsed.clamp(min, max);
                 response.mark_changed();

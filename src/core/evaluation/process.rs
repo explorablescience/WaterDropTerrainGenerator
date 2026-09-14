@@ -20,6 +20,9 @@ type ChunkTask = Task<Result<Vec<TileHandle>, NodeError>>;
 
 enum ActiveWork {
     Local {
+        /// The working size the pool was set to when these tasks were spawned - needed to address
+        /// their `EvalScope::Chunk` entries again once they finish (see [`EvalScope::Chunk`]).
+        working_size: usize,
         pending: HashMap<ChunkCoord, (Instant, ChunkTask)>,
         done: HashMap<ChunkCoord, Vec<TileHandle>>
     },
@@ -74,7 +77,7 @@ impl Processor {
         cache: &mut Cache,
         node_id: GraphNodeId
     ) -> Result<Option<CacheEntry>, NodeError> {
-        sync_pool_size(topology, chunk_grid, pool, cache, node_id)?;
+        sync_pool_size(topology, chunk_grid, pool, node_id)?;
 
         loop {
             if self.active.is_some() {
@@ -88,7 +91,7 @@ impl Processor {
                 }
             }
 
-            match next_to_spawn(topology, chunk_grid, cache, node_id)? {
+            match next_to_spawn(topology, chunk_grid, pool, cache, node_id)? {
                 Some(candidate) => {
                     self.spawn(topology, chunk_grid, pool, global_arena, cache, candidate)?;
                     continue;
@@ -97,7 +100,7 @@ impl Processor {
                     return Ok(Some(gather(
                         topology,
                         chunk_grid,
-                        pool.arena(),
+                        pool,
                         global_arena,
                         cache,
                         node_id
@@ -137,11 +140,15 @@ impl Processor {
             ActiveWork::Global {
                 native_resolution, ..
             } => cache.is_processing(active.node_id, EvalScope::Global(*native_resolution)),
-            ActiveWork::Local { pending, done } => {
-                match pending.keys().next().or_else(|| done.keys().next()) {
-                    Some(chunk) => cache.is_processing(active.node_id, EvalScope::Chunk(*chunk)),
-                    None => true
+            ActiveWork::Local {
+                working_size,
+                pending,
+                done
+            } => match pending.keys().next().or_else(|| done.keys().next()) {
+                Some(chunk) => {
+                    cache.is_processing(active.node_id, EvalScope::Chunk(*chunk, *working_size))
                 }
+                None => true
             }
         }
     }
@@ -168,7 +175,7 @@ impl Processor {
                     Ok(PollOutcome::Advanced)
                 }
             },
-            ActiveWork::Local { pending, done } => {
+            ActiveWork::Local { pending, done, .. } => {
                 let ready: Vec<ChunkCoord> = pending.keys().copied().collect();
                 for chunk in ready {
                     if let Some((_, task)) = pending.get_mut(&chunk)
@@ -190,11 +197,14 @@ impl Processor {
                     self.active = Some(active);
                     return Ok(PollOutcome::Pending);
                 }
-                let ActiveWork::Local { done, .. } = &mut active.work else {
+                let ActiveWork::Local {
+                    working_size, done, ..
+                } = &mut active.work
+                else {
                     unreachable!()
                 };
                 for (chunk, tiles) in done.drain() {
-                    cache.set(node_id, EvalScope::Chunk(chunk), tiles);
+                    cache.set(node_id, EvalScope::Chunk(chunk, *working_size), tiles);
                 }
                 Ok(PollOutcome::Advanced)
             }
@@ -297,7 +307,8 @@ impl Processor {
         }
 
         let snapshot: Arc<dyn Node> = Arc::from(node.clone_boxed());
-        let margin = (pool.tile_length() - chunk_grid.tile_size()) / 2;
+        let working_size = pool.tile_length();
+        let margin = (working_size - chunk_grid.tile_size()) / 2;
         let mut pending = HashMap::new();
         for chunk in chunk_grid.coords() {
             let ctx = chunk_grid.chunk_context(chunk, margin);
@@ -306,7 +317,7 @@ impl Processor {
                 let tile = match r {
                     Resolved::Local { ancestor, socket } => {
                         let (_, tiles) = cache
-                            .get(*ancestor, EvalScope::Chunk(chunk))
+                            .get(*ancestor, EvalScope::Chunk(chunk, working_size))
                             .ok_or(NodeError::NodeNotEvaluated(*ancestor))?;
                         tiles.get(*socket).cloned().ok_or_else(|| {
                             NodeError::OutputNotAvailable {
@@ -338,13 +349,14 @@ impl Processor {
             let task_pool = Arc::clone(pool);
             let task = AsyncComputeTaskPool::get()
                 .spawn(async move { task_node.process(&task_pool, &inputs, &ctx) });
-            cache.mark_processing(node_id, EvalScope::Chunk(chunk));
+            cache.mark_processing(node_id, EvalScope::Chunk(chunk, working_size));
             pending.insert(chunk, (Instant::now(), task));
         }
 
         self.active = Some(ActiveNode {
             node_id,
             work: ActiveWork::Local {
+                working_size,
                 pending,
                 done: HashMap::new()
             }
@@ -422,11 +434,13 @@ impl Processor {
     }
 }
 
+/// Resizes the shared pool to `node_id`'s own required working size, if it isn't already - other
+/// nodes' entries cached at a different working size stay valid (see [`EvalScope::Chunk`]), so no
+/// cache invalidation is needed here, just a pool swap for whatever gets spawned next.
 fn sync_pool_size(
     topology: &Topology,
     chunk_grid: &ChunkGrid,
     pool: &mut Arc<TilePool>,
-    cache: &mut Cache,
     node_id: GraphNodeId
 ) -> Result<(), NodeError> {
     if matches!(
@@ -438,7 +452,6 @@ fn sync_pool_size(
     let required = required_working_size(topology, node_id, chunk_grid.tile_size())?;
     if required != pool.tile_length() {
         *pool = TilePool::from_arena(pool.arena(), required);
-        cache.clear_all_chunks();
     }
     Ok(())
 }
@@ -469,6 +482,7 @@ fn required_working_size(
 fn next_to_spawn(
     topology: &Topology,
     chunk_grid: &ChunkGrid,
+    pool: &Arc<TilePool>,
     cache: &Cache,
     node_id: GraphNodeId
 ) -> Result<Option<GraphNodeId>, NodeError> {
@@ -477,9 +491,13 @@ fn next_to_spawn(
             NodeLocality::Global { native_resolution } => cache
                 .get(candidate, EvalScope::Global(native_resolution))
                 .is_some(),
-            NodeLocality::Local => chunk_grid
-                .coords()
-                .all(|c| cache.get(candidate, EvalScope::Chunk(c)).is_some())
+            // `pool`'s working size is whatever `sync_pool_size` fixed it to for this whole call
+            // (see `EvalScope::Chunk`), the same size `spawn_local` will tag its own entries with.
+            NodeLocality::Local => chunk_grid.coords().all(|c| {
+                cache
+                    .get(candidate, EvalScope::Chunk(c, pool.tile_length()))
+                    .is_some()
+            })
         };
         if !ready {
             return Ok(Some(candidate));
@@ -535,7 +553,7 @@ fn topological_order(
 fn gather(
     topology: &Topology,
     chunk_grid: &ChunkGrid,
-    local_arena: &Arc<TileArena>,
+    pool: &Arc<TilePool>,
     global_arena: &Arc<TileArena>,
     cache: &Cache,
     node_id: GraphNodeId
@@ -553,14 +571,16 @@ fn gather(
         }
         NodeLocality::Local => {
             let target_size = chunk_grid.tile_size();
-            let working_size = required_working_size(topology, node_id, target_size)?;
+            // The size `spawn_local` actually tagged this node's entries with for this call - see
+            // `EvalScope::Chunk` - not recomputed, so it can't drift from what was really cached.
+            let working_size = pool.tile_length();
             let crop_pool = (working_size != target_size)
-                .then(|| TilePool::from_arena(local_arena, target_size));
+                .then(|| TilePool::from_arena(pool.arena(), target_size));
 
             let mut per_chunk = HashMap::new();
             for chunk in chunk_grid.coords() {
                 let (uuid, tiles) = cache
-                    .get(node_id, EvalScope::Chunk(chunk))
+                    .get(node_id, EvalScope::Chunk(chunk, working_size))
                     .ok_or(NodeError::NodeNotEvaluated(node_id))?;
                 let cropped = match &crop_pool {
                     Some(p) => tiles

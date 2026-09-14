@@ -140,35 +140,46 @@ impl Perlin {
                     label: "Scale",
                     category: "Noise",
                     default: NParamValue::Float(1.0),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 4.0 })
+                    constraints: Some(NParamConstraints::FloatRange {
+                        min: 0.0,
+                        max: 25.0
+                    }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "seed",
                     label: "Seed",
                     category: "Noise",
                     default: NParamValue::Int(0),
-                    constraints: Some(NParamConstraints::IntRange { min: 0, max: 10000 })
+                    constraints: Some(NParamConstraints::IntRange {
+                        min: 0,
+                        max: 1_000_000
+                    }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "frequency",
                     label: "Frequency",
                     category: "Fractal Brownian Motion",
                     default: NParamValue::Float(0.05),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 })
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "octaves",
                     label: "Octaves",
                     category: "Fractal Brownian Motion",
                     default: NParamValue::Int(6),
-                    constraints: Some(NParamConstraints::IntRange { min: 1, max: 10 })
+                    constraints: Some(NParamConstraints::IntRange { min: 1, max: 10 }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "hurst_exponent",
                     label: "Hurst Exponent",
                     category: "Fractal Brownian Motion",
                     default: NParamValue::Float(0.7),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 })
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 }),
+                    unit: ParamUnit::Percent
                 },
                 NParamDesc {
                     key: "warp_amplitude",
@@ -178,7 +189,8 @@ impl Perlin {
                     constraints: Some(NParamConstraints::FloatRange {
                         min: 0.0,
                         max: 10.0
-                    })
+                    }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "warp_frequency",
@@ -188,14 +200,16 @@ impl Perlin {
                     constraints: Some(NParamConstraints::FloatRange {
                         min: 0.0,
                         max: 10.0
-                    })
+                    }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "warp_octaves",
                     label: "Warp Octaves",
                     category: "Warping",
                     default: NParamValue::Int(1),
-                    constraints: Some(NParamConstraints::IntRange { min: 1, max: 10 })
+                    constraints: Some(NParamConstraints::IntRange { min: 1, max: 10 }),
+                    unit: ParamUnit::None
                 },
             ]
         })

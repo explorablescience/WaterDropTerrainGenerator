@@ -24,11 +24,16 @@ pub struct ChunkGrid {
     tile_size: usize,
     /// World units covered by one texel - `new`'s input scaled by [`Self::WORLD_SCALE_FACTOR`].
     world_scale: f32,
+    /// Project-wide reference ceiling (world units) for height-related sliders elsewhere (SatMap's
+    /// gradient range, the Export panel's remap range, ...) - not itself applied to any node output.
+    max_height: f32,
     compute_target: ComputeTarget
 }
 impl ChunkGrid {
     /// Converts `new`'s user-facing `world_scale` (slider range `0..=2`, default `1`) to actual world units per texel.
     const WORLD_SCALE_FACTOR: f32 = 0.05;
+    /// Matches the coherent height range used by `Mountain`/`SatMap`/the Export panel.
+    pub const DEFAULT_MAX_HEIGHT: f32 = 10.0;
 
     pub fn new(chunks_x: u32, chunks_y: u32, tile_size: usize, world_scale: f32) -> Self {
         assert!(
@@ -40,12 +45,18 @@ impl ChunkGrid {
             chunks_y,
             tile_size,
             world_scale: world_scale * Self::WORLD_SCALE_FACTOR,
+            max_height: Self::DEFAULT_MAX_HEIGHT,
             compute_target: ComputeTarget::default()
         }
     }
 
     pub fn with_compute_target(mut self, compute_target: ComputeTarget) -> Self {
         self.compute_target = compute_target;
+        self
+    }
+
+    pub fn with_max_height(mut self, max_height: f32) -> Self {
+        self.max_height = max_height;
         self
     }
 
@@ -67,6 +78,9 @@ impl ChunkGrid {
     }
     pub fn compute_target(&self) -> ComputeTarget {
         self.compute_target
+    }
+    pub fn max_height(&self) -> f32 {
+        self.max_height
     }
 
     /// Every chunk coordinate in the grid, in row-major order.

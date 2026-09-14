@@ -126,7 +126,8 @@ impl Combine {
             default: NParamValue::Enum(CombineMethod::default().to_str().to_string()),
             constraints: Some(NParamConstraints::EnumOneOf {
                 options: CombineMethod::all_options()
-            })
+            }),
+            unit: ParamUnit::None
         }
     }
 
@@ -137,7 +138,8 @@ impl Combine {
             label,
             category: "Combining",
             default: NParamValue::Float(default),
-            constraints: Some(NParamConstraints::FloatRange { min: 0.0, max })
+            constraints: Some(NParamConstraints::FloatRange { min: 0.0, max }),
+            unit: ParamUnit::Percent
         }
     }
 

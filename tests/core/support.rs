@@ -5,7 +5,7 @@ use std::sync::Arc;
 use bevy::tasks::{AsyncComputeTaskPool, TaskPool};
 use waterdrop_terrain_generator::core::node::{
     NParamConstraints, NParamDesc, NParamValue, Node, NodeCategory, NodeError, NodeIcon,
-    NodePortType, NodeSocket, SocketDtype
+    NodePortType, NodeSocket, ParamUnit, SocketDtype
 };
 use waterdrop_terrain_generator::core::{TileContext, TileHandle, TilePool};
 
@@ -69,7 +69,8 @@ impl Node for FakeKernelNode {
             label: "Strength",
             category: "Modification",
             default: NParamValue::Float(1.0),
-            constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 })
+            constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 }),
+            unit: ParamUnit::None
         }]
     }
     fn get_param(&self, key: &str) -> Option<NParamValue> {

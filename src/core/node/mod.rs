@@ -16,7 +16,7 @@ pub use error::NodeError;
 pub use message::{
     MessageLifetime, NodeMessage, NodeMessageLog, NodeMessageSeverity, TimedNodeMessage
 };
-pub use parameters::{NParamConstraints, NParamDesc, NParamValidator, NParamValue};
+pub use parameters::{NParamConstraints, NParamDesc, NParamValidator, NParamValue, ParamUnit};
 pub use registry::{NodeDescriptor, registered_nodes};
 
 /// A node is a single operation in the terrain graph, which can be connected to other nodes to form a directed graph (DAG) of terrain operations.

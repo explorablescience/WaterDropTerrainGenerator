@@ -156,7 +156,7 @@ impl Default for SatMap {
         Self {
             preset: SatMapPreset::default(),
             min_height: 0.0,
-            max_height: 1.0
+            max_height: 10.0
         }
     }
 }
@@ -172,7 +172,8 @@ impl SatMap {
                     default: NParamValue::Enum(SatMapPreset::default().to_str().to_string()),
                     constraints: Some(NParamConstraints::EnumOneOf {
                         options: SatMapPreset::all_options()
-                    })
+                    }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "min_height",
@@ -182,17 +183,19 @@ impl SatMap {
                     constraints: Some(NParamConstraints::FloatRange {
                         min: -50.0,
                         max: 50.0
-                    })
+                    }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "max_height",
                     label: "Max Height",
                     category: "Coloring",
-                    default: NParamValue::Float(1.0),
+                    default: NParamValue::Float(10.0),
                     constraints: Some(NParamConstraints::FloatRange {
                         min: -50.0,
                         max: 50.0
-                    })
+                    }),
+                    unit: ParamUnit::None
                 },
             ]
         })

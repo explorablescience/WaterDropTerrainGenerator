@@ -23,7 +23,7 @@ impl Default for HydraulicErosion {
             droplets: 20_000,
             erosion_rate: 0.3,
             deposit_rate: 0.3,
-            seed: 1,
+            seed: 0,
             native_resolution: 256
         }
     }
@@ -41,38 +41,43 @@ impl HydraulicErosion {
                     constraints: Some(NParamConstraints::IntRange {
                         min: 0,
                         max: 200_000
-                    })
+                    }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "erosion_rate",
                     label: "Erosion Rate",
                     category: "Simulation",
                     default: NParamValue::Float(0.3),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 })
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 }),
+                    unit: ParamUnit::Percent
                 },
                 NParamDesc {
                     key: "deposit_rate",
                     label: "Deposit Rate",
                     category: "Simulation",
                     default: NParamValue::Float(0.3),
-                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 })
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 }),
+                    unit: ParamUnit::Percent
                 },
                 NParamDesc {
                     key: "seed",
                     label: "Seed",
                     category: "Simulation",
-                    default: NParamValue::Int(1),
+                    default: NParamValue::Int(0),
                     constraints: Some(NParamConstraints::IntRange {
                         min: 0,
-                        max: i32::MAX
-                    })
+                        max: 1_000_000
+                    }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "native_resolution",
                     label: "Native Resolution",
                     category: "Shape",
                     default: NParamValue::Int(256),
-                    constraints: Some(NParamConstraints::IntRange { min: 16, max: 1024 })
+                    constraints: Some(NParamConstraints::IntRange { min: 16, max: 1024 }),
+                    unit: ParamUnit::None
                 },
             ]
         })

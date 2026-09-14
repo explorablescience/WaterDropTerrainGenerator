@@ -35,11 +35,12 @@ impl Mountain {
                     key: "height",
                     label: "Height",
                     category: "Shape",
-                    default: NParamValue::Float(1.0),
+                    default: NParamValue::Float(2.0),
                     constraints: Some(NParamConstraints::FloatRange {
                         min: 0.0,
-                        max: 10.0
-                    })
+                        max: 50.0
+                    }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "radius",
@@ -48,8 +49,9 @@ impl Mountain {
                     default: NParamValue::Float(2.5),
                     constraints: Some(NParamConstraints::FloatRange {
                         min: 0.1,
-                        max: 20.0
-                    })
+                        max: 50.0
+                    }),
+                    unit: ParamUnit::None
                 },
                 NParamDesc {
                     key: "position",
@@ -59,7 +61,8 @@ impl Mountain {
                     constraints: Some(NParamConstraints::Vector2Range {
                         min: (-50.0, -50.0),
                         max: (50.0, 50.0)
-                    })
+                    }),
+                    unit: ParamUnit::None
                 },
             ]
         })
