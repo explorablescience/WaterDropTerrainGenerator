@@ -144,7 +144,8 @@ fn sample_gradient(stops: &[Stop], t: f32) -> [f32; 3] {
 }
 
 /// Colorizes a heightmap into RGB using a chosen preset gradient (à la Gaea's SatMap), remapping
-/// `[min_height, max_height]` onto the gradient's `[0, 1]` before sampling.
+/// `[min_height, max_height]` onto the gradient's `[0, 1]` before sampling. Both are fractions of
+/// the terrain's overall height (see `TileContext::terrain_height`), not world units.
 #[derive(Debug, Clone)]
 pub struct SatMap {
     preset: SatMapPreset,
@@ -156,7 +157,7 @@ impl Default for SatMap {
         Self {
             preset: SatMapPreset::default(),
             min_height: 0.0,
-            max_height: 10.0
+            max_height: 1.0
         }
     }
 }
@@ -181,32 +182,38 @@ impl SatMap {
                     category: "Coloring",
                     default: NParamValue::Float(0.0),
                     constraints: Some(NParamConstraints::FloatRange {
-                        min: -50.0,
-                        max: 50.0
+                        min: 0.0,
+                        max: 1.0
                     }),
-                    unit: ParamUnit::None
+                    unit: ParamUnit::Percent
                 },
                 NParamDesc {
                     key: "max_height",
                     label: "Max Height",
                     category: "Coloring",
-                    default: NParamValue::Float(10.0),
+                    default: NParamValue::Float(1.0),
                     constraints: Some(NParamConstraints::FloatRange {
-                        min: -50.0,
-                        max: 50.0
+                        min: 0.0,
+                        max: 1.0
                     }),
-                    unit: ParamUnit::None
+                    unit: ParamUnit::Percent
                 },
             ]
         })
     }
 
-    fn process_tile(&self, pool: &Arc<TilePool>, inputs: &[TileHandle]) -> TileHandle {
+    fn process_tile(
+        &self,
+        pool: &Arc<TilePool>,
+        inputs: &[TileHandle],
+        ctx: &TileContext
+    ) -> TileHandle {
         let mut color = pool.allocate_channels(3);
         let height = &inputs[0];
         let stops = self.preset.stops();
-        let range = (self.max_height - self.min_height).max(f32::EPSILON);
-        let min_height = self.min_height;
+        let min_height = self.min_height * ctx.terrain_height;
+        let max_height = self.max_height * ctx.terrain_height;
+        let range = (max_height - min_height).max(f32::EPSILON);
 
         for c in 0..3 {
             color
@@ -234,8 +241,7 @@ impl Node for SatMap {
         ICON
     }
 
-    /// Generic: accepts a Height or a Mask (e.g. a `Slope` output) alike - either is just a
-    /// scalar remapped onto the gradient by `t = (v - min_height) / (max_height - min_height)`.
+    /// Generic: accepts a Height or a Mask (e.g. a `Slope` output) alike
     fn inputs(&self) -> &[NodeSocket] {
         &[NodeSocket {
             name: "Input",
@@ -279,9 +285,9 @@ impl Node for SatMap {
         &self,
         pool: &Arc<TilePool>,
         inputs: &[TileHandle],
-        _ctx: &TileContext
+        ctx: &TileContext
     ) -> Result<Vec<TileHandle>, NodeError> {
-        Ok(vec![self.process_tile(pool, inputs)])
+        Ok(vec![self.process_tile(pool, inputs, ctx)])
     }
 
     fn clone_boxed(&self) -> Box<dyn Node> {

@@ -10,7 +10,8 @@ const ICON: NodeIcon = NodeIcon {
 };
 
 /// A basic `Local` primitive: one smooth dome, pointwise in world space (no neighbor reads, no
-/// whole-domain statistic), so it needs no padding - `position` and `radius` are plain world units.
+/// whole-domain statistic), so it needs no padding - `position` is plain world units, but `height`
+/// and `radius` are `0..1` fractions (see `Self::effective`).
 #[derive(Debug, Clone)]
 pub struct Mountain {
     pub height: f32,
@@ -20,8 +21,8 @@ pub struct Mountain {
 impl Default for Mountain {
     fn default() -> Self {
         Self {
-            height: 2.0,
-            radius: 2.5,
+            height: 0.2,
+            radius: 0.1,
             position: (0.0, 0.0)
         }
     }
@@ -35,23 +36,20 @@ impl Mountain {
                     key: "height",
                     label: "Height",
                     category: "Shape",
-                    default: NParamValue::Float(2.0),
-                    constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.0,
-                        max: 50.0
-                    }),
-                    unit: ParamUnit::None
+                    default: NParamValue::Float(0.2),
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 }),
+                    unit: ParamUnit::Percent
                 },
                 NParamDesc {
                     key: "radius",
                     label: "Radius",
                     category: "Shape",
-                    default: NParamValue::Float(2.5),
+                    default: NParamValue::Float(0.1),
                     constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.1,
-                        max: 50.0
+                        min: 0.01,
+                        max: 1.0
                     }),
-                    unit: ParamUnit::None
+                    unit: ParamUnit::Percent
                 },
                 NParamDesc {
                     key: "position",
@@ -68,14 +66,21 @@ impl Mountain {
         })
     }
 
-    /// Smooth radial falloff from `center`: `self.height` at the center, `0` at `self.radius` and beyond.
-    fn dome(&self, local: (f32, f32), center: (f32, f32)) -> f32 {
+    /// `height`/`radius` in world units: `self.height` fraction of `ctx.terrain_height`, `self.radius`
+    /// fraction of the terrain's half-extent (so 100% radius reaches the terrain edge from its center).
+    fn effective(&self, ctx: &TileContext) -> (f32, f32) {
+        let half_extent = ctx.world_extent.0.min(ctx.world_extent.1) * 0.5;
+        (self.height * ctx.terrain_height, self.radius * half_extent)
+    }
+
+    /// Smooth radial falloff from `center`: `height` at the center, `0` at `radius` and beyond.
+    fn dome(local: (f32, f32), center: (f32, f32), height: f32, radius: f32) -> f32 {
         let dx = local.0 - center.0;
         let dy = local.1 - center.1;
         let dist = (dx * dx + dy * dy).sqrt();
-        let t = (1.0 - dist / self.radius).clamp(0.0, 1.0);
+        let t = (1.0 - dist / radius).clamp(0.0, 1.0);
         let falloff = t * t * (3.0 - 2.0 * t); // smoothstep
-        falloff * self.height
+        falloff * height
     }
 }
 impl Node for Mountain {
@@ -127,10 +132,11 @@ impl Node for Mountain {
     ) -> Result<Vec<TileHandle>, NodeError> {
         let mut output = pool.allocate();
         let s = output.size();
+        let (height, radius) = self.effective(ctx);
         output.par_chunks_mut(s).enumerate().for_each(|(y, row)| {
             for (x, texel) in row.iter_mut().enumerate() {
                 let world = ctx.world_pos(x, y);
-                *texel = self.dome(world, self.position);
+                *texel = Self::dome(world, self.position, height, radius);
             }
         });
         Ok(vec![Arc::new(output)])

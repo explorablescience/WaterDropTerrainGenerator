@@ -24,17 +24,17 @@ pub struct ChunkGrid {
     tile_size: usize,
     /// World units covered by one texel - `new`'s input scaled by [`Self::WORLD_SCALE_FACTOR`].
     world_scale: f32,
-    /// Project-wide terrain height (world units): percent-based "Scale" params (e.g.
-    /// `Perlin::amplitude`) multiply against this to become world-space values (see
-    /// `TileContext::terrain_height`); also the reference range for height-related sliders
-    /// elsewhere (SatMap's gradient range, the Export panel's remap range, ...).
+    /// Project-wide terrain height (world units): percent-based params (e.g. `Perlin::amplitude`,
+    /// `Mountain::height`/`radius`, `SatMap::min_height`/`max_height`) multiply against this to
+    /// become world-space values (see `TileContext::terrain_height`); also seeds the Export
+    /// panel's remap range default, which stays independently editable after that.
     height: f32,
     compute_target: ComputeTarget
 }
 impl ChunkGrid {
     /// Converts `new`'s user-facing `world_scale` (slider range `0..=2`, default `1`) to actual world units per texel.
     const WORLD_SCALE_FACTOR: f32 = 0.05;
-    /// Matches the coherent height range used by `Mountain`/`SatMap`/the Export panel.
+    /// Default terrain height - see `Self::height`'s doc comment for what multiplies against it.
     pub const DEFAULT_HEIGHT: f32 = 10.0;
 
     pub fn new(chunks_x: u32, chunks_y: u32, tile_size: usize, world_scale: f32) -> Self {
