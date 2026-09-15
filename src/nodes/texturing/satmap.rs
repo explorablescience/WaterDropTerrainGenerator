@@ -181,10 +181,7 @@ impl SatMap {
                     label: "Min Height",
                     category: "Coloring",
                     default: NParamValue::Float(0.0),
-                    constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.0,
-                        max: 1.0
-                    }),
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 }),
                     unit: ParamUnit::Percent
                 },
                 NParamDesc {
@@ -192,10 +189,7 @@ impl SatMap {
                     label: "Max Height",
                     category: "Coloring",
                     default: NParamValue::Float(1.0),
-                    constraints: Some(NParamConstraints::FloatRange {
-                        min: 0.0,
-                        max: 1.0
-                    }),
+                    constraints: Some(NParamConstraints::FloatRange { min: 0.0, max: 1.0 }),
                     unit: ParamUnit::Percent
                 },
             ]
